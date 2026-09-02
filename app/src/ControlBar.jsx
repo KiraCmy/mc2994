@@ -1,13 +1,4 @@
-import { THEMES } from './themes.js'
-
-export default function ControlBar({
-  spikes,
-  hue,
-  themeId,
-  onSpikesChange,
-  onHueChange,
-  onThemeChange,
-}) {
+export default function ControlBar({ subdivision, onSubdivisionChange }) {
   const stopOrbit = (event) => {
     event.stopPropagation()
   }
@@ -19,59 +10,21 @@ export default function ControlBar({
       onPointerDown={stopOrbit}
       onWheel={stopOrbit}
     >
-      <div className="control-group">
-        <div className="slider-label-row">
-          <label htmlFor="spike-count">Spikes</label>
-          <span>{spikes}</span>
-        </div>
+      <div className="param-row">
+        <label className="param-label" htmlFor="subdivision">
+          Subdiv
+        </label>
         <input
-          id="spike-count"
-          type="range"
-          min="3"
-          max="48"
-          value={spikes}
-          onChange={(event) => onSpikesChange(Number(event.target.value))}
-        />
-      </div>
-
-      <div className="control-group">
-        <div className="slider-label-row">
-          <label htmlFor="spike-hue">Color</label>
-          <span>{hue}°</span>
-        </div>
-        <input
-          id="spike-hue"
-          className="hue-slider"
+          id="subdivision"
+          className="param-slider"
           type="range"
           min="0"
-          max="360"
-          value={hue}
-          onChange={(event) => onHueChange(Number(event.target.value))}
+          max="5"
+          step="1"
+          value={subdivision}
+          onChange={(event) => onSubdivisionChange(Number(event.target.value))}
         />
-      </div>
-
-      <div className="control-group theme-group">
-        <p className="theme-label">Theme</p>
-        <div className="theme-row" role="radiogroup" aria-label="Color theme">
-          {Object.values(THEMES).map((theme) => (
-            <button
-              key={theme.id}
-              type="button"
-              role="radio"
-              aria-checked={themeId === theme.id}
-              title={theme.label}
-              className={`theme-swatch${themeId === theme.id ? ' is-active' : ''}`}
-              style={{
-                '--swatch-bg': theme.background,
-                '--swatch-accent': theme.accent,
-              }}
-              onClick={() => onThemeChange(theme.id)}
-            >
-              <span className="theme-swatch-dot" />
-              <span className="theme-swatch-label">{theme.label}</span>
-            </button>
-          ))}
-        </div>
+        <span className="param-value">{subdivision}</span>
       </div>
     </aside>
   )

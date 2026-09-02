@@ -1,7 +1,34 @@
 :root {
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  color: #e5e7eb;
-  background: #12141a;
+  --bg-void: #0a0b0d;
+  --bg-panel: #12141a;
+  --bg-elevated: #1a1d24;
+  --border: #2a2e38;
+  --border-subtle: #1e222b;
+  --text: #c8ccd4;
+  --text-muted: #6b7280;
+  --text-dim: #4b5160;
+  --accent: #e8a317;
+  --accent-dim: #8a6410;
+  --accent-glow: rgba(232, 163, 23, 0.18);
+
+  --font-ui: "IBM Plex Mono", "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  --type-micro: 9px;
+  --type-caption: 10px;
+  --type-body: 11px;
+  --type-value: 11px;
+  --type-title: 13px;
+
+  --radius: 2px;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+
+  font-family: var(--font-ui);
+  color: var(--text);
+  background: var(--bg-void);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

@@ -1,18 +1,17 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { createSpikyMesh } from './createSpikyMesh.js'
-import { THEMES } from './themes.js'
+import { createFilmMesh } from './createFilmMesh.js'
 
-export default function SceneCanvas({ spikes, hue, themeId }) {
+export default function SceneCanvas({ subdivision }) {
   const canvasRef = useRef(null)
-  const paramsRef = useRef({ spikes, hue, themeId })
+  const paramsRef = useRef({ subdivision })
   const apiRef = useRef(null)
 
   useEffect(() => {
-    paramsRef.current = { spikes, hue, themeId }
+    paramsRef.current = { subdivision }
     apiRef.current?.applyParams(paramsRef.current)
-  }, [spikes, hue, themeId])
+  }, [subdivision])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -21,6 +20,8 @@ export default function SceneCanvas({ spikes, hue, themeId }) {
     }
 
     const scene = new THREE.Scene()
+    scene.background = new THREE.Color('#0a0b0d')
+
     const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100)
     camera.position.set(3.2, 2.4, 4.2)
 
@@ -31,7 +32,7 @@ export default function SceneCanvas({ spikes, hue, themeId }) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = true
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.05
+    renderer.toneMappingExposure = 1.02
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
@@ -40,64 +41,35 @@ export default function SceneCanvas({ spikes, hue, themeId }) {
     controls.minDistance = 2
     controls.maxDistance = 16
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.45)
+    const ambient = new THREE.AmbientLight(0xffffff, 0.35)
     scene.add(ambient)
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.15)
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.05)
     keyLight.position.set(4, 6, 3)
-    keyLight.castShadow = true
     scene.add(keyLight)
 
-    const fillLight = new THREE.DirectionalLight(0x9eb6ff, 0.35)
+    const fillLight = new THREE.DirectionalLight(0xc8ccd4, 0.28)
     fillLight.position.set(-3, 1, -2)
     scene.add(fillLight)
 
-    const spiky = createSpikyMesh(paramsRef.current.spikes)
-    scene.add(spiky.mesh)
+    const rimLight = new THREE.DirectionalLight(0xe8a317, 0.22)
+    rimLight.position.set(-2, 3, 4)
+    scene.add(rimLight)
 
-    let grid = new THREE.GridHelper(12, 12, 0x3a4154, 0x232833)
-    grid.position.y = -1.1
+    const film = createFilmMesh(paramsRef.current.subdivision)
+    scene.add(film.mesh)
+
+    const grid = new THREE.GridHelper(12, 12, 0x2a2e38, 0x1e222b)
+    grid.position.y = -1.15
     scene.add(grid)
-    let activeThemeId = null
-    let activeSpikes = null
 
-    const disposeGrid = (helper) => {
-      helper.geometry.dispose()
-      if (Array.isArray(helper.material)) {
-        helper.material.forEach((entry) => entry.dispose())
-      } else {
-        helper.material.dispose()
+    let activeSubdivision = null
+
+    const applyParams = ({ subdivision: nextSubdivision }) => {
+      if (nextSubdivision !== activeSubdivision) {
+        activeSubdivision = nextSubdivision
+        film.setSubdivision(nextSubdivision)
       }
-    }
-
-    const applyTheme = (id) => {
-      if (id === activeThemeId) {
-        return
-      }
-      activeThemeId = id
-      const theme = THEMES[id] ?? THEMES.midnight
-      scene.background = new THREE.Color(theme.background)
-      ambient.color.set(theme.ambient)
-      ambient.intensity = theme.ambientIntensity
-      keyLight.color.set(theme.key)
-      keyLight.intensity = theme.keyIntensity
-      fillLight.color.set(theme.fill)
-      fillLight.intensity = theme.fillIntensity
-
-      scene.remove(grid)
-      disposeGrid(grid)
-      grid = new THREE.GridHelper(12, 12, theme.gridMajor, theme.gridMinor)
-      grid.position.y = -1.1
-      scene.add(grid)
-    }
-
-    const applyParams = ({ spikes: nextSpikes, hue: nextHue, themeId: nextTheme }) => {
-      if (nextSpikes !== activeSpikes) {
-        activeSpikes = nextSpikes
-        spiky.setSpikeCount(nextSpikes)
-      }
-      spiky.setHue(nextHue)
-      applyTheme(nextTheme)
     }
 
     apiRef.current = { applyParams }
@@ -122,8 +94,8 @@ export default function SceneCanvas({ spikes, hue, themeId }) {
     const clock = new THREE.Clock()
     const tick = () => {
       const delta = clock.getDelta()
-      spiky.mesh.rotation.y += delta * 0.35
-      spiky.mesh.rotation.x = Math.sin(clock.elapsedTime * 0.45) * 0.12
+      film.mesh.rotation.y += delta * 0.28
+      film.mesh.rotation.x = Math.sin(clock.elapsedTime * 0.4) * 0.1
       controls.update()
       renderer.render(scene, camera)
       frameId = requestAnimationFrame(tick)
@@ -134,8 +106,13 @@ export default function SceneCanvas({ spikes, hue, themeId }) {
       cancelAnimationFrame(frameId)
       observer.disconnect()
       controls.dispose()
-      spiky.dispose()
-      disposeGrid(grid)
+      film.dispose()
+      grid.geometry.dispose()
+      if (Array.isArray(grid.material)) {
+        grid.material.forEach((entry) => entry.dispose())
+      } else {
+        grid.material.dispose()
+      }
       renderer.dispose()
       apiRef.current = null
     }
