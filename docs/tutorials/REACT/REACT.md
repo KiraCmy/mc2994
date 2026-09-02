@@ -599,3 +599,13 @@ If those work, you can read other people’s React code and change it on purpose
 - MDN JavaScript (when a JS feature is confusing): [https://developer.mozilla.org/en-US/docs/Web/JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
 
 You do not need to memorize React. You need a loop: **split the UI into components, put changing data in state, pass the rest as props, let JSX describe the screen.**
+
+
+
+
+every time open a new project:
+'''
+cd ~/Documents/another-project
+npm create vite@latest . -- --template react
+npm install
+'''

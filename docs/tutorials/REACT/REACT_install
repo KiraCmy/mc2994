@@ -1,0 +1,134 @@
+# Install React with TypeScript (beginner)
+
+React is not an app you download like Chrome. You **create a project folder**; that project includes React and TypeScript.
+
+You need **Node.js** first (that gives you `npm`). In Terminal, run `node -v`. If that fails, follow `docs/tutorials/REACT/node.js_install.md`, then come back here.
+
+This uses **Vite**, the usual way to start a basic React app.
+
+---
+
+## 1. Open Terminal
+
+Mac: `Command + Space`, type `Terminal`, press Return.
+
+Go to the folder where you keep projects:
+
+```bash
+cd ~/Documents
+```
+
+---
+
+## 2. Start the installer
+
+```bash
+npm create vite@latest
+```
+
+The first time, npm may ask to download `create-vite`. That is expected.
+
+### How to answer the questions
+
+- **Type** your answer, then press **Return**.
+- On a **list**, use the **up/down arrow keys** to move the `❯` marker, then press **Return**.
+- Do not pick options that end with `↗` (those open extra tools, not a basic app).
+
+---
+
+## 3. Answer each prompt (TypeScript React)
+
+The wording can vary slightly by version. Use this table.
+
+| Prompt | What to do |
+| --- | --- |
+| `Ok to proceed? (y)` | Type `y` and press Return |
+| `Project name:` | Type `my-react-app` and press Return (or press Return to keep the default name) |
+| `Package name:` | Press Return to keep the suggestion (this one often does not appear) |
+| `Select a framework:` | Arrow to **React**, then Return. Skip Vanilla, Vue, and the rest. |
+| `Select a variant:` | Arrow to **TypeScript**, then Return. That is the basic TypeScript app. |
+| `Install with npm and start now?` | Type `y` and press Return if you want the easy path (install + open the app). Type `n` if you want to run the commands yourself (section 4). |
+| Target directory is not empty | Choose **Cancel operation**. Pick a new project name instead of deleting files. |
+
+### Which “variant” is the basic one?
+
+Under React you may see several rows. For a first app, choose **exactly**:
+
+**TypeScript**
+
+Do **not** choose:
+
+- **JavaScript** — that is not TypeScript
+- **TypeScript + React Compiler** — extra, not needed yet
+- **RSC**, **React Router**, **TanStack Router**, or anything with **↗** — those are other starters
+
+---
+
+## 4. If you answered “No” to install and start
+
+The folder is created, but packages are not installed yet:
+
+```bash
+cd my-react-app
+npm install
+npm run dev
+```
+
+Use the folder name you typed at `Project name:` if it was not `my-react-app`.
+
+`npm install` can take a minute. That is normal.
+
+---
+
+## 5. Open the app
+
+If the installer already started the app, Terminal will print a link.
+
+If you ran `npm run dev` yourself, you get the same link, usually:
+
+`http://localhost:5173`
+
+Hold `Command` and click it (or paste it into a browser). You should see the default Vite + React page.
+
+Leave that command running while you work. Stop it with `Ctrl + C`. Start it again with `npm run dev` from inside the project folder.
+
+---
+
+## 6. You are done
+
+React + TypeScript live **inside** your project folder. Open that folder in your editor.
+
+| File | What it is |
+| --- | --- |
+| `src/App.tsx` | Start editing here |
+| `src/main.tsx` | Starts React and attaches it to the page |
+| `tsconfig.json` | TypeScript settings (you can ignore this at first) |
+
+`.tsx` means a TypeScript file that can contain React markup (JSX). That is normal for this setup.
+
+To make another app later, `cd ~/Documents` again and run `npm create vite@latest` with a new project name.
+
+---
+
+## If something fails
+
+| What you see | What to do |
+| --- | --- |
+| `command not found: npm` | Install Node, then **quit and reopen** Terminal |
+| Stuck on a list | Use **arrow keys**, then **Return** — clicking with the mouse often does nothing |
+| Picked the wrong variant | Delete the folder (only if it is the new empty project) and run `npm create vite@latest` again |
+| Browser is blank / won’t load | Make sure `npm run dev` is still running and use the URL Terminal printed |
+| Port already in use | `Ctrl + C`, then `npm run dev` again — Vite may use `5174` |
+
+---
+
+## Shortcut next time (optional)
+
+When you already know the answers, this creates the same **React + TypeScript** app without the menus:
+
+```bash
+npm create vite@latest my-react-app -- --template react-ts --no-interactive
+cd my-react-app
+npm install
+npm run dev
+```
