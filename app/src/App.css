@@ -50,9 +50,7 @@
   left: var(--space-6);
   right: var(--space-6);
   bottom: var(--space-6);
-  display: flex;
-  align-items: center;
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-4) var(--space-5);
   background: rgba(18, 20, 26, 0.88);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -61,12 +59,23 @@
   box-sizing: border-box;
 }
 
+.control-bar__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-5);
+  width: 100%;
+}
+
 .param-row {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 7.5ch 1fr 4.5ch;
   align-items: center;
-  gap: var(--space-4);
-  width: 100%;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.param-row--color {
+  grid-template-columns: 7.5ch 1fr;
 }
 
 .param-label {
@@ -76,10 +85,11 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .param-value {
-  min-width: 1.5ch;
+  min-width: 4ch;
   text-align: right;
   font-size: var(--type-value);
   line-height: 1.2;
@@ -125,6 +135,58 @@
   outline-offset: 1px;
 }
 
+.param-color-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.param-color {
+  width: 18px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+
+.param-color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.param-color::-webkit-color-swatch {
+  border: none;
+  border-radius: 0;
+}
+
+.param-color::-moz-color-swatch {
+  border: none;
+}
+
+.param-color:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.param-swatch-hex {
+  font-size: var(--type-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .control-bar__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 720px) {
   .app-header,
   .control-bar {
@@ -138,5 +200,9 @@
 
   .control-bar {
     bottom: var(--space-5);
+  }
+
+  .control-bar__grid {
+    grid-template-columns: 1fr;
   }
 }
