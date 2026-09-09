@@ -25,7 +25,7 @@ cd E:\2026Fall_Cornell\DESIGN4197_PWB\mc2994\app
 ## 2. Install packages (not every time)
 
 ```powershell
-npm install
+npm run dev
 ```
 
 Run this:
