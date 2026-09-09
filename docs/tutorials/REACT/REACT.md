@@ -6,15 +6,30 @@ You should be comfortable with **HTML tags**, a little **CSS**, and the idea tha
 
 ---
 
+## What is React?
+
+**React** is a JavaScript **library** for building the parts of a website the user sees and clicks — buttons, forms, pages, whole apps. Facebook (now Meta) created it. It is one of the most common tools for front-end work.
+
+Think of a page as Lego. In plain HTML you write one big static document. In React you build **components**: small, reusable pieces (a header, a card, a slider). You combine them into a screen. When the data behind a piece changes, React redraws **that piece**, not the entire page by hand.
+
+A few facts that keep the rest of this guide from feeling mysterious:
+
+- React is **not** a programming language. You write **JavaScript** (or TypeScript). This tutorial uses JavaScript.
+- React is **not** the whole website stack. It does not replace HTML, CSS, or a server. It sits in the browser and manages the UI.
+- Files often use **JSX**: markup that looks like HTML inside a `.jsx` / `.js` file. React turns that into real DOM elements.
+- You run a React project with a **dev server** (this course uses **Vite**). You do not open the HTML file by double-clicking it.
+
+If you can picture “HTML pieces that update when data changes,” you already have the right mental model. The sections below are the vocabulary and the steps to run it.
+
+---
+
 ## What problem does this solve?
 
 A plain website is a stack of HTML files. When the user clicks something, you hunt for elements and rewrite the page by hand (`document.getElementById`, innerHTML, and so on). That gets messy fast.
 
-**React** is a JavaScript library for building **user interfaces**. You describe the screen as small pieces called **components**. When data changes, React updates the matching pieces instead of you rewriting the whole page.
+With React, you describe the screen as components. When data changes, React updates the matching pieces instead of you rewriting the whole page.
 
 Typical uses: dashboards, forms, shopping carts, settings pages — anything that feels like an app in the browser.
-
-React is **not** a programming language. It is a tool you use **with** JavaScript (or TypeScript). This tutorial uses JavaScript.
 
 ---
 

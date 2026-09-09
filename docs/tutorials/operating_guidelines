@@ -1,0 +1,80 @@
+# How to run this app (Vite + React)
+
+This is a Vite + React site. Do **not** double-click `index.html`. The browser needs the Vite server to load React and Three.js.
+
+You need **Node.js** (that gives you `npm`). Check with `node -v`. If that fails, follow `docs/tutorials/REACT/node.js_install.md` first.
+
+---
+
+## 1. Open a terminal in the `app` folder
+
+In Cursor: Terminal → New Terminal. Then:
+
+```powershell
+cd app
+```
+
+If you are already at the repo root (`mc2994`), that is enough. From anywhere else, use the full path:
+
+```powershell
+cd E:\2026Fall_Cornell\DESIGN4197_PWB\mc2994\app
+```
+
+---
+
+## 2. Install packages (not every time)
+
+```powershell
+npm install
+```
+
+Run this:
+
+- the **first time** you set up the project
+- after `package.json` / `package-lock.json` change (for example after a git pull)
+- if you deleted `app/node_modules`
+- if `npm run dev` says `'vite' is not recognized` (Windows) or `vite: command not found`
+
+You do **not** need `npm install` every time you open Cursor.
+
+---
+
+## 3. Start the site
+
+```powershell
+npm run dev
+```
+
+Vite prints a local URL, usually:
+
+`http://localhost:5173`
+
+Open that in a browser. Leave the terminal running while you work.
+
+| Action | How |
+| --- | --- |
+| Stop the server | `Ctrl + C` in that terminal |
+| Start again later | `cd` into `app`, then `npm run dev` |
+
+---
+
+## If something fails
+
+| What you see | What to do |
+| --- | --- |
+| `'vite' is not recognized` / `command not found: vite` | You are in `app`, but packages are missing. Run `npm install`, then `npm run dev` again |
+| `command not found: npm` | Install Node, then quit and reopen the terminal |
+| Browser is blank / won’t load | Keep `npm run dev` running and use the URL the terminal printed |
+| Port already in use | `Ctrl + C`, then `npm run dev` again — Vite may use `5174` |
+
+---
+
+## Mini checklist (later projects)
+
+Same pattern for any Vite app:
+
+1. `cd` into the project folder (here: `app`).
+2. `npm install` once (or when packages change).
+3. `npm run dev`.
+4. Open the printed `localhost` URL.
+5. Leave it running; stop with `Ctrl + C`.
