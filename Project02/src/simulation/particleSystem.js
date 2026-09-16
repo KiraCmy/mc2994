@@ -74,11 +74,5 @@ export function createParticleSystem() {
   }
 }
 
-/** Height at UV from the shared noise map (matches 3D World height field). */
-export function sampleHeight(noiseMap, u, v, displace) {
-  if (!noiseMap) return 0
-  const res = noiseMap.resolution
-  const m = sampleField(noiseMap.mag, res, u, v)
-  const pot = sampleField(noiseMap.potential, res, u, v)
-  return (m * 0.65 + ((pot + 1) * 0.5) * 0.35) * displace
-}
+/** Height at UV from the shared height field (matches 2D HEIGHT MAP + 3D Terrain). */
+export { sampleHeight } from '../noise/generateNoiseMap.js'

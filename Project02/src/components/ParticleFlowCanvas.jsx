@@ -9,12 +9,13 @@ export default function ParticleFlowCanvas({
   particleCount = 500,
   particleSize = 1.6,
   trailLength = 0.65,
+  overMap = false,
   className,
 }) {
   const canvasRef = useRef(null)
   const containerRef = useRef(null)
-  const paramsRef = useRef({ particleSize, trailLength, particleCount })
-  paramsRef.current = { particleSize, trailLength, particleCount }
+  const paramsRef = useRef({ particleSize, trailLength, particleCount, overMap })
+  paramsRef.current = { particleSize, trailLength, particleCount, overMap }
 
   const drawRef = useRef(() => {})
 
@@ -44,26 +45,33 @@ export default function ParticleFlowCanvas({
 
     const trail = Math.min(1, Math.max(0, paramsRef.current.trailLength))
     const fade = trail <= 0.001 ? 1 : 0.04 + (1 - trail) * 0.35
-    ctx.fillStyle = `rgba(0, 0, 0, ${fade})`
+    if (paramsRef.current.overMap) {
+      // Soft veil so trails persist without burying the shared map underneath.
+      ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.28, fade * 0.45)})`
+    } else {
+      ctx.fillStyle = `rgba(0, 0, 0, ${fade})`
+    }
     ctx.fillRect(0, 0, size, size)
 
-    const pad = Math.round(size * 0.06)
+    const pad = Math.round(size * (paramsRef.current.overMap ? 0.08 : 0.06))
     const inner = size - pad * 2
     const radius = Math.max(0.5, paramsRef.current.particleSize)
     const x = particleSystem.getPosX()
     const y = particleSystem.getPosY()
     const n = particleSystem.getCount()
 
-    ctx.fillStyle = '#e040a0'
+    ctx.fillStyle = '#ff1493'
     for (let i = 0; i < n; i++) {
       ctx.beginPath()
       ctx.arc(pad + x[i] * inner, pad + y[i] * inner, radius, 0, Math.PI * 2)
       ctx.fill()
     }
 
-    ctx.strokeStyle = '#2d2d2d'
-    ctx.lineWidth = 1
-    ctx.strokeRect(pad + 0.5, pad + 0.5, inner - 1, inner - 1)
+    if (!paramsRef.current.overMap) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)'
+      ctx.lineWidth = 1
+      ctx.strokeRect(pad + 0.5, pad + 0.5, inner - 1, inner - 1)
+    }
   }
 
   useEffect(() => {
@@ -78,8 +86,16 @@ export default function ParticleFlowCanvas({
   }, [particleSystem, particleCount])
 
   useEffect(() => {
+    const canvas = canvasRef.current
+    if (overMap && canvas) {
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+      }
+    }
     drawRef.current()
-  }, [particleSize, trailLength])
+  }, [particleSize, trailLength, overMap])
 
   useEffect(() => {
     const container = containerRef.current

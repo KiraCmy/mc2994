@@ -45,7 +45,7 @@ export default function WindFieldCanvas({
       const gain = Math.max(0.05, windStrength)
 
       // Soft structural grid
-      ctx.strokeStyle = '#2d2d2d'
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)'
       ctx.lineWidth = 1
       ctx.beginPath()
       const gridN = 8
@@ -78,7 +78,7 @@ export default function WindFieldCanvas({
           const dx = Math.cos(ang) * len
           const dy = -Math.sin(ang) * len
 
-          ctx.strokeStyle = `rgba(224, 64, 160, ${alpha})`
+          ctx.strokeStyle = `rgba(255, 20, 147, ${alpha})`
           ctx.lineWidth = 1
           ctx.beginPath()
           ctx.moveTo(x - dx * 0.35, y - dy * 0.35)
@@ -87,7 +87,7 @@ export default function WindFieldCanvas({
         }
       }
 
-      ctx.strokeStyle = '#2d2d2d'
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)'
       ctx.strokeRect(pad + 0.5, pad + 0.5, inner - 1, inner - 1)
     }
 

@@ -3,9 +3,12 @@ import { generateCurlNoiseMap } from './noise/generateNoiseMap.js'
 import { DEFAULT_SIMULATION_MODE } from './simulation/simulationModes.js'
 import { useSimulationLoop } from './simulation/useSimulationLoop.js'
 import { createParticleSystem } from './simulation/particleSystem.js'
+import { createErosionTerrain } from './simulation/erosionTerrain.js'
+import { createRaindropSystem } from './simulation/raindropSystem.js'
 import Map2DPage from './pages/Map2DPage.jsx'
 import Grid3DPage from './pages/Grid3DPage.jsx'
 import SimulationPage from './pages/SimulationPage.jsx'
+import HomePage from './pages/HomePage.jsx'
 import './App.css'
 
 const DEFAULTS = {
@@ -13,7 +16,8 @@ const DEFAULTS = {
   octaves: 3,
   strength: 1.2,
   time: 0.4,
-  resolution: 48,
+  resolution: 96,
+  noiseType: 'simplex',
   shapeOp: 'none',
   shapeAmount: 0,
   displace: 0.85,
@@ -25,6 +29,8 @@ const DEFAULTS = {
   particleSpeed: 1,
   particleSize: 1.6,
   trailLength: 0.65,
+  rainAmount: 160,
+  erosionRate: 1.55,
 }
 
 const INITIAL_EVOLVE = DEFAULTS.time
@@ -33,24 +39,36 @@ function getRoute() {
   const hash = window.location.hash.replace(/^#\/?/, '')
   if (hash === '3d') return '3d'
   if (hash === 'sim' || hash === 'simulation') return 'sim'
-  return '2d'
+  if (hash === '2d') return '2d'
+  return 'home'
 }
 
-const ROUTE_LABEL = { '2d': '2D', '3d': '3D', sim: 'SIM' }
+const ROUTE_LABEL = { home: 'HOME', '2d': '2D', '3d': '3D', sim: 'SIM' }
 
 export default function App() {
   const [route, setRoute] = useState(getRoute)
   const [params, setParams] = useState(DEFAULTS)
   const [simulationMode, setSimulationMode] = useState(DEFAULT_SIMULATION_MODE)
   const [simView, setSimView] = useState('2d') // 2d | 3d
+  const [erosionVersion, setErosionVersion] = useState(0)
 
   const paramsRef = useRef(params)
   const modeRef = useRef(simulationMode)
   const particleSystemRef = useRef(null)
+  const erosionTerrainRef = useRef(null)
+  const raindropSystemRef = useRef(null)
   if (!particleSystemRef.current) {
     particleSystemRef.current = createParticleSystem()
   }
+  if (!erosionTerrainRef.current) {
+    erosionTerrainRef.current = createErosionTerrain()
+  }
+  if (!raindropSystemRef.current) {
+    raindropSystemRef.current = createRaindropSystem()
+  }
   const particles = particleSystemRef.current
+  const erosionTerrain = erosionTerrainRef.current
+  const raindrops = raindropSystemRef.current
 
   paramsRef.current = params
   modeRef.current = simulationMode
@@ -58,6 +76,13 @@ export default function App() {
   useEffect(() => {
     particles.ensureCount(params.particleCount)
   }, [particles, params.particleCount])
+
+  useEffect(() => {
+    if (simulationMode === 'erosion' && raindrops.isActive()) {
+      raindrops.ensureCount(params.rainAmount)
+      raindrops._draw2d?.()
+    }
+  }, [simulationMode, raindrops, params.rainAmount])
 
   const onTick = useCallback(
     (dt) => {
@@ -74,13 +99,21 @@ export default function App() {
       if (mode === 'particle') {
         particles.step(dt, p._noiseMap, p.particleSpeed)
         particles._draw2d?.()
+        return
+      }
+
+      if (mode === 'erosion') {
+        raindrops.ensureCount(p.rainAmount)
+        raindrops.step(dt, erosionTerrain, p.erosionRate)
+        raindrops._draw2d?.()
+        erosionTerrain._draw2d?.()
       }
     },
-    [particles],
+    [particles, raindrops, erosionTerrain],
   )
 
   const simulation = useSimulationLoop({ onTick })
-  const { reset: resetSimulation, pause: pauseSimulation } = simulation
+  const { reset: resetSimulation, pause: pauseSimulation, start: startSimulation } = simulation
 
   const stopAndResetSimulation = useCallback(() => {
     pauseSimulation()
@@ -88,11 +121,25 @@ export default function App() {
     setParams((p) => ({ ...p, time: INITIAL_EVOLVE }))
     particles.reset()
     particles._draw2d?.()
-  }, [pauseSimulation, resetSimulation, particles])
+    raindrops.clear()
+    raindrops._draw2d?.()
+    erosionTerrain.clear()
+    setErosionVersion((v) => v + 1)
+  }, [pauseSimulation, resetSimulation, particles, raindrops, erosionTerrain])
 
   const handleReset = useCallback(() => {
     stopAndResetSimulation()
   }, [stopAndResetSimulation])
+
+  const handleStart = useCallback(() => {
+    if (modeRef.current === 'erosion') {
+      const p = paramsRef.current
+      erosionTerrain.copyFromNoiseMap(p._noiseMap, p.displace)
+      raindrops.start(p.rainAmount, p.displace)
+      setErosionVersion((v) => v + 1)
+    }
+    startSimulation()
+  }, [erosionTerrain, raindrops, startSimulation])
 
   const handleModeChange = useCallback(
     (nextMode) => {
@@ -105,7 +152,7 @@ export default function App() {
   useEffect(() => {
     const onHash = () => setRoute(getRoute())
     window.addEventListener('hashchange', onHash)
-    if (!window.location.hash) window.location.hash = '#/2d'
+    if (!window.location.hash) window.location.hash = '#/'
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
@@ -119,6 +166,7 @@ export default function App() {
         time: params.time,
         shapeOp: params.shapeOp,
         shapeAmount: params.shapeAmount,
+        noiseType: params.noiseType,
       }),
     [
       params.resolution,
@@ -128,19 +176,28 @@ export default function App() {
       params.time,
       params.shapeOp,
       params.shapeAmount,
+      params.noiseType,
     ],
   )
 
   // Keep latest noise map on paramsRef for the rAF tick without re-binding the loop
   paramsRef.current = { ...params, _noiseMap: noiseMap }
 
+  if (route === 'home') {
+    return (
+      <div className="app-shell">
+        <HomePage />
+      </div>
+    )
+  }
+
   return (
     <div className="app-shell">
       <header className="brand-bar">
-        <div className="brand-block">
+        <a className="brand-block" href="#/" aria-label="Noise Lab home">
           <p className="app-kicker">NOISE LAB / {ROUTE_LABEL[route] ?? '2D'}</p>
           <h1 className="brand-title">Noise Lab</h1>
-        </div>
+        </a>
 
         <div className="page-tabs" role="tablist" aria-label="Views">
           <a
@@ -181,8 +238,12 @@ export default function App() {
             simulationMode={simulationMode}
             onSimulationModeChange={handleModeChange}
             simulation={simulation}
+            onStart={handleStart}
             onReset={handleReset}
             particleSystem={particles}
+            erosionTerrain={erosionTerrain}
+            raindropSystem={raindrops}
+            erosionVersion={erosionVersion}
             simView={simView}
             onSimViewChange={setSimView}
           />

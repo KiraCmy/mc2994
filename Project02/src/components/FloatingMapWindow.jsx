@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import NoiseMap2D from './NoiseMap2D.jsx'
 
-const WIN_W = 220
-const WIN_H = 260
-/** Keep clear of brand (top-left) and control bar (bottom). */
-const SAFE = { left: 280, top: 12, right: 16, bottom: 140 }
+const WIN_W = 180
+const WIN_H = 210
+/** Keep clear of the header, left edge, and the right control panel. */
+const SAFE = { left: 16, top: 64, right: 360, bottom: 16 }
 
 function clampPos(x, y) {
   const maxX = Math.max(SAFE.left, window.innerWidth - WIN_W - SAFE.right)
@@ -15,23 +15,32 @@ function clampPos(x, y) {
   }
 }
 
-function defaultPos() {
-  return clampPos(window.innerWidth - WIN_W - SAFE.right, SAFE.top + 8)
+function posBelowAnchor(anchorRef) {
+  const el = anchorRef?.current
+  if (!el) return clampPos(SAFE.left, SAFE.top)
+  const r = el.getBoundingClientRect()
+  return clampPos(Math.round(r.left), Math.round(r.bottom + 8))
 }
 
 /**
  * Draggable floating window for the live 2D map over the 3D page.
- * Kept away from the logo and bottom controls.
+ * Defaults to the left, directly below the viewport tabs.
  */
-export default function FloatingMapWindow({ open, onClose, noiseMap, resolution }) {
+export default function FloatingMapWindow({
+  open,
+  onClose,
+  noiseMap,
+  resolution,
+  anchorRef,
+}) {
   const panelRef = useRef(null)
   const dragRef = useRef(null)
-  const [pos, setPos] = useState(defaultPos)
+  const [pos, setPos] = useState(() => posBelowAnchor(anchorRef))
   const [dragging, setDragging] = useState(false)
 
-  useEffect(() => {
-    if (open) setPos(defaultPos())
-  }, [open])
+  useLayoutEffect(() => {
+    if (open) setPos(posBelowAnchor(anchorRef))
+  }, [open, anchorRef])
 
   useEffect(() => {
     if (!open) return undefined
@@ -59,10 +68,13 @@ export default function FloatingMapWindow({ open, onClose, noiseMap, resolution 
   }, [open])
 
   useEffect(() => {
-    const onResize = () => setPos((p) => clampPos(p.x, p.y))
+    const onResize = () => {
+      if (dragging) return
+      setPos((p) => clampPos(p.x, p.y))
+    }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
-  }, [])
+  }, [dragging])
 
   if (!open) return null
 

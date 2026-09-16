@@ -1,4 +1,4 @@
-import { fbm2 } from './simplex2d.js'
+import { sampleNoise } from './noiseTypes.js'
 import { shapeValue } from './shaping.js'
 
 const EPS = 0.001
@@ -17,6 +17,7 @@ export function generateCurlNoiseMap({
   strength = 1,
   shapeOp = 'none',
   shapeAmount = 1,
+  noiseType = 'simplex',
 }) {
   const res = Math.max(4, Math.floor(resolution))
   const cells = res * res
@@ -26,7 +27,14 @@ export function generateCurlNoiseMap({
   const potential = new Float32Array(cells)
 
   const potentialAt = (x, y) => {
-    const n = fbm2(x * scale + time * 0.15, y * scale - time * 0.11, octaves, lac, gain)
+    const n = sampleNoise(
+      noiseType,
+      x * scale + time * 0.15,
+      y * scale - time * 0.11,
+      octaves,
+      lac,
+      gain,
+    )
     return shapeValue(n, shapeOp, shapeAmount)
   }
 
@@ -52,13 +60,29 @@ export function generateCurlNoiseMap({
     }
   }
 
-  // Normalize magnitude for display / height mapping
+  // Normalize magnitude for display / vector strength
   let maxMag = 1e-6
   for (let k = 0; k < cells; k++) maxMag = Math.max(maxMag, mag[k])
   const normMag = new Float32Array(cells)
   for (let k = 0; k < cells; k++) normMag[k] = mag[k] / maxMag
 
-  return { resolution: res, vx, vy, mag: normMag, potential, maxMag }
+  // Shared unit height field — source of truth for 2D height map + 3D terrain.
+  // Blend curl magnitude with remapped potential; displace is applied at render time.
+  const height = new Float32Array(cells)
+  for (let k = 0; k < cells; k++) {
+    height[k] = normMag[k] * 0.65 + ((potential[k] + 1) * 0.5) * 0.35
+  }
+
+  return { resolution: res, vx, vy, mag: normMag, potential, height, maxMag }
+}
+
+/**
+ * Sample the shared unit height field (× displace for mesh elevation).
+ * Same values drive the 2D HEIGHT MAP grayscale and 3D Terrain Y.
+ */
+export function sampleHeight(noiseMap, u, v, displace = 1) {
+  if (!noiseMap?.height) return 0
+  return sampleField(noiseMap.height, noiseMap.resolution, u, v) * displace
 }
 
 /** Bilinear sample of a scalar field (u,v in [0,1]). */

@@ -3,27 +3,30 @@
 :root {
   --bg: #000000;
   --bg-soft: #080808;
-  --line: #5f5f5f;
-  --line-soft: #2d2d2d;
   --text: #f2f2f2;
   --text-soft: #bcbcbc;
   --text-dim: #7a7a7a;
   --dot: #f4f4f4;
-  --accent: #e040a0;
-  --accent-soft: #8a2060;
+  --accent: #ff1493;
+  --border-outer: rgba(255, 255, 255, 0.30);
+  --border-inner: rgba(255, 255, 255, 0.14);
+  --border-width: 1px;
+  --control-height: 28px;
+  --control-pad-x: 12px;
+  --control-letter-spacing: 0.12em;
 
   --font-ui: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
   --font-display: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'IBM Plex Mono', 'SF Mono', ui-monospace, monospace;
 
-  --type-micro: 9px;
-  --type-small: 10px;
-  --type-body: 11px;
-  --type-value: 11px;
-  --type-subtitle: 14px;
+  --type-micro: 10px;
+  --type-small: 11px;
+  --type-body: 12px;
+  --type-value: 12px;
+  --type-subtitle: 15px;
   --type-display: clamp(38px, 5.2vw, 64px);
 
-  --radius: 2px;
+  --radius: 0;
   --space-1: 2px;
   --space-2: 4px;
   --space-3: 8px;
@@ -47,6 +50,7 @@ body,
 body {
   overflow: hidden;
   font-family: var(--font-ui);
+  font-weight: 400;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;

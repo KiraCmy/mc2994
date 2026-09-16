@@ -1,7 +1,7 @@
 /** Curl-noise equation readout styled as a marginal annotation. */
 export default function EquationPanel() {
   return (
-    <aside className="equation-panel" aria-label="Curl noise equation">
+    <section className="equation-panel control-section" aria-label="Curl noise equation">
       <p className="equation-kicker">ANNOTATION / EQUATION</p>
       <div className="equation-block">
         <p className="eq-line">
@@ -44,6 +44,6 @@ export default function EquationPanel() {
           <dd>curl gain</dd>
         </div>
       </dl>
-    </aside>
+    </section>
   )
 }

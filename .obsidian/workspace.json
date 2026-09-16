@@ -4,21 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "7535590e78b3c38f",
+        "id": "7fe4350e5940f5e6",
         "type": "tabs",
         "children": [
           {
-            "id": "b997ead4a3b3b43d",
+            "id": "99e623fa5be9a983",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/random_thoughts.md",
+                "file": "docs/tutorials/Prompts/Design Adjustment_Noise Lab.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "random_thoughts"
+              "title": "Design Adjustment_Noise Lab"
             }
           }
         ]
@@ -188,23 +188,23 @@
       "bases:Create new base": false
     }
   },
-  "active": "b997ead4a3b3b43d",
+  "active": "99e623fa5be9a983",
   "lastOpenFiles": [
-    "Project02/dist/assets/index-CvAQ8GWK.css",
-    "Project02/dist/assets/index-ct-EboBc.js",
-    "Project02/src/components/SimulationScene3D.jsx",
-    "Project02/src/simulation/particleSystem.js",
-    "Project02/dist/assets/index-CjShACiK.css",
-    "Project02/dist/assets/index-eP94di25.js",
-    "Project02/src/components/ParticleFlowCanvas.jsx",
-    "docs/tutorials/Class Note.md",
-    "Project02/dist/assets/index-Cw_DhyxY.css",
-    "Project02/dist/assets/index-DSfI5iMD.js",
-    "Project02/src/components/WindFieldCanvas.jsx",
-    "Project02/dist/assets/index-DJNmA0NE.css",
-    "docs/random_thoughts.md",
-    "docs/tutorials/REACT/REACT.md",
     "docs/tutorials/REACT/node.js_install.md",
+    "docs/tutorials/Prompts/Design Adjustment_Noise Lab.md",
+    "Project02/src/components/RaindropCanvas.jsx",
+    "Project02/src/simulation/raindropSystem.js",
+    "Project02/src/components/ErosionHeightCanvas.jsx",
+    "Project02/src/simulation/erosionTerrain.js",
+    "Project02/src/components/CaptureBridge.jsx",
+    "Project02/src/components/ViewportExportMenu.jsx",
+    "Project02/src/export/exportTerrain.js",
+    "Project02/src/export",
+    "Project02/src/components/ViewDisplayBar.jsx",
+    "Project02/src/noise/noiseTypes.js",
+    "docs/random_thoughts.md",
+    "docs/tutorials/Class Note.md",
+    "docs/tutorials/REACT/REACT.md",
     "docs/tutorials/tutorial_.md",
     "Project02/dist/icons.svg",
     "Project02/dist/favicon.svg",
@@ -227,7 +227,6 @@
     "Project02/node_modules/glsl-noise/README.md",
     "Project02/node_modules/@types/react/README.md",
     "Project02/node_modules/react/README.md",
-    "Project02/node_modules/vite/README.md",
     "Project02/src/assets/vite.svg",
     "Project02/src/assets/react.svg",
     "Project02/src/assets/hero.png",
