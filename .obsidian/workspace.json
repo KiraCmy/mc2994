@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/tutorials/Prompts/Design Adjustment_Noise Lab.md",
+                "file": "docs/tutorials/Class Note.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Design Adjustment_Noise Lab"
+              "title": "Class Note"
             }
           }
         ]
@@ -190,8 +190,15 @@
   },
   "active": "99e623fa5be9a983",
   "lastOpenFiles": [
-    "docs/tutorials/REACT/node.js_install.md",
+    "docs/random_thoughts.md",
+    "Pasted image 20260916120314.png",
+    "Pasted image 20260916120103.png",
+    "docs/tutorials/tutorial_.md",
+    "docs/tutorials/Class Note.md",
+    "Pasted image 20260916115539.png",
+    "Pasted image 20260916115430.png",
     "docs/tutorials/Prompts/Design Adjustment_Noise Lab.md",
+    "docs/tutorials/REACT/node.js_install.md",
     "Project02/src/components/RaindropCanvas.jsx",
     "Project02/src/simulation/raindropSystem.js",
     "Project02/src/components/ErosionHeightCanvas.jsx",
@@ -202,10 +209,7 @@
     "Project02/src/export",
     "Project02/src/components/ViewDisplayBar.jsx",
     "Project02/src/noise/noiseTypes.js",
-    "docs/random_thoughts.md",
-    "docs/tutorials/Class Note.md",
     "docs/tutorials/REACT/REACT.md",
-    "docs/tutorials/tutorial_.md",
     "Project02/dist/icons.svg",
     "Project02/dist/favicon.svg",
     "Project02/node_modules/three/README.md",
@@ -231,10 +235,6 @@
     "Project02/src/assets/react.svg",
     "Project02/src/assets/hero.png",
     "Project02/public/icons.svg",
-    "Project02/public/favicon.svg",
-    "Untitled.canvas",
-    "Pasted image 20260909000702.png",
-    "Pasted image 20260909000658.png",
-    "app/dist/icons.svg"
+    "Untitled.canvas"
   ]
 }

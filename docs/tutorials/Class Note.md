@@ -12,3 +12,7 @@ Approach 02: Noise maps as the result of **simulations**
 - Cellular Automata
 - Flood fill
 - Hydraulic Erosion Simulations
+
+
+## Presentation 
+- show the image of the theme you are interested 
