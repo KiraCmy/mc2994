@@ -11,12 +11,14 @@
             "id": "99e623fa5be9a983",
             "type": "leaf",
             "state": {
-              "type": "image",
+              "type": "markdown",
               "state": {
-                "file": "docs/assets/image/Pasted image 20260916120314.png"
+                "file": "docs/planning/Firebase Prompt.md",
+                "mode": "source",
+                "source": false
               },
-              "icon": "lucide-image",
-              "title": "Pasted image 20260916120314"
+              "icon": "lucide-file",
+              "title": "Firebase Prompt"
             }
           }
         ]
@@ -186,21 +188,23 @@
       "bases:新建数据库": false
     }
   },
-  "active": "7fa31267925a205f",
+  "active": "99e623fa5be9a983",
   "lastOpenFiles": [
     "Project02/dist/index.html",
+    "Project02/dist/assets/index-whl6xG1T.css",
+    "Project02/dist/assets/index-C_sfnv6T.js",
+    "Project02/dist/assets",
+    "Project02/dist/assets/index-BT4O5e-C.js",
+    "Project02/dist/assets/index-BO-DrEJc.js",
+    "Project02/src/components/AuthPanel.jsx",
+    "Project02/src/hooks/useAuthUser.js",
+    "Project02/src/hooks",
+    "docs/planning/Prompt_Archive.md",
+    "docs/assets/image/Pasted image 20260916120314.png",
     "Project02/dist/assets/index-DelnLSlo.js",
     "Project02/dist/assets/index-B-f2gcYb.css",
-    "Project02/dist/assets",
     "Project02/dist/icons.svg",
     "Project02/dist/favicon.svg",
-    "Project02/dist",
-    "Project02/node_modules/firebase/functions/dist/esm/firestore/lite/pipelines/index.d.ts",
-    "Project02/node_modules/firebase/functions/dist/firestore/lite/pipelines/index.d.ts",
-    "Project02/node_modules/firebase/functions/dist/esm/messaging/sw/index.d.ts",
-    "Project02/node_modules/firebase/functions/dist/esm/firestore/pipelines/index.d.ts",
-    "Project02/node_modules/firebase/functions/dist/esm/firestore/pipelines/index.cdn.d.ts",
-    "Project02/node_modules/firebase/functions/dist/esm/firestore/lite/pipelines",
     "Project02/node_modules/protobufjs/google/README.md",
     "Project02/node_modules/protobufjs/README.md",
     "Project02/node_modules/web-vitals/README.md",
@@ -225,7 +229,6 @@
     "Project02/node_modules/get-caller-file/LICENSE.md",
     "Project02/node_modules/@firebase/database-types/README.md",
     "Project02/node_modules/re2js/README.md",
-    "Project02/node_modules/@firebase/firestore-types/README.md",
     "Project01/src/assets/vite.svg",
     "Project01/src/assets/react.svg",
     "Project01/src/assets/hero.png",
@@ -234,7 +237,6 @@
     "Project01/dist/icons.svg",
     "Project01/dist/favicon.svg",
     "未命名.canvas",
-    "docs/assets/image/Pasted image 20260916120314.png",
     "Untitled.canvas"
   ]
 }

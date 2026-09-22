@@ -22,3 +22,10 @@ Use my existing project structure and current Noise Lab parameters.
 Do not redesign or refactor the app yet.
 Keep the tutorial simple, practical, and beginner-friendly.
 Do not implement anything yet.
+
+## Create Firebase Login
+I also enabled Google Sign-In in Firebase.
+
+Please include "Continue with Google" in the authentication UI in addition to Email/Password.
+
+Keep the implementation simple and consistent with the existing Noise Lab design.

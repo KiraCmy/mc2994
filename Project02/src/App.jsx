@@ -9,6 +9,8 @@ import Map2DPage from './pages/Map2DPage.jsx'
 import Grid3DPage from './pages/Grid3DPage.jsx'
 import SimulationPage from './pages/SimulationPage.jsx'
 import HomePage from './pages/HomePage.jsx'
+import AuthPanel from './components/AuthPanel.jsx'
+import { useAuthUser } from './hooks/useAuthUser.js'
 import './App.css'
 
 const DEFAULTS = {
@@ -51,6 +53,7 @@ export default function App() {
   const [simulationMode, setSimulationMode] = useState(DEFAULT_SIMULATION_MODE)
   const [simView, setSimView] = useState('2d') // 2d | 3d
   const [erosionVersion, setErosionVersion] = useState(0)
+  const { user, authReady, authError } = useAuthUser()
 
   const paramsRef = useRef(params)
   const modeRef = useRef(simulationMode)
@@ -199,31 +202,34 @@ export default function App() {
           <h1 className="brand-title">Noise Lab</h1>
         </a>
 
-        <div className="page-tabs" role="tablist" aria-label="Views">
-          <a
-            role="tab"
-            aria-selected={route === '2d'}
-            className={route === '2d' ? 'is-active' : ''}
-            href="#/2d"
-          >
-            2D MAP
-          </a>
-          <a
-            role="tab"
-            aria-selected={route === '3d'}
-            className={route === '3d' ? 'is-active' : ''}
-            href="#/3d"
-          >
-            3D WORLD
-          </a>
-          <a
-            role="tab"
-            aria-selected={route === 'sim'}
-            className={route === 'sim' ? 'is-active' : ''}
-            href="#/sim"
-          >
-            SIMULATION MAP
-          </a>
+        <div className="brand-actions">
+          <div className="page-tabs" role="tablist" aria-label="Views">
+            <a
+              role="tab"
+              aria-selected={route === '2d'}
+              className={route === '2d' ? 'is-active' : ''}
+              href="#/2d"
+            >
+              2D MAP
+            </a>
+            <a
+              role="tab"
+              aria-selected={route === '3d'}
+              className={route === '3d' ? 'is-active' : ''}
+              href="#/3d"
+            >
+              3D WORLD
+            </a>
+            <a
+              role="tab"
+              aria-selected={route === 'sim'}
+              className={route === 'sim' ? 'is-active' : ''}
+              href="#/sim"
+            >
+              SIMULATION MAP
+            </a>
+          </div>
+          <AuthPanel user={user} authReady={authReady} authError={authError} />
         </div>
       </header>
 
