@@ -10,6 +10,7 @@ import Grid3DPage from './pages/Grid3DPage.jsx'
 import SimulationPage from './pages/SimulationPage.jsx'
 import HomePage from './pages/HomePage.jsx'
 import AuthPanel from './components/AuthPanel.jsx'
+import NoiseConfigPanel from './components/NoiseConfigPanel.jsx'
 import { useAuthUser } from './hooks/useAuthUser.js'
 import './App.css'
 
@@ -24,6 +25,7 @@ const DEFAULTS = {
   shapeAmount: 0,
   displace: 0.85,
   gridScale: 3.2,
+  waterLevel: 0,
   windStrength: 1,
   evolutionSpeed: 0.35,
   vectorDensity: 24,
@@ -152,6 +154,16 @@ export default function App() {
     [stopAndResetSimulation],
   )
 
+  const handleLoadConfig = useCallback(
+    (config) => {
+      stopAndResetSimulation()
+      setParams((current) => ({ ...current, ...config.params }))
+      setSimulationMode(config.simulationMode ?? DEFAULT_SIMULATION_MODE)
+      setSimView(config.simView ?? '2d')
+    },
+    [stopAndResetSimulation],
+  )
+
   useEffect(() => {
     const onHash = () => setRoute(getRoute())
     window.addEventListener('hashchange', onHash)
@@ -210,7 +222,8 @@ export default function App() {
               className={route === '2d' ? 'is-active' : ''}
               href="#/2d"
             >
-              2D MAP
+              <span className="tab-label-full">2D MAP</span>
+              <span className="tab-label-short">2D</span>
             </a>
             <a
               role="tab"
@@ -218,7 +231,8 @@ export default function App() {
               className={route === '3d' ? 'is-active' : ''}
               href="#/3d"
             >
-              3D WORLD
+              <span className="tab-label-full">3D WORLD</span>
+              <span className="tab-label-short">3D</span>
             </a>
             <a
               role="tab"
@@ -226,9 +240,15 @@ export default function App() {
               className={route === 'sim' ? 'is-active' : ''}
               href="#/sim"
             >
-              SIMULATION MAP
+              <span className="tab-label-full">SIMULATION MAP</span>
+              <span className="tab-label-short">SIM</span>
             </a>
           </div>
+          <NoiseConfigPanel
+            user={user}
+            state={{ params, simulationMode, simView }}
+            onLoad={handleLoadConfig}
+          />
           <AuthPanel user={user} authReady={authReady} authError={authError} />
         </div>
       </header>

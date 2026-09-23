@@ -274,6 +274,67 @@ Add height-based shading to the 3D terrain SOLID mode.
 - Preserve Wireframe and Solid + Wireframe modes.
 
 
+## Add Color
+-Add a BIOME display mode to the existing 3D terrain.
+
+Map terrain elevation to these colors:
+- Deep water: #161A24
+- Shallow water: #30384D
+- Lowland: #726B79
+- Highland: #A18491
+- Rock: #B8A8AE
+- Snow / highest peaks: #F1ECEF
+
+Use smooth blending between elevation zones instead of hard bands.
+
+Use #FF1493 very sparingly as an accent for selected/highlighted terrain features, not as a main biome color.
+
+Add a Water Level control to adjust the lake threshold.
+
+Keep the existing noise, terrain geometry, lighting, and other display modes unchanged.
+
+## Revise Color
+Refine the BIOME terrain visualization.
+
+The current terrain looks too soft and pink, and the biome zones are difficult to distinguish.
+
+1. Keep most terrain neutral and dark:
+- lowland: #4A4D5A
+- highland: #726B79
+- rock: #A39AA1
+- peaks: #E8E5E7
+
+2. Reduce pink/mauve coverage significantly.
+Use #FF1493 only as a subtle accent, not as a terrain base color.
+
+3. Add a separate horizontal water plane at the Water Level instead of coloring low terrain as water.
+Use #161A24 for water with slight transparency.
+
+4. Keep smooth transitions between terrain zones, but make each biome visually distinguishable.
+
+5. Increase terrain surface definition slightly so ridges and valleys are easier to read.
+
+Keep the existing geometry and noise generation unchanged.
+
+
+
+
+-Replace the pure black 3D viewport background with a subtle atmospheric gradient.
+
+Palette:
+- top: #11131B
+- center: #1D1B26
+- bottom: #29232B
+
+Blend dark blue-gray into dusty mauve-gray.
+
+Add a very subtle radial glow behind the terrain so the center is slightly lighter than the edges.
+
+Keep it dark, low-saturation and minimal.
+Avoid obvious gradient bands or bright pink.
+Keep #FF1493 as the main accent color.
+
+
 
 
 

@@ -29,3 +29,27 @@ I also enabled Google Sign-In in Firebase.
 Please include "Continue with Google" in the authentication UI in addition to Email/Password.
 
 Keep the implementation simple and consistent with the existing Noise Lab design.
+
+## Fix Google Account Login Issue
+Google Sign-In is not completing successfully.
+
+Current behavior:
+- Google provider is enabled in Firebase Console.
+- The Google account selection and 2FA flow works.
+- After returning to the app, there is no error.
+- However, no Google user appears in Firebase Authentication > Users.
+- Email/Password authentication already works correctly.
+
+Please debug the Google authentication flow only.
+
+Check:
+- GoogleAuthProvider setup
+- signInWithPopup vs signInWithRedirect
+- redirect result handling if redirect is used
+- Firebase auth state after Google sign-in
+- any caught/suppressed Firebase errors
+
+Add temporary console logging if needed so we can see whether Google authentication actually succeeds.
+
+Do not change the existing Email/Password authentication or UI design.
+Make the minimum necessary fix.

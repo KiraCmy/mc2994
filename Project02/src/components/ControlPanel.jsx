@@ -10,6 +10,7 @@ const TIPS = {
   RES: 'Grid sample count (N×N). Higher = sharper map and sim height field.',
   HEIGHT: 'How far the 3D mesh lifts from curl magnitude.',
   SIZE: 'World size of the 3D grid plane.',
+  WATER: 'Height of the BIOME lake plane. Higher = larger flooded area.',
   OP: 'Shaping operator remaps the noise potential before curl.',
   AMT: 'Amount / strength of the selected shaping operator.',
   EXP: 'Exponent for POWER shaping (curves the potential).',
@@ -226,6 +227,17 @@ export default function ControlPanel({
             step={0.1}
             display={params.gridScale.toFixed(1)}
             onChange={set('gridScale')}
+          />
+          <ParamSlider
+            id={`${mode}-waterLevel`}
+            label="WATER"
+            tip={TIPS.WATER}
+            value={params.waterLevel ?? 0}
+            min={0}
+            max={0.72}
+            step={0.01}
+            display={(params.waterLevel ?? 0).toFixed(2)}
+            onChange={set('waterLevel')}
           />
         </div>
       ) : null}

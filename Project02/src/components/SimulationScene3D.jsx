@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { sampleField } from '../noise/generateNoiseMap.js'
 import { sampleHeight } from '../simulation/particleSystem.js'
 import CaptureBridge from './CaptureBridge.jsx'
+import { AtmosphereBackground } from './atmosphereBackground.js'
 
 function Terrain({ noiseMap, displace, gridScale }) {
   const meshRef = useRef(null)
@@ -340,9 +341,10 @@ export default function SimulationScene3D({
       gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
       resize={{ debounce: 0 }}
       onCreated={({ gl }) => {
-        gl.setClearColor('#000000')
+        gl.setClearColor('#11131B')
       }}
     >
+      <AtmosphereBackground />
       <ambientLight intensity={0.45} />
       <directionalLight position={[4, 8, 2]} intensity={1.0} color="#ffffff" />
       <directionalLight position={[-3, 2, -4]} intensity={0.35} color="#ff1493" />

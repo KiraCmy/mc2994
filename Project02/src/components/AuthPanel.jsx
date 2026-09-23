@@ -3,12 +3,13 @@ import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithEmailAndPassword,
-  signInWithRedirect,
+  signInWithPopup,
   signOut,
 } from 'firebase/auth'
 import { auth } from '../firebase.js'
 
 const googleProvider = new GoogleAuthProvider()
+googleProvider.setCustomParameters({ prompt: 'select_account' })
 
 export default function AuthPanel({ user, authReady, authError }) {
   const [open, setOpen] = useState(false)
@@ -25,6 +26,32 @@ export default function AuthPanel({ user, authReady, authError }) {
       setOpen(false)
     } catch (error) {
       setMessage(error.message)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const signInWithGoogle = async () => {
+    setPending(true)
+    setMessage('')
+    console.info('[Firebase Auth] Starting Google popup sign-in')
+
+    try {
+      const result = await signInWithPopup(auth, googleProvider)
+      console.info('[Firebase Auth] Google sign-in succeeded', {
+        uid: result.user.uid,
+        email: result.user.email,
+        displayName: result.user.displayName,
+        providers: result.user.providerData.map((provider) => provider.providerId),
+      })
+      setOpen(false)
+    } catch (error) {
+      console.error('[Firebase Auth] Google sign-in failed', {
+        code: error.code,
+        message: error.message,
+        customData: error.customData,
+      })
+      setMessage(`${error.code ?? 'auth/unknown'}: ${error.message}`)
     } finally {
       setPending(false)
     }
@@ -114,7 +141,7 @@ export default function AuthPanel({ user, authReady, authError }) {
                 type="button"
                 className="auth-button auth-google"
                 disabled={pending}
-                onClick={() => run(() => signInWithRedirect(auth, googleProvider))}
+                onClick={signInWithGoogle}
               >
                 CONTINUE WITH GOOGLE
               </button>

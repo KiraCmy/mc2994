@@ -11,11 +11,12 @@ const DISPLAY_MODES = [
   { id: 'solid', label: 'SOLID' },
   { id: 'wireframe', label: 'WIREFRAME' },
   { id: 'solid-wire', label: 'SOLID + WIREFRAME' },
+  { id: 'biome', label: 'BIOME' },
 ]
 
 export default function Grid3DPage({ params, onChange, noiseMap }) {
   const [mapOpen, setMapOpen] = useState(true)
-  const [renderMode, setRenderMode] = useState('solid')
+  const [renderMode, setRenderMode] = useState('biome')
   const [showAxis, setShowAxis] = useState(false)
   const [showGrid, setShowGrid] = useState(true)
   const [cameraResetNonce, setCameraResetNonce] = useState(0)
@@ -83,6 +84,7 @@ export default function Grid3DPage({ params, onChange, noiseMap }) {
                 displace={params.displace}
                 gridScale={params.gridScale}
                 displayMode={renderMode}
+                waterLevel={params.waterLevel}
                 showAxis={showAxis}
                 showGrid={showGrid}
                 cameraResetNonce={cameraResetNonce}
