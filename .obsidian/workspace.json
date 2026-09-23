@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/planning/Voxel_Prompt.md",
+                "file": "docs/tutorials/Voxel/Voxel_sbs_tutorial.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Voxel_Prompt"
+              "title": "Voxel_sbs_tutorial"
             }
           }
         ]
@@ -46,7 +46,7 @@
                 "searchQuery": ""
               },
               "icon": "lucide-folder-closed",
-              "title": "文件列表"
+              "title": "Files"
             }
           },
           {
@@ -83,7 +83,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 200
   },
   "right": {
     "id": "2554ad8639d7394f",
@@ -179,18 +179,20 @@
   },
   "left-ribbon": {
     "hiddenItems": {
-      "switcher:打开快速切换": false,
-      "graph:查看关系图谱": false,
-      "canvas:新建白板": false,
-      "daily-notes:打开/创建今天的日记": false,
-      "templates:插入模板": false,
-      "command-palette:打开命令面板": false,
-      "bases:新建数据库": false
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
     }
   },
   "active": "99e623fa5be9a983",
   "lastOpenFiles": [
+    "未命名.canvas",
     "docs/tutorials/Voxel/Voxel_sbs_tutorial.md",
+    "docs/planning/Voxel_Prompt.md",
     "docs/tutorials/Operation.md",
     "Project02/node_modules/playwright-core/types/types.d.ts",
     "Project02/node_modules/playwright-core/types/protocol.d.ts",
@@ -226,8 +228,6 @@
     "Project02/node_modules/playwright/lib/agents/playwright-test-plan.prompt.md",
     "Project02/node_modules/playwright/lib/agents/playwright-test-heal.prompt.md",
     "Project02/node_modules/playwright/lib/agents/playwright-test-healer.agent.md",
-    "Project02/node_modules/playwright/lib/agents/playwright-test-generator.agent.md",
-    "Project02/node_modules/playwright/lib/agents/playwright-test-generate.prompt.md",
     "Project02/node_modules/highlight.js/styles/school-book.png",
     "Project02/node_modules/highlight.js/styles/pojoaque.jpg",
     "Project02/node_modules/highlight.js/styles/brown-papersq.png",
@@ -236,7 +236,6 @@
     "Project02/node_modules/highlight.js/scss/brown-papersq.png",
     "docs/assets/image/Pasted image 20260916120314.png",
     "Project02/dist/icons.svg",
-    "未命名.canvas",
     "Untitled.canvas"
   ]
 }
