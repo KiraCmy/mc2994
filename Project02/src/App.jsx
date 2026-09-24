@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { generateCurlNoiseMap } from './noise/generateNoiseMap.js'
 import { DEFAULT_SIMULATION_MODE } from './simulation/simulationModes.js'
 import { useSimulationLoop } from './simulation/useSimulationLoop.js'
@@ -13,6 +13,9 @@ import AuthPanel from './components/AuthPanel.jsx'
 import NoiseConfigPanel from './components/NoiseConfigPanel.jsx'
 import { useAuthUser } from './hooks/useAuthUser.js'
 import './App.css'
+
+/** Stage 8 — keep voxel graph out of #/2d · #/3d · #/sim initial work. */
+const VoxelPage = lazy(() => import('./pages/VoxelPage.jsx'))
 
 const DEFAULTS = {
   scale: 3.2,
@@ -43,11 +46,12 @@ function getRoute() {
   const hash = window.location.hash.replace(/^#\/?/, '')
   if (hash === '3d') return '3d'
   if (hash === 'sim' || hash === 'simulation') return 'sim'
+  if (hash === 'voxel') return 'voxel'
   if (hash === '2d') return '2d'
   return 'home'
 }
 
-const ROUTE_LABEL = { home: 'HOME', '2d': '2D', '3d': '3D', sim: 'SIM' }
+const ROUTE_LABEL = { home: 'HOME', '2d': '2D', '3d': '3D', sim: 'SIM', voxel: 'VOXEL' }
 
 export default function App() {
   const [route, setRoute] = useState(getRoute)
@@ -171,6 +175,11 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
+  // Leave SIM → pause rAF so #/2d · #/3d · #/voxel never inherit a running tick.
+  useEffect(() => {
+    if (route !== 'sim') pauseSimulation()
+  }, [route, pauseSimulation])
+
   const noiseMap = useMemo(
     () =>
       generateCurlNoiseMap({
@@ -243,6 +252,15 @@ export default function App() {
               <span className="tab-label-full">SIMULATION MAP</span>
               <span className="tab-label-short">SIM</span>
             </a>
+            <a
+              role="tab"
+              aria-selected={route === 'voxel'}
+              className={route === 'voxel' ? 'is-active' : ''}
+              href="#/voxel"
+            >
+              <span className="tab-label-full">VOXEL</span>
+              <span className="tab-label-short">VOX</span>
+            </a>
           </div>
           <NoiseConfigPanel
             user={user}
@@ -273,6 +291,16 @@ export default function App() {
             simView={simView}
             onSimViewChange={setSimView}
           />
+        ) : route === 'voxel' ? (
+          <Suspense
+            fallback={
+              <div className="page page-3d" role="status">
+                <p className="control-placeholder">Loading voxel lab…</p>
+              </div>
+            }
+          >
+            <VoxelPage />
+          </Suspense>
         ) : (
           <Map2DPage params={params} onChange={setParams} noiseMap={noiseMap} />
         )}
