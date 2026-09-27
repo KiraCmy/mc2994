@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
-import { auth } from '../firebase.js'
+import { auth, firebaseReady } from '../firebase.js'
 import { ensureUserProfile } from '../services/users.js'
 
 export function useAuthUser() {
@@ -9,6 +9,12 @@ export function useAuthUser() {
   const [authError, setAuthError] = useState('')
 
   useEffect(() => {
+    if (!firebaseReady || !auth) {
+      setAuthReady(true)
+      setAuthError('Firebase is not configured. Local preview only.')
+      return undefined
+    }
+
     return onAuthStateChanged(
       auth,
       (nextUser) => {

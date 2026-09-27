@@ -12,8 +12,27 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-const app = initializeApp(firebaseConfig)
+const hasConfig = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId)
 
-export const auth = getAuth(app)
-export const db = getFirestore(app)
-export const storage = getStorage(app)
+let app = null
+let auth = null
+let db = null
+let storage = null
+
+if (hasConfig) {
+  try {
+    app = initializeApp(firebaseConfig)
+    auth = getAuth(app)
+    db = getFirestore(app)
+    storage = getStorage(app)
+  } catch (error) {
+    console.error('[Firebase] Failed to initialize — running without auth/cloud saves.', error)
+  }
+} else {
+  console.warn(
+    '[Firebase] Missing VITE_FIREBASE_* env vars. Noise Lab runs locally without auth. Add a Project02/.env file to enable Firebase.',
+  )
+}
+
+export { app, auth, db, storage }
+export const firebaseReady = Boolean(auth && db)

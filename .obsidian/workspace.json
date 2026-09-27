@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/tutorials/Voxel/Voxel_sbs_tutorial.md",
+                "file": "docs/tutorials/1-shader-fundamentals.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Voxel_sbs_tutorial"
+              "title": "1-shader-fundamentals"
             }
           }
         ]
@@ -83,7 +83,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 200
+    "width": 200,
+    "collapsed": true
   },
   "right": {
     "id": "2554ad8639d7394f",
@@ -190,8 +191,11 @@
   },
   "active": "99e623fa5be9a983",
   "lastOpenFiles": [
-    "未命名.canvas",
+    "docs/tutorials/02-shader-studies.md",
     "docs/tutorials/Voxel/Voxel_sbs_tutorial.md",
+    "docs/tutorials/shader_basic_knowledge.md",
+    "docs/tutorials/1-shader-fundamentals.md",
+    "未命名.canvas",
     "docs/planning/Voxel_Prompt.md",
     "docs/tutorials/Operation.md",
     "Project02/node_modules/playwright-core/types/types.d.ts",
@@ -226,8 +230,6 @@
     "Project02/node_modules/playwright/README.md",
     "Project02/node_modules/playwright/lib/agents/playwright-test-planner.agent.md",
     "Project02/node_modules/playwright/lib/agents/playwright-test-plan.prompt.md",
-    "Project02/node_modules/playwright/lib/agents/playwright-test-heal.prompt.md",
-    "Project02/node_modules/playwright/lib/agents/playwright-test-healer.agent.md",
     "Project02/node_modules/highlight.js/styles/school-book.png",
     "Project02/node_modules/highlight.js/styles/pojoaque.jpg",
     "Project02/node_modules/highlight.js/styles/brown-papersq.png",

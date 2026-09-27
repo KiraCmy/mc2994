@@ -6,7 +6,7 @@ import {
   signInWithPopup,
   signOut,
 } from 'firebase/auth'
-import { auth } from '../firebase.js'
+import { auth, firebaseReady } from '../firebase.js'
 
 const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({ prompt: 'select_account' })
@@ -19,6 +19,10 @@ export default function AuthPanel({ user, authReady, authError }) {
   const [pending, setPending] = useState(false)
 
   const run = async (action) => {
+    if (!auth) {
+      setMessage('Firebase is not configured.')
+      return
+    }
     setPending(true)
     setMessage('')
     try {
@@ -32,6 +36,10 @@ export default function AuthPanel({ user, authReady, authError }) {
   }
 
   const signInWithGoogle = async () => {
+    if (!auth) {
+      setMessage('Firebase is not configured.')
+      return
+    }
     setPending(true)
     setMessage('')
     console.info('[Firebase Auth] Starting Google popup sign-in')
@@ -76,6 +84,13 @@ export default function AuthPanel({ user, authReady, authError }) {
         <div className="auth-popover" role="dialog" aria-label="Noise Lab account">
           <p className="auth-kicker">NOISE LAB ACCOUNT</p>
 
+          {!firebaseReady ? (
+            <p className="auth-message" role="alert">
+              Firebase env vars are missing. Local Noise Lab still works — auth/presets need a
+              Project02/.env file.
+            </p>
+          ) : null}
+
           {user ? (
             <>
               <p className="auth-user">{user.displayName || 'SIGNED IN'}</p>
@@ -83,7 +98,7 @@ export default function AuthPanel({ user, authReady, authError }) {
               <button
                 type="button"
                 className="auth-button"
-                disabled={pending}
+                disabled={pending || !auth}
                 onClick={() => run(() => signOut(auth))}
               >
                 SIGN OUT
@@ -97,6 +112,7 @@ export default function AuthPanel({ user, authReady, authError }) {
                   type="email"
                   autoComplete="email"
                   value={email}
+                  disabled={!firebaseReady}
                   onChange={(event) => setEmail(event.target.value)}
                 />
               </label>
@@ -108,6 +124,7 @@ export default function AuthPanel({ user, authReady, authError }) {
                   autoComplete="current-password"
                   minLength={6}
                   value={password}
+                  disabled={!firebaseReady}
                   onChange={(event) => setPassword(event.target.value)}
                 />
               </label>
@@ -116,7 +133,7 @@ export default function AuthPanel({ user, authReady, authError }) {
                 <button
                   type="button"
                   className="auth-button is-primary"
-                  disabled={pending || !email || password.length < 6}
+                  disabled={pending || !firebaseReady || !email || password.length < 6}
                   onClick={() =>
                     run(() => signInWithEmailAndPassword(auth, email, password))
                   }
@@ -126,7 +143,7 @@ export default function AuthPanel({ user, authReady, authError }) {
                 <button
                   type="button"
                   className="auth-button"
-                  disabled={pending || !email || password.length < 6}
+                  disabled={pending || !firebaseReady || !email || password.length < 6}
                   onClick={() =>
                     run(() => createUserWithEmailAndPassword(auth, email, password))
                   }
@@ -135,12 +152,14 @@ export default function AuthPanel({ user, authReady, authError }) {
                 </button>
               </div>
 
-              <div className="auth-divider"><span>OR</span></div>
+              <div className="auth-divider">
+                <span>OR</span>
+              </div>
 
               <button
                 type="button"
                 className="auth-button auth-google"
-                disabled={pending}
+                disabled={pending || !firebaseReady}
                 onClick={signInWithGoogle}
               >
                 CONTINUE WITH GOOGLE
@@ -149,7 +168,9 @@ export default function AuthPanel({ user, authReady, authError }) {
           )}
 
           {message || authError ? (
-            <p className="auth-message" role="alert">{message || authError}</p>
+            <p className="auth-message" role="alert">
+              {message || authError}
+            </p>
           ) : null}
         </div>
       ) : null}

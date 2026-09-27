@@ -36,6 +36,7 @@ function serializableParams(params) {
 }
 
 export async function saveNoiseConfig(user, name, state) {
+  if (!db) throw new Error('Firebase is not configured.')
   return addDoc(collection(db, 'users', user.uid, 'configs'), {
     ownerId: user.uid,
     name: name.trim() || 'Untitled configuration',
@@ -49,6 +50,7 @@ export async function saveNoiseConfig(user, name, state) {
 }
 
 export async function listNoiseConfigs(user) {
+  if (!db) throw new Error('Firebase is not configured.')
   const configQuery = query(
     collection(db, 'users', user.uid, 'configs'),
     orderBy('updatedAt', 'desc'),
