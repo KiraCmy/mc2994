@@ -2,7 +2,7 @@
 
 Hands-on experiments for Noise Lab (React + Three.js / React Three Fiber).
 
-**Prerequisites:** [1-shader-fundamentals.md](./1-shader-fundamentals.md) — pipeline, uniforms / attributes / varyings, GLSL basics, spatial data. This guide does **not** re-teach those.
+**Prerequisites:** [1-shader-fundamentals.md](01-shader-fundamentals.md) — pipeline, uniforms / attributes / varyings, GLSL basics, spatial data. This guide does **not** re-teach those.
 
 **How to use:** implement one study at a time on a terrain mesh (or a simple plane). Keep a flat-color baseline so you can switch back and compare. Do not combine strategies until the end section.
 
