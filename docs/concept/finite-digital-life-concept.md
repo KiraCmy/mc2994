@@ -26,6 +26,43 @@ form. The entity develops autonomously, exists for a finite lifespan,
 and eventually dies. The user cannot prevent its death, but can choose
 which moments of its existence are worth preserving.
 
+## Conceptual Origin — Blade Runner (1982)
+
+The project is conceptually inspired by the replicants in *Blade Runner*
+(1982). The reference is to their condition as artificial lives, not to
+the film's visual aesthetic.
+
+![[blade-runner-1982-roy-batty.jpeg]]
+
+Roy Batty, a replicant, in the last moments of a lifespan built into his
+existence. *Blade Runner* (1982), directed by Ridley Scott. He is about
+to disappear, and the experiences that made this life his own will
+disappear with him.
+
+**Artificial life and finite lifespan.** Replicants are artificial
+beings whose limited lifespan is built into their existence from the
+beginning. This suggests a generated digital entity that is created
+knowing it will eventually disappear.
+
+**Artificial life and identity.** A replicated life begins from existing
+information. If something is made from what came before, what makes it
+an individual rather than simply a copy?
+
+Finite Digital Life explores these questions through abstract procedural
+entities rather than human-like characters:
+
+> **If something begins from inherited information, when does it become
+> itself?**
+
+> **If an artificial life is designed to disappear, which moment of its
+> existence is worth preserving?**
+
+Each entity may inherit traces from previous entities, but develops
+differently through its own finite existence. Its individuality emerges
+through inheritance, variation, development, and memory.
+
+**Creation → Inheritance → Individuality → Life → Death → Memory → New Life**
+
 ## Why it exists in this project
 
 Most generative systems focus on producing a final result: set
@@ -144,6 +181,10 @@ objects into a record of **relationships across generations**.
 Each entity can be unique while still carrying traces of what existed
 before it.
 
+Inheritance is not only a generative mechanism. It also creates a
+question of identity: how much of an entity comes from what it inherits,
+and how much emerges through its own development?
+
 ## The world remembers
 
 The larger system is therefore constructed through accumulated histories
@@ -196,8 +237,10 @@ The project explores several relationships:
   Life ↔ Death                        What changes when disappearance is
                                       designed into the system?
 
-  Individual ↔ Lineage                Is an entity independent if it
-                                      inherits from previous generations?
+  Individual ↔ Lineage                How much of an entity comes from
+                                      what it inherits, and how much
+                                      emerges as its own through
+                                      development?
 
   Presence ↔ Memory                   Can something continue to affect
                                       the system after it is gone?
@@ -274,9 +317,10 @@ through inheritance.
 
 > **A procedural system for cultivating finite artificial digital lives.
 > The user chooses the conditions from which an entity emerges, but does
-> not directly design its final form. Each entity develops through a
-> limited lifespan and eventually disappears. The user cannot prevent
-> its death, but can choose moments worth preserving. After death,
-> traces of the entity can remain within the system and influence later
-> generations, creating lineage and allowing the system to remember what
-> has disappeared.**
+> not directly design its final form. An entity may begin with inherited
+> information and develop into an individual state through its own
+> lifetime. It exists for a limited lifespan and eventually disappears.
+> The user cannot prevent its death, but can choose moments worth
+> preserving. After death, traces of the entity can remain within the
+> system and influence later generations, creating lineage and allowing
+> the system to remember what has disappeared.**
