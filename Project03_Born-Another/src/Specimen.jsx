@@ -1,7 +1,14 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { edgeAlpha } from './surfaceParams.js'
+import {
+  DECAY_BIAS,
+  edgeAlpha,
+  isLifecycleStudy,
+  isMaterialLifecycleStudy,
+  lifecycleVisualStudy,
+  materialLifecycleVisualStudy,
+} from './surfaceParams.js'
 import {
   decayFragmentShader,
   decayVertexShader,
@@ -9,32 +16,56 @@ import {
   developmentVertexShader,
   fragmentShader,
   individualityFragmentShader,
+  materialFragmentShader,
   traceBodyFragmentShader,
   traceFragmentShader,
   traceVertexShader,
   vertexShader,
 } from './surfaceShader.js'
 
-function shadersFor(studyId) {
-  if (studyId === 'trace') {
+function familyMode(family) {
+  if (family === 'crystal') return 1
+  if (family === 'hybrid') return 2
+  return 0
+}
+
+function decayBiasFor(materialParams) {
+  const family = materialParams.family ?? 'membrane'
+  const preset = DECAY_BIAS[family] ?? DECAY_BIAS.membrane
+  return {
+    thinning: materialParams.thinning ?? preset.thinning,
+    edgeSoftnessBias: materialParams.edgeSoftnessBias ?? preset.edgeSoftnessBias,
+    fractureSharpness: materialParams.fractureSharpness ?? preset.fractureSharpness,
+    lateWarp: materialParams.lateWarp ?? preset.lateWarp,
+  }
+}
+
+function shadersFor(visualStudy, age = 0) {
+  if (visualStudy === 'material') {
+    return {
+      vertex: age >= 0.5 ? decayVertexShader : developmentVertexShader,
+      fragment: materialFragmentShader,
+    }
+  }
+  if (visualStudy === 'trace') {
     return {
       vertex: decayVertexShader,
       fragment: traceBodyFragmentShader,
     }
   }
-  if (studyId === 'decay') {
+  if (visualStudy === 'decay') {
     return {
       vertex: decayVertexShader,
       fragment: decayFragmentShader,
     }
   }
-  if (studyId === 'development') {
+  if (visualStudy === 'development') {
     return {
       vertex: developmentVertexShader,
       fragment: developmentFragmentShader,
     }
   }
-  if (studyId === 'individuality') {
+  if (visualStudy === 'individuality') {
     return {
       vertex: vertexShader,
       fragment: individualityFragmentShader,
@@ -46,7 +77,8 @@ function shadersFor(studyId) {
   }
 }
 
-function createBodyUniforms(surface, individuality, development, decay, age) {
+function createBodyUniforms(surface, individuality, development, decay, material, age) {
+  const bias = decayBiasFor(material)
   return {
     uColorA: { value: new THREE.Color(surface.colorA) },
     uColorB: { value: new THREE.Color(surface.colorB) },
@@ -70,11 +102,20 @@ function createBodyUniforms(surface, individuality, development, decay, age) {
     uNoiseAmount: { value: development.noiseAmount },
     uDecayScale: { value: decay.decayScale },
     uDecayStart: { value: decay.decayStart },
-    uEdgeSoftness: { value: decay.edgeSoftness },
+    uEdgeSoftness: { value: bias.edgeSoftnessBias },
     uBoundaryWidth: { value: decay.boundaryWidth },
     uDiscardThreshold: { value: decay.discardThreshold },
     uDecayDisplacement: { value: decay.decayDisplacement },
     uDecayAccent: { value: new THREE.Color(decay.decayAccent) },
+    uMaterialMode: { value: familyMode(material.family) },
+    uIridescence: { value: material.iridescence },
+    uInternalContrast: { value: material.internalContrast },
+    uTransmission: { value: material.transmission },
+    uTransmitTint: { value: new THREE.Color('#b7cdd6') },
+    uIridSecondary: { value: new THREE.Color('#c9b4d4') },
+    uThinningRate: { value: bias.thinning },
+    uFractureSharpness: { value: bias.fractureSharpness },
+    uLateWarp: { value: bias.lateWarp },
   }
 }
 
@@ -84,15 +125,46 @@ function syncBodyUniforms(material, {
   individuality,
   development,
   decay,
+  materialParams,
   age,
+  isMaterialStudy,
+  materialLifecycle,
 }) {
+  const bias = decayBiasFor(materialParams)
+
   material.uniforms.uColorA.value.set(surface.colorA)
   material.uniforms.uColorB.value.set(surface.colorB)
   material.uniforms.uRimColor.value.set(surface.rimColor)
-  material.uniforms.uFresnelPower.value = surface.fresnelPower
-  material.uniforms.uRimStrength.value = surface.rimStrength
-  material.uniforms.uBodyAlpha.value = surface.opacity
-  material.uniforms.uEdgeAlpha.value = edgeAlpha(surface.opacity)
+
+  if (isMaterialStudy) {
+    material.uniforms.uFresnelPower.value = materialParams.fresnelPower
+    material.uniforms.uRimStrength.value = materialParams.rimStrength
+    material.uniforms.uBodyAlpha.value = materialParams.bodyAlpha
+    material.uniforms.uEdgeAlpha.value = edgeAlpha(materialParams.bodyAlpha)
+    material.uniforms.uMaterialMode.value = familyMode(materialParams.family)
+    material.uniforms.uIridescence.value = materialParams.iridescence
+    material.uniforms.uInternalContrast.value = materialParams.internalContrast
+    material.uniforms.uTransmission.value = materialParams.transmission
+    material.uniforms.uThinningRate.value = bias.thinning
+    material.uniforms.uFractureSharpness.value = bias.fractureSharpness
+    material.uniforms.uLateWarp.value = bias.lateWarp
+    material.uniforms.uEdgeSoftness.value = bias.edgeSoftnessBias
+  } else if (materialLifecycle) {
+    material.uniforms.uFresnelPower.value = materialParams.fresnelPower
+    material.uniforms.uRimStrength.value = materialParams.rimStrength
+    material.uniforms.uBodyAlpha.value = materialParams.bodyAlpha
+    material.uniforms.uEdgeAlpha.value = edgeAlpha(materialParams.bodyAlpha)
+    if (material.uniforms.uLateWarp) material.uniforms.uLateWarp.value = bias.lateWarp
+  } else {
+    material.uniforms.uFresnelPower.value = surface.fresnelPower
+    material.uniforms.uRimStrength.value = surface.rimStrength
+    material.uniforms.uBodyAlpha.value = surface.opacity
+    material.uniforms.uEdgeAlpha.value = edgeAlpha(surface.opacity)
+    if (material.uniforms.uLateWarp) material.uniforms.uLateWarp.value = 1
+    if (material.uniforms.uThinningRate) material.uniforms.uThinningRate.value = 0.45
+    if (material.uniforms.uFractureSharpness) material.uniforms.uFractureSharpness.value = 0.2
+    material.uniforms.uEdgeSoftness.value = decay.edgeSoftness
+  }
 
   material.uniforms.uSeed.value = individuality.seed
   material.uniforms.uNoiseScale.value = individuality.noiseScale
@@ -103,12 +175,16 @@ function syncBodyUniforms(material, {
   material.uniforms.uAge.value = age
   material.uniforms.uSpeed.value = development.speed
   material.uniforms.uPulseSpeed.value = development.pulseSpeed
-  material.uniforms.uDisplacement.value = development.displacement
+  material.uniforms.uDisplacement.value = isMaterialStudy
+    ? development.displacement * 0.55
+    : development.displacement
   material.uniforms.uNoiseAmount.value = development.noiseAmount
 
   material.uniforms.uDecayScale.value = decay.decayScale
   material.uniforms.uDecayStart.value = decay.decayStart
-  material.uniforms.uEdgeSoftness.value = decay.edgeSoftness
+  if (!isMaterialStudy) {
+    material.uniforms.uEdgeSoftness.value = decay.edgeSoftness
+  }
   material.uniforms.uBoundaryWidth.value = decay.boundaryWidth
   material.uniforms.uDiscardThreshold.value = decay.discardThreshold
   material.uniforms.uDecayDisplacement.value = decay.decayDisplacement
@@ -122,19 +198,42 @@ export default function Specimen({
   development,
   decay,
   trace,
+  material: materialParams,
   preserved,
+  isDead = false,
 }) {
   const bodyRef = useRef(null)
   const residueRef = useRef(null)
-  const showNoise = studyId !== 'surface'
-  const shaders = shadersFor(studyId)
+
   const age =
-    studyId === 'trace' ? trace.age : studyId === 'decay' ? decay.age : development.age
-  const showBody = studyId !== 'trace' || age < 0.995
-  const showResidue = studyId === 'trace'
+    isLifecycleStudy(studyId)
+      ? development.age
+      : studyId === 'trace'
+        ? trace.age
+        : studyId === 'decay'
+          ? decay.age
+          : development.age
+
+  const visualStudy =
+    studyId === 'lifecycle'
+      ? lifecycleVisualStudy(age, isDead)
+      : isMaterialLifecycleStudy(studyId)
+        ? materialLifecycleVisualStudy(age, isDead)
+        : studyId
+
+  const isMaterialStudy = visualStudy === 'material'
+  const materialLifecycle = isMaterialLifecycleStudy(studyId)
+  const showNoise = visualStudy !== 'surface'
+  const shaders = shadersFor(visualStudy, age)
+  const showBody =
+    isLifecycleStudy(studyId)
+      ? !isDead && age < 0.995
+      : studyId !== 'trace' || age < 0.995
+  const showResidue =
+    isLifecycleStudy(studyId) ? isDead || age >= 0.92 : studyId === 'trace'
 
   const bodyUniforms = useMemo(
-    () => createBodyUniforms(surface, individuality, development, decay, age),
+    () => createBodyUniforms(surface, individuality, development, decay, materialParams, age),
     [],
   )
 
@@ -170,9 +269,24 @@ export default function Specimen({
       individuality,
       development,
       decay,
+      materialParams,
       age,
+      isMaterialStudy,
+      materialLifecycle,
     })
-  }, [showNoise, surface, individuality, development, decay, age, showBody])
+  }, [
+    showNoise,
+    surface,
+    individuality,
+    development,
+    decay,
+    materialParams,
+    age,
+    showBody,
+    visualStudy,
+    isMaterialStudy,
+    materialLifecycle,
+  ])
 
   useLayoutEffect(() => {
     const material = residueRef.current
@@ -208,10 +322,16 @@ export default function Specimen({
   }, [showResidue, individuality, decay, trace, age, preserved])
 
   useFrame(({ clock }) => {
-    const material = bodyRef.current
-    if (!material) return
-    if (studyId === 'development' || studyId === 'decay' || studyId === 'trace') {
-      material.uniforms.uTime.value = clock.getElapsedTime()
+    const mat = bodyRef.current
+    if (!mat) return
+    if (
+      visualStudy === 'development' ||
+      visualStudy === 'decay' ||
+      visualStudy === 'trace' ||
+      visualStudy === 'material' ||
+      isLifecycleStudy(studyId)
+    ) {
+      mat.uniforms.uTime.value = clock.getElapsedTime()
     }
   })
 
@@ -221,7 +341,7 @@ export default function Specimen({
         <mesh renderOrder={0}>
           <sphereGeometry args={[1, 128, 128]} />
           <shaderMaterial
-            key={`body-${studyId}`}
+            key={`body-${visualStudy}-${isMaterialStudy && age >= 0.5 ? 'late' : 'live'}`}
             ref={bodyRef}
             vertexShader={shaders.vertex}
             fragmentShader={shaders.fragment}

@@ -61,3 +61,51 @@ The lower-left list now includes Study 05. Trace uses the same floating paramete
 Implementation uses two meshes: one for the dying body (Study 04 logic with a late-life fade-out) and one for the frozen trace (static late-life warp, no `uTime` motion). An Animate / Pause control and the Space key advance age automatically along the Birth–Death line; the white marker moves with it. Studies 04 and 05 also had a shading pass to remove a dark horizontal band caused by double-sided transparency and over-bent displaced normals.
 
 ![[born-another-study-05-trace.jpg]]
+
+## Study 06 — Lifecycle
+
+Study 06 does not add a new shader. It connects Studies 01–05 through one clock-driven life in React. Age advances on its own from birth to death (~16 seconds) when Animate or Space is pressed. `uTime` still drives breathing and noise motion; `uAge` only moves while the life is playing and stops at death.
+
+As age crosses each band, the existing materials take over in order: individuality at birth, development through maturity, decay through instability and late life, then the living body exits and only the Study 05 trace remains. Near age 0.95 the identity is preserved once so the residue belongs to that life. Death is irreversible for that specimen—scrubbing age backward does not revive it. After death the control becomes New Life, which resets age to 0, clears the preserved state, and starts again.
+
+The lower-left list now includes Study 06. The HUD shows the current stage name under age and seed. Lifecycle parameters keep the same floating overlay with a single Age control for pausing and inspecting a moment. The Birth–Death marker still follows age.
+
+Early life / development stage (age ~0.11): the form is still intact, breathing with Study 03 motion while the journey marker sits near Birth.
+
+![[born-another-study-06-lifecycle-development.jpg]]
+
+Late life / decay stage (age ~0.78): the membrane thins and opens along the seed-locked decay field while Animate continues toward Death.
+
+![[born-another-study-06-lifecycle.jpg]]
+
+![[born-another-study-06-lifecycle-decay.jpg]]
+
+## Study 07 — Material
+
+Study 07 keeps the same seed, breath, and Birth → Death clock from Study 06, then changes only how the body reads as matter. Three family presets retune the fragment path—clarity, Fresnel, iridescence, internal contrast, transmission—without swapping geometry or inventing a new life story. Membrane stays milky and soft-edged; Crystalline opens toward fragile glass or mineral; Hybrid mixes both through the same seed-locked noise mask so milky and clear regions share one silhouette.
+
+The lower-left list now includes Study 07. Material parameters use the same floating overlay: family tabs (Membrane, Crystalline, Hybrid), plus age, clarity, Fresnel, iridescence, and internal contrast. Entering the study continues the lifecycle pass; the HUD still shows the stage name, and Animate / Space / New Life work as in Study 06. Through living stages the material shader holds the chosen family; from instability onward the existing decay and trace materials take over so the full journey still appears on screen, with the family’s edge and opacity carried into late life.
+
+Hybrid at instability (age ~0.63): milky and crystalline patches share one irregular form while the Birth–Death marker sits past mid-life.
+
+![[born-another-study-07-material.jpg]]
+
+## Study 08 — Behavior
+
+Study 08 keeps the same seed, age clock, and shared decay field from Studies 04–07, then lets material type change **how** the body fails—not when Animate runs. One aging pipeline stays in place; family bias retunes thinning, hole softness, fracture sharpness, and late-life warp. Membrane dissolves gradually with soft openings; Crystalline breaks into sharper, more isolated remnants with brittle instability; Hybrid lets milky regions thin and open while crystalline patches crack and linger, so interior structure can read as soft areas fail.
+
+The lower-left list now includes Study 08. Behavior parameters use the same floating overlay: family tabs, plus age, thinning, fracture, and late warp. Entering the study continues the Birth → Death pass; stage names and Animate / Space / New Life match Studies 06–07. Compare families at the same seed and age so the difference is mortality character, not a different individual.
+
+Hybrid at instability (age ~0.71): soft thinning with fracture pushed high—jagged crystalline edges and dissolving membrane regions on one silhouette.
+
+![[born-another-study-08-behavior.jpg]]
+
+## Study 09 — Layered
+
+Study 09 splits the specimen into two nested meshes that still share one seed and age: a soft translucent outer membrane and a denser inner core. The first pass read as a small opaque ball inside a glass bubble. The refine closes that gap—inner scale near 0.76, stronger low-frequency displacement on the core, lower core opacity, and a noise-driven cyan → soft blue → violet → pink → warm yellow field—so the colors sit *inside* the entity rather than on a separate sphere. Outer motion stays slow and soft; the inner body moves with a related but offset field. No particles, textures, or hard refraction.
+
+The lower-left list now includes Study 09. Layered parameters use the same floating overlay: Both / Outer / Inner visibility, plus age, outer opacity, inner scale, and inner contrast. Camera, pale background, and the Birth–Death marker stay unchanged.
+
+Both layers at mid-life (age 0.45, inner scale 0.76): one soft translucent organism with irregular colorful interior visible through the membrane.
+
+![[born-another-study-09-layered.jpg]]

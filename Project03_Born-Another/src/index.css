@@ -219,6 +219,37 @@ body {
   white-space: nowrap;
 }
 
+.adjust-families {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4em;
+}
+
+.adjust-family {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-stretch: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.38;
+}
+
+.adjust-family.is-active {
+  opacity: 1;
+}
+
+.adjust-family:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 4px;
+}
+
 .adjust-sliders {
   display: flex;
   flex-direction: column;

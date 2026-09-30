@@ -711,6 +711,484 @@ Where does “animation” end and “lifespan” begin in your implementation? 
 
 ---
 
+## Study 07 — Material Variation
+
+### Question
+
+How can the same artificial life have different material identities without becoming a completely different object?
+
+### Shader concept
+
+Hold geometry, seed, age, lifecycle, and scene fixed. Change only how light, opacity, and internal color are composed in the **fragment shader**. The comparison then isolates material behavior: the specimen remains one lineage of form, while its substance reads as membrane, crystal, or something between.
+
+Reuse the surface tools already built in Studies 01–05:
+
+- soft position gradients and body/rim mixes (Study 01);
+- seed-locked procedural noise for internal structure (Study 02);
+- view-dependent Fresnel for thin edges (Study 01);
+- layered alpha so the pale background shows through.
+
+Add only what material families need: stronger edge and iridescence curves, clearer transmission-like darkening or brightening through the body, and a noise-driven mask that blends milky and crystalline regions in the Hybrid family. Do not introduce image textures or physically accurate path-traced glass. A simple Fresnel-weighted “fake refraction” tint—sampling the body color with a small view-dependent shift—is enough to suggest clear depth.
+
+This remains primarily a **fragment/surface study**. Vertex displacement from Study 03 may stay on for continuity, but it should not be the variable you change between material families.
+
+Treat each family as a **parameter bundle** (opacity curve, Fresnel power, iridescence strength, internal contrast, transmission mix), not as a cosmetic palette swap.
+
+### Goal
+
+Present three related material identities on the same living form:
+
+1. **Membrane** — milky, semi-translucent, soft Fresnel edges, subtle cyan / pink / violet interior; reads organic and synthetic at once.
+2. **Crystalline** — clearer and more mineral or glass-like; stronger edge response and iridescence; sharper internal contrast; fragile rather than polished display glass.
+3. **Hybrid** — translucent crystalline patches mixed with soft opaque or milky regions; visible internal color or structure; sits between organism, mineral, and artifact.
+
+A viewer should recognize the same seed and silhouette across all three, while still naming three different substances.
+
+### Inputs and uniforms
+
+- existing surface and identity inputs: position, normal, view direction, `uSeed`, noise scale;
+- `uMaterialMode` or discrete presets (`membrane`, `crystal`, `hybrid`);
+- body opacity / edge opacity (or a single clarity control);
+- Fresnel power and rim / iridescence strength;
+- internal contrast (how hard Study 02 noise regions read);
+- transmission or clarity amount (how much the body “opens” toward glass);
+- optional hybrid mask soft/hard edge from noise;
+- shared lifecycle uniforms (`uAge`, `uTime`) left unchanged for this study—do not yet route material into decay or trace rates.
+
+### Implementation
+
+1. Keep the mesh, camera, lighting, seed, and age path identical to Study 06 when comparing materials.
+2. Factor the living fragment look into shared blocks: body gradient, identity noise, Fresnel rim, final alpha.
+3. Define three uniform presets (or one mode enum) that only retune those blocks:
+   - Membrane: higher body alpha, lower Fresnel power, soft rim, muted noise contrast, little transmission.
+   - Crystalline: lower body alpha, higher Fresnel power, stronger iridescence, sharper noise `smoothstep` bands, more transmission tint.
+   - Hybrid: use identity noise as a mask; milky settings where the mask is low, crystalline settings where it is high.
+4. Implement transmission as a fragment approximation: darken or cool the interior with facing angle, or slightly tint `bodyColor` with a second hue as `facing` rises—avoid real environment refraction probes for now.
+5. Keep iridescence view-dependent (for example, mix rim hues with `normal.x` or fresnel), stronger for crystal than membrane.
+6. Expose only a few UI controls: material family, clarity, Fresnel, iridescence, internal contrast. Prefer presets over dozens of raw sliders.
+7. Capture side-by-side screenshots of the same seed and age under each family.
+8. Note for later: the same presets could bias development, decay start, or trace density—but leave that lifecycle coupling for a future study.
+
+### Essential patterns
+
+Material preset (conceptual uniforms):
+
+```js
+const MATERIAL = {
+  membrane: {
+    bodyAlpha: 0.86,
+    fresnelPower: 2.4,
+    rimStrength: 0.35,
+    iridescence: 0.25,
+    internalContrast: 0.45,
+    transmission: 0.1,
+  },
+  crystal: {
+    bodyAlpha: 0.42,
+    fresnelPower: 4.2,
+    rimStrength: 0.75,
+    iridescence: 0.7,
+    internalContrast: 0.8,
+    transmission: 0.55,
+  },
+  hybrid: {
+    bodyAlpha: 0.7,
+    fresnelPower: 3.2,
+    rimStrength: 0.55,
+    iridescence: 0.5,
+    internalContrast: 0.65,
+    transmission: 0.35,
+    hybridMix: 1.0,
+  },
+}
+```
+
+Fragment composition (reuse Study 01–02 ideas):
+
+```glsl
+float gradient = smoothstep(uLow, uHigh, vPosition.y);
+vec3 bodyColor = mix(uColorA, uColorB, gradient);
+
+float identityNoise = noise(vPosition * uNoiseScale + vec3(uSeed));
+float band = mix(0.35, 0.06, uInternalContrast);
+float pattern = smoothstep(0.5 - band, 0.5 + band, identityNoise);
+bodyColor = mix(bodyColor, uAccentColor, pattern * uAccentStrength);
+
+float facing = max(dot(normalize(vNormal), normalize(vViewDirection)), 0.0);
+float fresnel = pow(1.0 - facing, uFresnelPower);
+
+// Soft fake transmission: clearer materials open toward a cooler interior tint.
+vec3 transmitted = mix(bodyColor, uTransmitTint, facing * uTransmission);
+vec3 surfaceColor = mix(transmitted, bodyColor, 1.0 - uTransmission * 0.5);
+
+float irid = fresnel * uIridescence;
+vec3 rim = mix(uRimColor, uIridSecondary, 0.5 + 0.5 * normalize(vNormal).x);
+vec3 finalColor = surfaceColor + rim * uRimStrength * (fresnel + irid);
+
+float alpha = mix(uBodyAlpha, uEdgeAlpha, fresnel);
+```
+
+Hybrid mask (same seed, two substance responses):
+
+```glsl
+float hybridMask = smoothstep(0.35, 0.65, identityNoise); // 0 milky → 1 crystal
+float bodyAlpha = mix(uMembraneAlpha, uCrystalAlpha, hybridMask);
+float fresnelPower = mix(uMembraneFresnel, uCrystalFresnel, hybridMask);
+float transmission = mix(uMembraneTransmission, uCrystalTransmission, hybridMask);
+```
+
+### Observe and experiment
+
+- Freeze seed and age; switch only the material family. Does the silhouette still read as the same individual?
+- Push crystalline clarity until it becomes generic glass—then pull back until it feels fragile and mineral.
+- For Hybrid, soften vs harden the noise mask: when does the mix feel like one substance with regions, and when like two materials glued together?
+- Compare membrane and crystal under the same Fresnel power: which other parameters carry the family difference?
+- View the same preset on the pale background; check that translucent crystal still has a readable edge.
+- Scrub age while holding material fixed (optional): notice what *could* later depend on material, without implementing that link yet.
+
+### Concept connection
+
+Identity so far has meant seed, pattern, and lifespan. Material adds another axis of kinship: related beings may share a lifecycle while differing in substance—membrane lineage, crystalline lineage, or unstable hybrids. The object stays one artificial life; the matter is what changes.
+
+Later, material can bias how that life unfolds (how it develops, how it fails, what residue it leaves). This study only establishes the families so that coupling remains a deliberate next step rather than an accidental side effect of color.
+
+### Reflection
+
+Which parameters actually change the *kind* of matter, and which only recolor the same membrane? Where is the line between a material family and a cosmetic preset?
+
+---
+
+## Study 08 — Material Behavior
+
+### Question
+
+If an entity’s material is part of its identity, should different materials age, decay, and disappear differently?
+
+### Shader / system concept
+
+Study 07 treated material as a living surface preset: membrane, crystalline, or hybrid on the same seed and silhouette. Study 08 couples those families to the **existing lifecycle and decay path**. `uAge` still drives irreversible progress; `uSeed` still locks which regions fail first. Material type answers a different question: **how** the body thins, breaks, and exits—not when the user presses Animate.
+
+Do not build three separate decay shaders. Keep one shared aging pipeline (Study 04 discard field + Study 03 late instability + Study 05 residue handoff), then let `uMaterialMode` (or the Study 07 preset bundle) bias that pipeline:
+
+| Concern | Shared for all families | Biased by material |
+|---|---|---|
+| When life advances | `uAge` clock, stage bands | Soft retunes of thresholds, not separate timelines |
+| Which regions fail | Seed-locked noise / identity field | Soft vs sharp response curves; hybrid mask |
+| How failure looks | Thinning, holes, warp, then trace | Soft dissolve vs brittle fracture vs mixed |
+| What remains | Study 05 residue mesh | Density / hardness of leftover structure |
+
+Keep **fragment** work as the primary place for organic thinning, soft holes, sharp fracture masks, and alpha exit. Use **vertex** deformation only where the family needs a different late-life instability: soft crumple for membrane, harder angular-looking warp for crystal (still procedural displacement—no rigid-body fracture or particle systems). Avoid image textures and over-engineered physics.
+
+### Goal
+
+At the **same seed and age**, three material families should read as the same individual living different kinds of mortality:
+
+1. **Membrane** — gradually thinner and more transparent; soft holes and dissolving boundaries; organic, gradual decay.
+2. **Crystalline** — sharper fractures and fragmented islands; brittle instability; disappearance through broken or isolated regions rather than a gentle melt.
+3. **Hybrid** — milky regions thin and dissolve while crystalline patches fracture and linger; internal structure may read more clearly as soft areas open.
+
+Material becomes part of lifecycle behavior, not only a cosmetic surface look.
+
+### Inputs and uniforms
+
+Reuse Studies 04–07:
+
+- `uAge` — irreversible lifecycle driver (unchanged ownership from Study 06);
+- `uSeed`, identity / decay noise scales — stable individual variation;
+- `uMaterialMode` or family presets from Study 07;
+- shared decay uniforms: `uDecayStart`, `uDecayScale`, `uEdgeSoftness`, `uBoundaryWidth`, `uDiscardThreshold`, `uDecayDisplacement`;
+- optional bias uniforms (or derived in GLSL from mode):
+  - `uDecaySoftness` / edge width (membrane high, crystal low);
+  - `uFractureSharpness` (crystal high: harder `smoothstep` or absolute-edge masks);
+  - `uThinningRate` (how fast body alpha falls with age before holes dominate);
+  - hybrid mask from identity noise (Study 07).
+
+Do not add a second age clock. Material should not invent a parallel lifespan; it only reshapes response to the same `uAge`.
+
+### Implementation
+
+1. **Start from the shared path.** Keep one body mesh, one age clock, and the same seed-locked decay field used in Study 04. Trace still appears near death via the existing preserve / residue logic.
+2. **Factor decay into stages inside one fragment (and optional late vertex).** Pseudocode order: living material look (Study 07) → age-based thinning → material-biased hole / fracture mask → boundary accent → discard / alpha → near-death body exit.
+3. **Membrane bias (mostly fragment):**
+   - Raise edge softness; widen soft transitions so openings bloom gradually.
+   - Accelerate opacity / transmission thinning with age before aggressive discard.
+   - Prefer low-frequency holes that feel like dissolving tissue.
+   - Vertex: mild, smooth late warp only.
+4. **Crystalline bias (fragment + light vertex):**
+   - Narrow edge softness; push the remaining mask toward hard steps so holes read as cracks or broken panes.
+   - Optional fracture cue: combine the decay field with a second, higher-frequency ridge or `abs(noise - 0.5)` so remnants form isolated shards.
+   - Vertex: slightly stronger, noisier late displacement so instability feels brittle, not rubbery—still normal-offset displacement, not real fracture meshes.
+5. **Hybrid bias:**
+   - Reuse Study 07’s hybrid mask.
+   - Where mask is milky: membrane thinning and soft remaining.
+   - Where mask is crystalline: sharper remaining and slower local disappearance so hard patches outlast soft ones.
+   - As soft regions open, accent / interior color can read more strongly (exposed structure)—keep this a color/alpha cue, not a new geometry pass.
+6. **Compare fairly.** Freeze seed and scrub or animate the same ages (e.g. 0.4, 0.65, 0.8, 0.95) under each family. Differences should come from bias curves, not from different seeds or different life durations.
+7. **UI.** Family tabs from Study 07 remain primary. Optional: one “decay character” readout or soft/hard bias slider for debugging—avoid a full second decay panel per material.
+8. **Stop before overbuild.** No particle shatter, no crack texture maps, no separate timelines per family.
+
+### Essential patterns
+
+Material biases on shared decay progress:
+
+```js
+// Same age and seed for every family; only response curves change.
+const DECAY_BIAS = {
+  membrane: {
+    thinning: 0.75,
+    edgeSoftness: 0.22,
+    fractureSharpness: 0.15,
+    lateWarp: 0.7,
+  },
+  crystal: {
+    thinning: 0.35,
+    edgeSoftness: 0.06,
+    fractureSharpness: 0.85,
+    lateWarp: 1.15,
+  },
+  hybrid: {
+    thinning: 0.55,
+    edgeSoftness: 0.14,
+    fractureSharpness: 0.5,
+    lateWarp: 0.9,
+  },
+}
+```
+
+Shared fragment decay, then material reshape:
+
+```glsl
+float decayField = fbm(vPosition * uDecayScale + seedOffset);
+float holeOpen = smoothstep(uDecayStart, 0.9, uAge);
+
+// Membrane: soft remaining. Crystal: hard cut. Hybrid: mix by mask.
+float softRemain = smoothstep(holeOpen - uEdgeSoftness, holeOpen + uEdgeSoftness, decayField);
+float hardRemain = step(holeOpen, decayField); // or a very narrow smoothstep
+float remain = mix(softRemain, hardRemain, uFractureSharpness);
+
+// Optional crystal shards: isolated high ridges survive longer.
+float ridge = abs(decayField - 0.5) * 2.0;
+float shard = smoothstep(0.55, 0.9, ridge);
+remain = mix(remain, max(remain, shard * remain), uFractureSharpness);
+
+// Age thinning before holes dominate (membrane leans on this).
+float thin = 1.0 - holeOpen * uThinningRate;
+float alpha = baseAlpha * thin * remain;
+if (alpha < uDiscardThreshold) discard;
+```
+
+Hybrid regional behavior (fragment):
+
+```glsl
+float hybridMask = smoothstep(0.32, 0.68, identityNoise); // 0 membrane → 1 crystal
+float remain = mix(membraneRemain, crystalRemain, hybridMask);
+float thin = mix(membraneThin, crystalThin, hybridMask);
+// Soft areas dissolve first; crystalline patches can retain alpha longer.
+```
+
+Vertex note (late life only):
+
+```glsl
+// Same displacement field; scale amplitude by material lateWarp bias.
+float instability = smoothstep(0.65, 1.0, uAge);
+float warp = (decayNoise * 2.0 - 1.0) * uDecayDisplacement * instability * uLateWarp;
+// Membrane: lower uLateWarp. Crystal: higher, still continuous mesh offsets.
+```
+
+### Observe and experiment
+
+- Same seed, age `0.7`: does membrane look softly eaten while crystal looks cracked or islanded?
+- Same seed, age `0.9`: which family leaves clearer isolated remnants before trace?
+- Hybrid only: scrub mid-decay—do milky zones open while brighter / clearer patches hold?
+- Swap family without changing seed or age: silhouette kinship should remain; mortality character should change.
+- Push crystal sharpness until it looks noisy or digital—then ease until fractures feel intentional.
+- Confirm membrane never needs a second age clock to feel “slower”—soft curves alone should carry gradualism.
+
+### Concept connection
+
+Study 07 made substance visible. Study 08 makes substance **consequential**. Identity is no longer only pattern and lifespan length; it includes how a body fails. Membrane lineages dissolve; crystalline lineages shatter; hybrids can do both in different regions. The lifecycle system stays one story; material writes a dialect of death into that story.
+
+Trace can later inherit the same bias (softer haze vs sharper shard residue). This study only needs the living-body path to prove the idea.
+
+### Reflection
+
+If two entities share a seed and a lifespan but die differently, what still makes them the same individual—and what makes them different kinds of being?
+
+---
+
+## Study 09 — Layered Body
+
+### Question
+
+How can one artificial life feel like it has an outer body and an internal living structure?
+
+### Shader / system concept
+
+Studies 01–08 treated the specimen as a **single** living surface—one mesh whose fragment and vertex programs carried membrane, crystal, decay, and material bias. Study 09 splits the body into **two nested meshes** that still belong to one individual:
+
+```text
+Entity
+├── OuterShell   (scale ≈ 1.0)
+└── InnerCore    (scale ≈ 0.55–0.7)
+```
+
+The outer shell is a larger, milky, translucent membrane: soft Fresnel edges, subtle cyan / pink tint, lower opacity toward the center, slow soft deformation. Through that shell you should see a denser inner core—stronger cyan / violet / pink / pale-yellow iridescence, procedural color variation, and motion that is related but not identical.
+
+Why two meshes instead of faking depth in one fragment shader?
+
+- A single transparent sphere can tint and Fresnel, but it cannot convincingly place a **smaller, independently deforming** volume inside itself.
+- Nested meshes give real occlusion and parallax as you orbit: the core sits in space, not as a painted-on highlight.
+- Each layer can run its own material, noise scale, time offset, and displacement amplitude without packing every behavior into one GLSL program.
+
+Reuse Study 01–03 tools (gradient, Fresnel, seeded noise, soft vertex breath) and Study 07’s restrained pearly palette. Do **not** redesign the full Study 04–08 decay system here. Both layers still receive the same `uAge` so they share a lifespan clock, but the goal of this study is only **outer body + internal structure**. Later work can decide how the membrane opens and exposes the core at death.
+
+### Goal
+
+Present one entity that reads as layered life:
+
+1. **Outer membrane** — larger translucent shell; milky / pearly / soft; subtle cyan and pink; visible Fresnel; low opacity toward the center; slow, soft deformation.
+2. **Inner core** — smaller form visible through the membrane; denser and more defined; procedural cyan → violet → pink → pale-yellow transitions (not a literal rainbow); independently moving and deforming; synthetic internal structure, not a second decorative ball.
+
+A viewer should feel one organism / mineral / artifact with insides—not two unrelated spheres stacked for effect.
+
+### Inputs and uniforms
+
+**Shared (one identity):**
+
+- `uSeed` — base individual identity;
+- `uAge` — irreversible lifecycle progress (same value for both layers; no new decay redesign);
+- `uTime` — continuous motion clock;
+- camera, lighting, pale background, highly subdivided base geometry (same sphere topology, different scale).
+
+**Outer shell (conceptually):**
+
+- softer body / edge alpha (center more open, rim more present);
+- lower Fresnel power, soft rim, subtle cyan / pink tint;
+- lower-frequency noise, smaller displacement, slower speed / pulse;
+- `outerSeed = uSeed` (or a tiny fixed offset).
+
+**Inner core:**
+
+- higher opacity and internal contrast; stronger iridescent mix;
+- different noise scale and `innerSeed = uSeed + offset`;
+- stronger displacement, slightly faster or phase-shifted time (`uTime + uInnerTimeOffset`);
+- restrained palette stops: cyan, violet, pink, pale yellow—blended with noise and position, not `hue = angle`.
+
+Keep UI small: layer visibility (Outer / Inner / Both), maybe outer opacity, inner scale, and one shared age scrubber.
+
+### Scene / component structure
+
+In React Three Fiber (or equivalent), nest two meshes under one group:
+
+```text
+<group>                    // one entity, one orbit pivot
+  <mesh scale={1.0}>       // OuterShell
+    shellMaterial
+  </mesh>
+  <mesh scale={0.62}>      // InnerCore
+    coreMaterial
+  </mesh>
+</group>
+```
+
+Both can start from the same `sphereGeometry` with high segment counts so displacement stays smooth. Assign **separate** `ShaderMaterial` instances (or two `<shaderMaterial />`s) so uniforms and motion do not stay locked together.
+
+### Implementation
+
+1. **Duplicate the living mesh path.** Clone or instantiate a second sphere; scale the inner mesh to roughly `0.55–0.7`. Keep seed, age, camera, and background identical while testing.
+2. **Layered transparency (outer).** Set the shell material to `transparent: true`, write alpha from Fresnel-weighted opacity (lower toward facing center, higher at the rim). Prefer `depthWrite: false` on the translucent shell so the core is not blocked by an opaque depth mask. `DoubleSide` can help thin membranes but often doubles color and sorting cost—try front side first; enable both sides only if the shell disappears when looking through open regions.
+3. **Transparency sorting.** Two transparent objects can flicker or draw in the wrong order. Practical fixes for this study: draw the **inner core first** (lower `renderOrder`) and the shell after; keep both with `depthWrite: false` if needed; avoid a third overlapping transparent body. You do not need a perfect OIT solution for a two-layer specimen.
+4. **Outer look.** Reuse Study 01–02 membrane cues: soft gradient, muted accents, gentle Fresnel. Keep vertex displacement calm (Study 03 breath at low amplitude and low-frequency noise).
+5. **Inner look.** Build color from procedural fields, for example mix four restrained colors with `smoothstep` bands on noise and a bit of `vPosition` so patches feel irregular and pearly—not a continuous RGB rainbow or a neon orb. Raise definition (contrast, accent strength) so the core reads denser through the shell.
+6. **Independent motion.** Outer: slower `uSpeed` / `uPulseSpeed`, softer `uDisplacement`, larger-scale (lower-frequency) noise. Inner: different noise scale, `uSeed + offset`, optional time offset, slightly stronger displacement. Both still sample the same `uAge` for shared life progress (subtle aging tint is enough; no new decay pipeline).
+7. **Compare.** Toggle Outer only → Inner only → Outer + Inner at fixed seed and age. Confirm the shell contributes milky enclosure and the core contributes living interior.
+8. **Stop before overbuild.** No image textures, organ metaphors, heavy refraction, glass probes, or particles. Leave “membrane dies and exposes core” for a later study.
+
+### Essential patterns
+
+Nested entity (R3F sketch):
+
+```jsx
+<group>
+  <mesh scale={1} renderOrder={1}>
+    <sphereGeometry args={[1, 128, 128]} />
+    <shaderMaterial
+      transparent
+      depthWrite={false}
+      uniforms={outerUniforms}
+      vertexShader={outerVertex}
+      fragmentShader={outerFragment}
+    />
+  </mesh>
+  <mesh scale={0.62} renderOrder={0}>
+    <sphereGeometry args={[1, 128, 128]} />
+    <shaderMaterial
+      transparent
+      depthWrite={false}
+      uniforms={innerUniforms}
+      vertexShader={innerVertex}
+      fragmentShader={innerFragment}
+    />
+  </mesh>
+</group>
+```
+
+Shared seed, different fields:
+
+```js
+const outerSeed = seed
+const innerSeed = seed + 17.13 // fixed offset; still one individual
+```
+
+Outer alpha (center opens, rim holds):
+
+```glsl
+float facing = max(dot(normalize(vNormal), normalize(vViewDirection)), 0.0);
+float fresnel = pow(1.0 - facing, uFresnelPower);
+float alpha = mix(uBodyAlpha * 0.35, uEdgeAlpha, fresnel); // milky shell, readable rim
+```
+
+Inner restrained iridescence (not a rainbow gradient):
+
+```glsl
+float n = noise(vPosition * uNoiseScale + vec3(uSeed));
+float t = clamp(n * 0.7 + vPosition.y * 0.15 + 0.5, 0.0, 1.0);
+vec3 c0 = vec3(0.55, 0.82, 0.86); // cyan
+vec3 c1 = vec3(0.72, 0.62, 0.88); // violet
+vec3 c2 = vec3(0.90, 0.72, 0.80); // pink
+vec3 c3 = vec3(0.92, 0.90, 0.72); // pale yellow
+vec3 core = mix(c0, c1, smoothstep(0.0, 0.35, t));
+core = mix(core, c2, smoothstep(0.3, 0.65, t));
+core = mix(core, c3, smoothstep(0.55, 1.0, t));
+```
+
+Independent breath (vertex uniforms differ per layer):
+
+```js
+outer: { speed: 0.22, pulseSpeed: 0.8, displacement: 0.12, noiseScale: 1.8 }
+inner: { speed: 0.4,  pulseSpeed: 1.35, displacement: 0.2,  noiseScale: 3.2, timeOffset: 1.7 }
+```
+
+### Observe and experiment
+
+- Outer only: does the shell feel like a membrane with an empty interior, or already “complete”?
+- Inner only: does the core feel like structure, or like a second hero blob competing with the shell?
+- Both: can you see the core move differently while the shell slowly breathes?
+- Raise outer opacity until the core vanishes—then pull back until insides return without losing the milky skin.
+- Change only the inner seed offset: when does kinship break and become two entities?
+- Scrub `uAge` lightly: both should age in sync without needing Study 08’s full fracture redesign yet.
+- Orbit the camera: nested meshes should parallax; a faked single-shader “core” usually will not.
+
+### Concept connection
+
+Until now, identity lived on one surface. Layering introduces **depth of body**: an exterior that mediates the world and an interior that continues the same seed. The entity becomes less like a shaded ball and more like a vessel—still ambiguous between organism, mineral, data, and artifact. Death can later mean the outer membrane failing while the core remains, changes, or becomes the trace. This study only proves that the two-layer body is legible and kin to one seed.
+
+### Reflection
+
+What visual cues convince you the inner form is *inside* the same life—and what cues make it look like a prop trapped in glass?
+
+---
+
 ## Compact Comparison
 
 | Study | Main inputs | Fragment/surface effect | Vertex/geometry effect | Conceptual role |

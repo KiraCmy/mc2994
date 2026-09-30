@@ -4,10 +4,14 @@ export default function Hud({
   studyId,
   age,
   seed,
+  stage,
+  isDead,
   animating,
   onSelectStudy,
   onToggleAnimate,
 }) {
+  const animateLabel = isDead ? 'New Life' : animating ? 'Pause' : 'Animate'
+
   return (
     <div className="hud">
       <p className="hud-title">Born Another</p>
@@ -16,6 +20,12 @@ export default function Hud({
           Age {Number(age).toFixed(2)}
           <br />
           Seed {seed}
+          {stage ? (
+            <>
+              <br />
+              {stage}
+            </>
+          ) : null}
         </p>
         <button
           type="button"
@@ -23,7 +33,7 @@ export default function Hud({
           aria-pressed={animating}
           onClick={onToggleAnimate}
         >
-          {animating ? 'Pause' : 'Animate'}
+          {animateLabel}
         </button>
       </div>
       <div className="hud-studies" role="tablist" aria-label="Studies">

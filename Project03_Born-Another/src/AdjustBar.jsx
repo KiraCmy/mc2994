@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { LAYER_MODES, MATERIAL_FAMILIES } from './surfaceParams.js'
 
 const SURFACE_SLIDERS = [
   { key: 'fresnelPower', label: 'Fresnel', min: 1, max: 6, step: 0.05 },
@@ -55,6 +56,32 @@ const TRACE_SLIDERS = [
 
 const TRACE_COLORS = [{ key: 'traceColor', label: 'Trace Color' }]
 
+const LIFECYCLE_SLIDERS = [
+  { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
+]
+
+const MATERIAL_SLIDERS = [
+  { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
+  { key: 'clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 },
+  { key: 'fresnelPower', label: 'Fresnel', min: 1, max: 6, step: 0.05 },
+  { key: 'iridescence', label: 'Iridescence', min: 0, max: 1, step: 0.01 },
+  { key: 'internalContrast', label: 'Internal Contrast', min: 0, max: 1, step: 0.01 },
+]
+
+const BEHAVIOR_SLIDERS = [
+  { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
+  { key: 'thinning', label: 'Thinning', min: 0, max: 1, step: 0.01 },
+  { key: 'fractureSharpness', label: 'Fracture', min: 0, max: 1, step: 0.01 },
+  { key: 'lateWarp', label: 'Late Warp', min: 0.4, max: 1.4, step: 0.01 },
+]
+
+const LAYERED_SLIDERS = [
+  { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
+  { key: 'outerOpacity', label: 'Outer Opacity', min: 0.12, max: 0.7, step: 0.01 },
+  { key: 'innerScale', label: 'Inner Scale', min: 0.65, max: 0.85, step: 0.01 },
+  { key: 'innerContrast', label: 'Inner Contrast', min: 0.2, max: 1, step: 0.01 },
+]
+
 function formatValue(slider, value) {
   if (slider.integers) return String(Math.round(value))
   if (slider.key === 'displacement' || slider.key === 'decayDisplacement') {
@@ -65,23 +92,35 @@ function formatValue(slider, value) {
 
 function controlsFor(studyId) {
   if (studyId === 'individuality') {
-    return { sliders: IDENTITY_SLIDERS, colors: IDENTITY_COLORS }
+    return { sliders: IDENTITY_SLIDERS, colors: IDENTITY_COLORS, families: null, modes: null }
   }
   if (studyId === 'development') {
-    return { sliders: DEVELOPMENT_SLIDERS, colors: [] }
+    return { sliders: DEVELOPMENT_SLIDERS, colors: [], families: null, modes: null }
   }
   if (studyId === 'decay') {
-    return { sliders: DECAY_SLIDERS, colors: DECAY_COLORS }
+    return { sliders: DECAY_SLIDERS, colors: DECAY_COLORS, families: null, modes: null }
   }
   if (studyId === 'trace') {
-    return { sliders: TRACE_SLIDERS, colors: TRACE_COLORS }
+    return { sliders: TRACE_SLIDERS, colors: TRACE_COLORS, families: null, modes: null }
   }
-  return { sliders: SURFACE_SLIDERS, colors: SURFACE_COLORS }
+  if (studyId === 'lifecycle') {
+    return { sliders: LIFECYCLE_SLIDERS, colors: [], families: null, modes: null }
+  }
+  if (studyId === 'material') {
+    return { sliders: MATERIAL_SLIDERS, colors: [], families: MATERIAL_FAMILIES, modes: null }
+  }
+  if (studyId === 'behavior') {
+    return { sliders: BEHAVIOR_SLIDERS, colors: [], families: MATERIAL_FAMILIES, modes: null }
+  }
+  if (studyId === 'layered') {
+    return { sliders: LAYERED_SLIDERS, colors: [], families: null, modes: LAYER_MODES }
+  }
+  return { sliders: SURFACE_SLIDERS, colors: SURFACE_COLORS, families: null, modes: null }
 }
 
 export default function AdjustBar({ study, params, onChange }) {
   const [open, setOpen] = useState(false)
-  const { sliders, colors } = controlsFor(study.id)
+  const { sliders, colors, families, modes } = controlsFor(study.id)
 
   return (
     <form
@@ -91,6 +130,46 @@ export default function AdjustBar({ study, params, onChange }) {
       {open && (
         <div className="adjust-panel">
           <p className="adjust-heading">{study.heading}</p>
+
+          {modes && (
+            <div className="adjust-families" role="tablist" aria-label="Layer visibility">
+              {modes.map((mode) => {
+                const active = params.mode === mode.id
+                return (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={`adjust-family${active ? ' is-active' : ''}`}
+                    onClick={() => onChange('mode', mode.id)}
+                  >
+                    {mode.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {families && (
+            <div className="adjust-families" role="tablist" aria-label="Material family">
+              {families.map((family) => {
+                const active = params.family === family.id
+                return (
+                  <button
+                    key={family.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={`adjust-family${active ? ' is-active' : ''}`}
+                    onClick={() => onChange('family', family.id)}
+                  >
+                    {family.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           <div className="adjust-sliders">
             {sliders.map((slider) => (
