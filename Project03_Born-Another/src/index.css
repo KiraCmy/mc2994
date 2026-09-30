@@ -60,7 +60,35 @@ body {
   position: absolute;
   top: 4.2cqh;
   right: 3.4cqw;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.85em;
   text-align: right;
+}
+
+.hud-animate {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-stretch: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.38;
+  pointer-events: auto;
+}
+
+.hud-animate.is-active {
+  opacity: 1;
+}
+
+.hud-animate:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 4px;
 }
 
 .hud-studies {
@@ -108,10 +136,32 @@ body {
   gap: 1.5cqw;
 }
 
-.hud-life i {
+.hud-life-track {
+  position: relative;
   flex: 1;
+  height: 0.9em;
+  display: flex;
+  align-items: center;
+}
+
+.hud-life-line {
+  display: block;
+  width: 100%;
   height: 1px;
   background: rgba(255, 255, 255, 0.92);
+}
+
+.hud-life-dot {
+  position: absolute;
+  top: 50%;
+  width: max(0.45rem, 0.55cqw);
+  height: max(0.45rem, 0.55cqw);
+  margin: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 .adjust {

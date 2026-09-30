@@ -17,6 +17,18 @@ export const STUDIES = [
     name: 'Development',
     heading: 'Development Parameters',
   },
+  {
+    id: 'decay',
+    index: '04',
+    name: 'Decay',
+    heading: 'Decay Parameters',
+  },
+  {
+    id: 'trace',
+    index: '05',
+    name: 'Trace',
+    heading: 'Trace Parameters',
+  },
 ]
 
 export const INITIAL_SURFACE = {
@@ -37,11 +49,35 @@ export const INITIAL_INDIVIDUALITY = {
 }
 
 export const INITIAL_DEVELOPMENT = {
-  age: 0.45,
-  speed: 0.28,
-  pulseSpeed: 1.25,
-  displacement: 0.09,
-  noiseAmount: 1.2,
+  age: 0.5,
+  speed: 0.32,
+  pulseSpeed: 1.1,
+  displacement: 0.22,
+  noiseAmount: 1.55,
+}
+
+export const INITIAL_DECAY = {
+  age: 0.78,
+  decayStart: 0.52,
+  edgeSoftness: 0.14,
+  boundaryWidth: 0.07,
+  discardThreshold: 0.06,
+  decayDisplacement: 0.07,
+  decayScale: 2.35,
+  decayAccent: '#b87a8a',
+}
+
+export const INITIAL_TRACE = {
+  age: 0.92,
+  traceScale: 2.6,
+  traceThreshold: 0.62,
+  internalTrace: 0.7,
+  rimTrace: 0.85,
+  boundaryTrace: 0.55,
+  traceOpacity: 0.42,
+  traceFresnelPower: 2.8,
+  persistence: 1,
+  traceColor: '#d8dde4',
 }
 
 export function edgeAlpha(opacity) {

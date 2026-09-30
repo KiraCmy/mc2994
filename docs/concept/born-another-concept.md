@@ -11,12 +11,12 @@ tags:
 - temporality
 - memory
 - lineage
-title: Finite Digital Life
+title: Born Another
 type: concept
 updated: 2026-09-23
 ---
 
-# Concept --- Finite Digital Life
+# Concept --- Born Another
 
 ## In one breath
 
@@ -48,7 +48,7 @@ knowing it will eventually disappear.
 information. If something is made from what came before, what makes it
 an individual rather than simply a copy?
 
-Finite Digital Life explores these questions through abstract procedural
+Born Another explores these questions through abstract procedural
 entities rather than human-like characters:
 
 > **If something begins from inherited information, when does it become
@@ -288,7 +288,7 @@ between **life, time, preservation, memory, and lineage** is maintained.
 
 ## Key terms
 
-**Finite Digital Life** --- A generated entity whose existence is
+**Born Another** --- A generated entity whose existence is
 intentionally limited in time.
 
 **Initial Conditions** --- User-defined conditions that influence

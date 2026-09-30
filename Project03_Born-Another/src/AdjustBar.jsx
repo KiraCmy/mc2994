@@ -25,13 +25,41 @@ const DEVELOPMENT_SLIDERS = [
   { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
   { key: 'speed', label: 'Speed', min: 0, max: 0.7, step: 0.01 },
   { key: 'pulseSpeed', label: 'Pulse', min: 0.1, max: 3, step: 0.01 },
-  { key: 'displacement', label: 'Displacement', min: 0, max: 0.2, step: 0.001 },
-  { key: 'noiseAmount', label: 'Identity Noise', min: 0, max: 2, step: 0.01 },
+  { key: 'displacement', label: 'Displacement', min: 0, max: 0.45, step: 0.001 },
+  { key: 'noiseAmount', label: 'Identity Noise', min: 0, max: 2.5, step: 0.01 },
 ]
+
+const DECAY_SLIDERS = [
+  { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
+  { key: 'decayStart', label: 'Decay Start', min: 0.2, max: 0.9, step: 0.01 },
+  { key: 'edgeSoftness', label: 'Edge Softness', min: 0.02, max: 0.35, step: 0.01 },
+  { key: 'boundaryWidth', label: 'Boundary', min: 0.02, max: 0.2, step: 0.005 },
+  { key: 'discardThreshold', label: 'Discard', min: 0.01, max: 0.25, step: 0.01 },
+  { key: 'decayDisplacement', label: 'Instability', min: 0, max: 0.18, step: 0.001 },
+  { key: 'decayScale', label: 'Decay Scale', min: 0.8, max: 5, step: 0.05 },
+]
+
+const DECAY_COLORS = [{ key: 'decayAccent', label: 'Decay Accent' }]
+
+const TRACE_SLIDERS = [
+  { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
+  { key: 'traceThreshold', label: 'Density', min: 0.2, max: 0.9, step: 0.01 },
+  { key: 'traceScale', label: 'Trace Scale', min: 0.6, max: 5, step: 0.05 },
+  { key: 'internalTrace', label: 'Internal', min: 0, max: 1, step: 0.01 },
+  { key: 'rimTrace', label: 'Rim Trace', min: 0, max: 1, step: 0.01 },
+  { key: 'boundaryTrace', label: 'Boundary', min: 0, max: 1, step: 0.01 },
+  { key: 'traceOpacity', label: 'Opacity', min: 0.05, max: 0.9, step: 0.01 },
+  { key: 'traceFresnelPower', label: 'Fresnel', min: 1, max: 6, step: 0.05 },
+  { key: 'persistence', label: 'Persistence', min: 0, max: 1, step: 0.01 },
+]
+
+const TRACE_COLORS = [{ key: 'traceColor', label: 'Trace Color' }]
 
 function formatValue(slider, value) {
   if (slider.integers) return String(Math.round(value))
-  if (slider.key === 'displacement') return Number(value).toFixed(3)
+  if (slider.key === 'displacement' || slider.key === 'decayDisplacement') {
+    return Number(value).toFixed(3)
+  }
   return Number(value).toFixed(2)
 }
 
@@ -41,6 +69,12 @@ function controlsFor(studyId) {
   }
   if (studyId === 'development') {
     return { sliders: DEVELOPMENT_SLIDERS, colors: [] }
+  }
+  if (studyId === 'decay') {
+    return { sliders: DECAY_SLIDERS, colors: DECAY_COLORS }
+  }
+  if (studyId === 'trace') {
+    return { sliders: TRACE_SLIDERS, colors: TRACE_COLORS }
   }
   return { sliders: SURFACE_SLIDERS, colors: SURFACE_COLORS }
 }

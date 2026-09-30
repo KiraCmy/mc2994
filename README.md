@@ -1,6 +1,6 @@
 # Procedural World Building
 This repository contains my coursework, experiments, and projects for Procedural World Building.
 
-## Finite Digital Life
+## Born Another
 
-Shader-study progress is recorded in [Finite-Digital-Life](Finite-Digital-Life.md).
+Shader-study progress is recorded in [Born-Another](docs/Progress-Recording/Born-Another.md).

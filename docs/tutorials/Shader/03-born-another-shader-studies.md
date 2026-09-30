@@ -1,4 +1,4 @@
-# Finite Digital Life — Shader Studies
+# Born Another — Shader Studies
 
 ## Purpose
 
@@ -543,6 +543,171 @@ Life → Death → Trace → Memory → New Life
 ### Reflection
 
 What is the minimum visual information needed for a trace to feel like the memory of one particular entity?
+
+---
+
+## Study 06 — Lifecycle
+
+### Question
+
+How can the five shader studies become one continuous, irreversible life rather than five separate demos?
+
+### System concept
+
+Studies 01–05 each isolate one visual strategy. Study 06 connects them through a single **lifecycle state** in JavaScript / React. The GPU still receives the same uniforms; what changes is **who owns `uAge`** and **when each study’s behavior is active**.
+
+Until now, age is often scrubbed by hand. In Study 06, age becomes a **clock-driven lifespan**: once life begins, `uAge` advances automatically from `0.0` to `1.0`. The shaders from earlier studies are reused—not rewritten. React decides the current stage, updates `uAge` each frame, and switches (or layers) the appropriate material behavior.
+
+Keep two clocks separate:
+
+| Value | Meaning | Changes when |
+|---|---|---|
+| `uTime` | Continuous world time | Every frame while the scene runs |
+| `uAge` | Progress through one life | Only while life is playing; stops at death |
+
+`uTime` can still drive breathing and noise motion in Studies 03–05. `uAge` drives **irreversible** change: development, decay, death, and the handoff to trace. Do not tie age to `sin(uTime)` or any looping function.
+
+Suggested stage map (one life, normalized age):
+
+```text
+Birth          0.00
+Development    0.00 → 0.25
+Maturity       0.25 → 0.55
+Instability    0.55 → 0.75
+Decay          0.75 → 0.95
+Death          0.95 → 1.00
+Trace          after 1.00 (body gone, residue remains)
+```
+
+This is mainly a **JavaScript / React state-system study**, not a new shader effect.
+
+### Goal
+
+Run one specimen through a full life automatically: surface and identity at birth, visible development and motion in mid-life, instability and decay near the end, irreversible death, then the existing Trace residue. The user should press one control (or Space) to begin and watch the journey unfold without scrubbing age by hand.
+
+### Inputs and state
+
+**React state (minimal):**
+
+- `age` — current `uAge`, `0.0` to `1.0`;
+- `playing` — whether the lifespan clock is running;
+- `isDead` — set once age reaches `1.0`; death is not reversible for this life;
+- `preserved` — snapshot taken near death (seed, accent, decay settings, `preservedAge`) for Study 05 trace;
+- existing parameter groups from Studies 01–04 (surface, individuality, development, decay, trace).
+
+**Uniforms passed to the GPU (unchanged):**
+
+- `uAge` ← from React `age`;
+- `uTime` ← from render loop / `useFrame`, independent of lifecycle play/pause logic for age;
+- `uSeed` and material params ← from individuality / surface state.
+
+**Optional UI:**
+
+- Animate / Pause (and Space to toggle);
+- Birth–Death marker (already tied to age);
+- Reset or “New life” only after death—not a rewind mid-life.
+
+### Implementation
+
+1. **Centralize age.** One function updates `age` and writes the same value to every study’s `uAge` uniform (development, decay, trace body).
+2. **Lifecycle loop.** When `playing` is true and `!isDead`, advance age each frame: `age += delta / lifeDuration`. Use `requestAnimationFrame` or `useFrame`; clamp to `1.0`.
+3. **Map stages.** Derive a stage label from age (birth, development, maturity, …) for HUD or debugging. Shaders can keep using smooth `uAge` curves; the stage map is mainly for you and the UI.
+4. **Reuse study materials.** Do not add a sixth GLSL effect. At each age range, the active look comes from existing study logic:
+   - early life: Surface + Individuality base;
+   - mid life: Development displacement and evolving pattern (Studies 02–03);
+   - late life: Decay thinning and instability (Study 04);
+   - after death: Trace residue only (Study 05).
+5. **Preserve at death.** When `age >= ~0.95`, copy identity/decay fields into `preserved` once. After `age === 1.0`, set `isDead`, stop the age clock, hide the living body, show the trace mesh with frozen `preservedAge`.
+6. **Irreversibility.** While `isDead`, ignore age decreases. Scrubbing age backward mid-life may pause animation, but do not revive a dead entity without an explicit “New life” that resets age to `0` and clears `preserved`.
+7. **Start / stop.** Animate button or Space: if not dead and not playing → start from current age (or from `0` if previous life finished); if playing → pause. Keep `uTime` advancing in the render loop if you still want ambient motion while paused—or document a choice; age must not advance while paused.
+8. **Wire the HUD.** Life journey dot follows `age`. Stage name optional in meta readout.
+
+### Essential patterns
+
+Lifecycle tick (React):
+
+```js
+const LIFE_DURATION = 16 // seconds for 0 → 1
+
+function setAge(next) {
+  const age = Math.min(1, Math.max(0, next))
+  setDevelopment((s) => ({ ...s, age }))
+  setDecay((s) => ({ ...s, age }))
+  setTrace((s) => ({ ...s, age }))
+  if (age >= 0.95 && !preserved) {
+    setPreserved(captureTrace(individuality, decay, age))
+  }
+  if (age >= 1) {
+    setPlaying(false)
+    setIsDead(true)
+  }
+}
+
+// in animation loop, when playing && !isDead:
+setAge(ageRef.current + (deltaMs / 1000) / LIFE_DURATION)
+```
+
+Stage from age (for HUD or logs):
+
+```js
+function lifecycleStage(age) {
+  if (age >= 1) return 'trace'
+  if (age >= 0.95) return 'death'
+  if (age >= 0.75) return 'decay'
+  if (age >= 0.55) return 'instability'
+  if (age >= 0.25) return 'maturity'
+  if (age > 0) return 'development'
+  return 'birth'
+}
+```
+
+Handoff to Trace (conceptual):
+
+```js
+// After death: body material off or fully transparent;
+// residue material uses preserved seed + preservedAge, not live uTime-driven development.
+{isDead && (
+  <TraceMesh preserved={preserved} traceParams={trace} />
+)}
+```
+
+Space to toggle (same behavior as Animate):
+
+```js
+useEffect(() => {
+  function onKeyDown(e) {
+    if (e.code !== 'Space') return
+    if (e.target.matches('input, button, textarea')) return
+    e.preventDefault()
+    toggleLifecycle()
+  }
+  window.addEventListener('keydown', onKeyDown)
+  return () => window.removeEventListener('keydown', onKeyDown)
+}, [])
+```
+
+### Observe and experiment
+
+- Run a full life with Animate or Space; confirm the dot moves Birth → Death without manual scrubbing.
+- Pause mid-development: does motion (`uTime`) continue while age stays fixed?
+- Compare the same seed at age `0.2`, `0.5`, and `0.9` by pausing at those moments.
+- Let one life finish: does the body disappear and leave only Study 05 trace?
+- Try starting a second life only via reset—not by dragging age backward after death.
+- Adjust `LIFE_DURATION`: does a slower pass make stages easier to read?
+
+### Concept connection
+
+Studies 01–05 taught **what** can change on the surface and in the mesh. Study 06 teaches **when** those changes happen in one ordered existence:
+
+```text
+Birth → Development → Maturity → Instability → Decay → Death → Trace
+```
+
+The specimen is no longer a material preset you inspect at arbitrary ages. It becomes a process you witness. Death is a state transition in the app, not a shader bug; trace is the consequence, not a separate artwork.
+
+### Reflection
+
+Where does “animation” end and “lifespan” begin in your implementation? What is the smallest state object you need so death feels final but the trace still belongs to that one individual?
 
 ---
 
