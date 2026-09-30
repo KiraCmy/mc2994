@@ -1,16 +1,14 @@
-# React + Vite
+# Born Another
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Project 03 — shader studies of a finite artificial life: surface, identity, development, decay, trace, lifecycle, material, behavior, and layered body.
 
-Currently, two official plugins are available:
+## Run
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+npm install
+npm run dev
+```
 
-## React Compiler
+Progress notes and screenshots: [docs/Progress-Recording/Born-Another.md](../docs/Progress-Recording/Born-Another.md)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+Tutorial: [docs/tutorials/Shader/03-born-another-shader-studies.md](../docs/tutorials/Shader/03-born-another-shader-studies.md)
