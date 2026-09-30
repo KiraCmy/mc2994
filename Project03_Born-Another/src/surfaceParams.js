@@ -245,9 +245,16 @@ export const LAYER_MODES = [
 export const INITIAL_LAYERED = {
   mode: 'both',
   age: 0.45,
-  outerOpacity: 0.34,
-  innerScale: 0.76,
-  innerContrast: 0.78,
+  outerOpacity: 0.22,
+  innerScale: 0.93,
+  innerContrast: 0.65,
+  // Pearly frosted membrane
+  outerColorA: '#ebe6ea',
+  outerColorB: '#dfe8ee',
+  outerRimColor: '#f7f4f8',
+  // Soft cyan ↔ pink core (reference iridescence)
+  innerColorA: '#7ec8e8',
+  innerColorB: '#f0a8c8',
 }
 
 export const INNER_SEED_OFFSET = 17.13

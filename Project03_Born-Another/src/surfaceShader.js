@@ -831,6 +831,8 @@ export const outerShellFragmentShader = /* glsl */ `
   uniform vec3 uColorA;
   uniform vec3 uColorB;
   uniform vec3 uRimColor;
+  uniform vec3 uInnerTintA;
+  uniform vec3 uInnerTintB;
   uniform float uLow;
   uniform float uHigh;
   uniform float uFresnelPower;
@@ -852,14 +854,18 @@ export const outerShellFragmentShader = /* glsl */ `
     float age = clamp(uAge, 0.0, 1.0);
     float gradient = smoothstep(uLow, uHigh, vPosition.y);
     vec3 bodyColor = mix(uColorA, uColorB, gradient);
-    bodyColor = mix(bodyColor, vec3(0.88, 0.84, 0.9), 0.1);
-    bodyColor = mix(bodyColor, mix(uColorA, uColorB, 0.55), age * 0.12);
+    bodyColor = mix(bodyColor, vec3(0.96, 0.95, 0.97), 0.22);
+
+    // Bleed core palette into the shell so layers feel continuous.
+    vec3 coreBleed = mix(uInnerTintA, uInnerTintB, gradient * 0.5 + 0.25);
+    bodyColor = mix(bodyColor, coreBleed, 0.28);
+
+    bodyColor = mix(bodyColor, mix(uColorB, vec3(0.8, 0.86, 0.92), 0.45), smoothstep(0.55, 0.95, age) * 0.28);
 
     vec3 seedOffset = vec3(uSeed * 0.137, uSeed * 0.219, uSeed * 0.311);
-    float identityNoise = fbm(vPosition * uNoiseScale * 0.7 + seedOffset);
-    float pattern = smoothstep(0.25, 0.75, identityNoise);
-    vec3 softAccent = mix(vec3(0.8, 0.9, 0.92), vec3(0.92, 0.8, 0.86), pattern);
-    bodyColor = mix(bodyColor, softAccent, pattern * uAccentStrength * 0.28);
+    float identityNoise = fbm(vPosition * uNoiseScale * 0.75 + seedOffset);
+    float frost = smoothstep(0.3, 0.78, identityNoise);
+    bodyColor = mix(bodyColor, mix(bodyColor, coreBleed, 0.4), frost * uAccentStrength * 0.2);
 
     vec3 normal = normalize(vNormal);
     vec3 worldNormal = normalize(vWorldNormal);
@@ -867,13 +873,28 @@ export const outerShellFragmentShader = /* glsl */ `
     float facing = max(dot(normal, viewDirection), 0.0);
     float fresnel = pow(1.0 - facing, uFresnelPower);
 
-    vec3 rim = mix(uRimColor, vec3(0.86, 0.92, 0.94), 0.25 + 0.2 * worldNormal.x);
-    vec3 key = normalize(vec3(-0.25, 0.45, 0.85));
-    float light = 0.92 + 0.08 * max(dot(worldNormal, key), 0.0);
+    vec3 rim = mix(uRimColor, mix(uInnerTintB, vec3(1.0), 0.35), 0.35);
+    vec3 key = normalize(vec3(-0.2, 0.55, 0.9));
+    float light = 0.94 + 0.08 * max(dot(worldNormal, key), 0.0);
+    float gloss = pow(max(dot(reflect(-key, worldNormal), viewDirection), 0.0), 30.0);
 
-    vec3 finalColor = (bodyColor + rim * uRimStrength * fresnel) * light;
-    float alpha = mix(uBodyAlpha * 0.12, min(0.72, uBodyAlpha + 0.18), fresnel);
-    alpha *= mix(0.88, 1.0, smoothstep(0.0, 0.08, age));
+    vec3 finalColor = bodyColor * light;
+    finalColor += rim * uRimStrength * fresnel * 0.65;
+    finalColor += vec3(1.0) * gloss * 0.14;
+
+    float decayField = fbm(vPosition * uNoiseScale * 1.05 + seedOffset * 1.6);
+    float decayProgress = smoothstep(0.55, 0.98, age);
+    float remaining = smoothstep(decayProgress - 0.18, decayProgress + 0.16, decayField);
+    float tear = smoothstep(0.7, 1.0, age);
+    remaining *= mix(1.0, smoothstep(0.12, 0.5, decayField), tear);
+
+    // Softer shell — more haze than hard glass object.
+    float alpha = mix(uBodyAlpha * 0.08, min(0.48, uBodyAlpha + 0.2), fresnel);
+    alpha *= remaining;
+    alpha *= mix(0.6, 1.0, smoothstep(0.0, 0.12, age));
+    alpha *= 1.0 - smoothstep(0.92, 1.0, age) * 0.8;
+
+    if (alpha < 0.03) discard;
 
     gl_FragColor = vec4(finalColor, alpha);
     #include <colorspace_fragment>
@@ -881,6 +902,10 @@ export const outerShellFragmentShader = /* glsl */ `
 `
 
 export const innerCoreFragmentShader = /* glsl */ `
+  uniform vec3 uColorA;
+  uniform vec3 uColorB;
+  uniform vec3 uShellTintA;
+  uniform vec3 uShellTintB;
   uniform float uSeed;
   uniform float uNoiseScale;
   uniform float uAge;
@@ -900,28 +925,31 @@ export const innerCoreFragmentShader = /* glsl */ `
     float age = clamp(uAge, 0.0, 1.0);
     vec3 seedOffset = vec3(uSeed * 0.137, uSeed * 0.219, uSeed * 0.311);
 
-    float fieldA = fbm(vPosition * uNoiseScale * 0.55 + seedOffset);
-    float fieldB = fbm(vPosition * uNoiseScale * 0.95 + seedOffset * 1.35 + vec3(2.1, 0.4, 5.2));
-    float detail = fbm(vPosition * uNoiseScale * 1.8 + seedOffset * 0.8);
+    float fieldA = fbm(vPosition * uNoiseScale * 0.5 + seedOffset);
+    float fieldB = fbm(vPosition * uNoiseScale * 0.9 + seedOffset * 1.4 + vec3(1.7, 0.6, 4.2));
+    float detail = fbm(vPosition * uNoiseScale * 1.55 + seedOffset * 0.75);
     float contrast = clamp(uInternalContrast, 0.0, 1.0);
 
-    float t = fieldA * mix(0.55, 0.85, contrast) + fieldB * 0.35 + vPosition.y * 0.08;
-    t = clamp(t, 0.0, 1.0);
-    float region = smoothstep(0.2, 0.8, mix(fieldA, fieldB, 0.4));
+    float t = fieldA * mix(0.5, 0.8, contrast) + fieldB * 0.4;
+    t = clamp(t + vPosition.x * 0.1 - vPosition.y * 0.05, 0.0, 1.0);
 
-    vec3 cyan = vec3(0.48, 0.82, 0.88);
-    vec3 softBlue = vec3(0.58, 0.72, 0.9);
-    vec3 violet = vec3(0.7, 0.58, 0.88);
-    vec3 pink = vec3(0.92, 0.7, 0.8);
-    vec3 warmYellow = vec3(0.94, 0.88, 0.68);
+    vec3 cyan = uColorA;
+    vec3 pink = uColorB;
+    vec3 violet = mix(cyan, pink, 0.45) * vec3(0.92, 0.86, 1.05);
+    violet = mix(violet, vec3(0.78, 0.62, 0.92), 0.28);
 
-    vec3 core = mix(cyan, softBlue, smoothstep(0.0, 0.28, t));
-    core = mix(core, violet, smoothstep(0.22, 0.48, t));
-    core = mix(core, pink, smoothstep(0.42, 0.7, t));
-    core = mix(core, warmYellow, smoothstep(0.62, 0.95, t));
-    core = mix(core, mix(violet, pink, detail), region * 0.18);
-    core = mix(core, core * 1.06, 0.12);
-    core = mix(core, core * vec3(0.96, 0.94, 1.0), age * 0.15);
+    vec3 core = mix(cyan, violet, smoothstep(0.05, 0.45, t));
+    core = mix(core, pink, smoothstep(0.35, 0.85, t));
+    core = mix(core, mix(pink, cyan, detail), 0.1);
+    // Soften toward shell palette so the core doesn't read as a separate object.
+    vec3 shellWash = mix(uShellTintA, uShellTintB, 0.5);
+    core = mix(core, shellWash, 0.18);
+    core *= mix(1.04, 1.14, fieldB);
+
+    float reveal = smoothstep(0.55, 0.78, age);
+    float fade = smoothstep(0.78, 1.0, age);
+    core = mix(core, core * 1.08, reveal * (1.0 - fade));
+    core = mix(core, mix(core, vec3(0.76, 0.8, 0.88), 0.45), fade * 0.45);
 
     vec3 normal = normalize(vNormal);
     vec3 worldNormal = normalize(vWorldNormal);
@@ -929,20 +957,29 @@ export const innerCoreFragmentShader = /* glsl */ `
     float facing = max(dot(normal, viewDirection), 0.0);
     float fresnel = pow(1.0 - facing, uFresnelPower);
 
-    vec3 rim = mix(pink * 0.85, softBlue, 0.45 + 0.35 * worldNormal.x);
-    vec3 key = normalize(vec3(-0.2, 0.5, 0.8));
-    float light = 0.9 + 0.1 * max(dot(worldNormal, key), 0.0);
+    vec3 rim = mix(pink * 0.9, cyan, 0.4 + 0.25 * worldNormal.x);
+    vec3 key = normalize(vec3(-0.15, 0.4, 0.85));
+    float light = 0.93 + 0.09 * max(dot(worldNormal, key), 0.0);
 
-    vec3 finalColor = (core + rim * uRimStrength * fresnel * 0.55) * light;
-    float alpha = mix(uBodyAlpha * 0.55, min(0.78, uBodyAlpha + 0.08), fresnel * 0.45);
-    alpha *= mix(0.8, 1.0, smoothstep(0.0, 0.1, age));
+    vec3 finalColor = core * light + rim * uRimStrength * fresnel * 0.32;
+
+    float decayField = fbm(vPosition * uNoiseScale * 0.75 + seedOffset * 1.2);
+    float decayProgress = smoothstep(0.74, 1.0, age);
+    float remaining = smoothstep(decayProgress - 0.22, decayProgress + 0.2, decayField);
+
+    float alpha = mix(uBodyAlpha * 0.58, min(0.82, uBodyAlpha + 0.08), fresnel * 0.2);
+    alpha *= mix(0.5, 1.0, smoothstep(0.0, 0.14, age));
+    alpha *= mix(1.0, remaining, smoothstep(0.72, 0.88, age));
+    alpha *= 1.0 - smoothstep(0.94, 1.0, age);
+
+    if (alpha < 0.028) discard;
 
     gl_FragColor = vec4(finalColor, alpha);
     #include <colorspace_fragment>
   }
 `
 
-export const layeredVertexShader = /* glsl */ `
+export const outerLayeredVertexShader = /* glsl */ `
   uniform float uTime;
   uniform float uAge;
   uniform float uSeed;
@@ -959,32 +996,41 @@ export const layeredVertexShader = /* glsl */ `
 
   ${noiseFunctions}
 
-  float formField(vec3 p) {
-    float large = fbm(p * uNoiseScale * 0.55 + vec3(uSeed * 0.09, 1.2, uTime * uSpeed * 0.15));
-    float medium = fbm(p * uNoiseScale + vec3(0.0, uTime * uSpeed * 0.45, uSeed * 0.17));
-    float detail = fbm(p * uNoiseScale * 1.85 + vec3(uTime * uSpeed * 0.3, uSeed * 0.29, 2.4));
-    return (large * 2.0 - 1.0) * 0.85
-         + (medium * 2.0 - 1.0) * 0.45
-         + (detail * 2.0 - 1.0) * 0.22;
+  // Shared low-frequency body — same domain as the core for one silhouette.
+  float sharedBody(vec3 p) {
+    float large = fbm(p * 0.72 + vec3(uSeed * 0.09, 1.1, uTime * uSpeed * 0.12));
+    float medium = fbm(p * 1.15 + vec3(0.0, uTime * uSpeed * 0.32, uSeed * 0.17));
+    return (large * 2.0 - 1.0) * 0.7 + (medium * 2.0 - 1.0) * 0.35;
+  }
+
+  // Outer adds only mild surface texture on top of the shared body.
+  float outerField(vec3 p) {
+    float base = sharedBody(p);
+    float skin = fbm(p * uNoiseScale * 1.6 + vec3(uTime * uSpeed * 0.4, uSeed * 0.22, 2.4));
+    float ridged = 1.0 - abs(skin * 2.0 - 1.0);
+    return base * 0.78 + (ridged * 2.0 - 1.0) * 0.22 + (skin * 2.0 - 1.0) * 0.12;
   }
 
   void main() {
+    float age = clamp(uAge, 0.0, 1.0);
     float pulse = sin(uTime * uPulseSpeed + uSeed * 0.01) * 0.5 + 0.5;
-    float lifeEnvelope = smoothstep(0.0, 0.08, uAge) * (1.0 - smoothstep(0.9, 1.0, uAge));
-    float noiseGain = mix(0.9, 1.85, clamp(uNoiseAmount * 0.5, 0.0, 1.0));
+    float growth = smoothstep(0.0, 0.16, age) * mix(1.0, 1.2, smoothstep(0.2, 0.55, age));
+    float fracture = smoothstep(0.58, 0.94, age);
+    float noiseGain = mix(0.9, 1.7, clamp(uNoiseAmount * 0.5, 0.0, 1.0));
 
-    float field = formField(position);
-    float amount = (field * 0.96 + (pulse - 0.5) * 0.06) * uDisplacement * lifeEnvelope * noiseGain;
+    float field = outerField(position);
+    float amount = (field * 0.92 + (pulse - 0.5) * 0.06) * uDisplacement * growth * noiseGain;
+    amount += field * uDisplacement * 0.45 * fracture * noiseGain;
     vec3 displacedPosition = position + normal * amount;
 
-    float e = 0.06;
+    float e = 0.055;
     vec3 tangent = normalize(cross(normal, abs(normal.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
     vec3 bitangent = normalize(cross(normal, tangent));
-    float dT = (formField(position + tangent * e) - formField(position - tangent * e)) * 0.5;
-    float dB = (formField(position + bitangent * e) - formField(position - bitangent * e)) * 0.5;
-    float slope = clamp(uDisplacement * lifeEnvelope * noiseGain, 0.0, 0.4);
+    float dT = (outerField(position + tangent * e) - outerField(position - tangent * e)) * 0.5;
+    float dB = (outerField(position + bitangent * e) - outerField(position - bitangent * e)) * 0.5;
+    float slope = clamp(uDisplacement * (growth + fracture * 0.5) * noiseGain * 0.55, 0.0, 0.4);
     vec3 perturbed = normalize(normal - (tangent * dT + bitangent * dB) * slope);
-    vec3 displacedNormal = normalize(mix(normal, perturbed, 0.55));
+    vec3 displacedNormal = normalize(mix(normal, perturbed, mix(0.4, 0.58, fracture)));
 
     vec4 worldPosition = modelMatrix * vec4(displacedPosition, 1.0);
     vec4 viewPosition = viewMatrix * worldPosition;
@@ -995,3 +1041,66 @@ export const layeredVertexShader = /* glsl */ `
     gl_Position = projectionMatrix * viewPosition;
   }
 `
+
+export const innerLayeredVertexShader = /* glsl */ `
+  uniform float uTime;
+  uniform float uAge;
+  uniform float uSeed;
+  uniform float uNoiseScale;
+  uniform float uSpeed;
+  uniform float uPulseSpeed;
+  uniform float uDisplacement;
+  uniform float uNoiseAmount;
+
+  varying vec3 vPosition;
+  varying vec3 vViewPosition;
+  varying vec3 vNormal;
+  varying vec3 vWorldNormal;
+
+  ${noiseFunctions}
+
+  // Same shared body domain as outer — keeps the object continuous.
+  float sharedBody(vec3 p) {
+    float large = fbm(p * 0.72 + vec3(uSeed * 0.09, 1.1, uTime * uSpeed * 0.12));
+    float medium = fbm(p * 1.15 + vec3(0.0, uTime * uSpeed * 0.32, uSeed * 0.17));
+    return (large * 2.0 - 1.0) * 0.7 + (medium * 2.0 - 1.0) * 0.35;
+  }
+
+  float innerField(vec3 p) {
+    float base = sharedBody(p);
+    float soft = fbm(p * uNoiseScale * 0.9 + vec3(uSeed * 0.14, uTime * uSpeed * 0.28, 1.8));
+    return base * 0.82 + (soft * 2.0 - 1.0) * 0.28;
+  }
+
+  void main() {
+    float age = clamp(uAge, 0.0, 1.0);
+    float pulse = sin(uTime * uPulseSpeed + uSeed * 0.01) * 0.5 + 0.5;
+    float swell = smoothstep(0.04, 0.32, age) * (1.0 - smoothstep(0.8, 1.0, age) * 0.75);
+    swell = mix(0.45, 1.15, swell);
+    float lateCollapse = smoothstep(0.82, 1.0, age);
+    float noiseGain = mix(0.9, 1.55, clamp(uNoiseAmount * 0.5, 0.0, 1.0));
+
+    float field = innerField(position);
+    float amount = (field * 0.94 + (pulse - 0.5) * 0.07) * uDisplacement * swell * noiseGain;
+    amount -= abs(field) * uDisplacement * 0.4 * lateCollapse;
+    vec3 displacedPosition = position + normal * amount;
+
+    float e = 0.055;
+    vec3 tangent = normalize(cross(normal, abs(normal.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 bitangent = normalize(cross(normal, tangent));
+    float dT = (innerField(position + tangent * e) - innerField(position - tangent * e)) * 0.5;
+    float dB = (innerField(position + bitangent * e) - innerField(position - bitangent * e)) * 0.5;
+    float slope = clamp(uDisplacement * swell * noiseGain * 0.5, 0.0, 0.36);
+    vec3 perturbed = normalize(normal - (tangent * dT + bitangent * dB) * slope);
+    vec3 displacedNormal = normalize(mix(normal, perturbed, 0.45));
+
+    vec4 worldPosition = modelMatrix * vec4(displacedPosition, 1.0);
+    vec4 viewPosition = viewMatrix * worldPosition;
+    vPosition = position;
+    vViewPosition = viewPosition.xyz;
+    vNormal = normalize(normalMatrix * displacedNormal);
+    vWorldNormal = normalize(mat3(modelMatrix) * displacedNormal);
+    gl_Position = projectionMatrix * viewPosition;
+  }
+`
+

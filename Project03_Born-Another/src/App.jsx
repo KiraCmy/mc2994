@@ -129,10 +129,9 @@ export default function App() {
       }
     }
     if (nextId === 'layered') {
-      // Study 09 focuses on layers, not full death — mid-life default.
+      // Full life scrub / Animate — start mid-life unless already playing a pass.
       setIsDead(false)
       isDeadRef.current = false
-      setAnimating(false)
       setSharedAge(layered.age ?? 0.45, { force: true })
     }
     setStudyId(nextId)
@@ -279,13 +278,17 @@ export default function App() {
       >
         {study.id === 'layered' ? (
           <LayeredBody
-            surface={surface}
             seed={individuality.seed}
             age={layered.age}
             mode={layered.mode}
             outerOpacity={layered.outerOpacity}
             innerScale={layered.innerScale}
             innerContrast={layered.innerContrast}
+            outerColorA={layered.outerColorA}
+            outerColorB={layered.outerColorB}
+            outerRimColor={layered.outerRimColor}
+            innerColorA={layered.innerColorA}
+            innerColorB={layered.innerColorB}
           />
         ) : (
           <Specimen

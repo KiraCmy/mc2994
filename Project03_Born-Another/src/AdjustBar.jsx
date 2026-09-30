@@ -78,8 +78,16 @@ const BEHAVIOR_SLIDERS = [
 const LAYERED_SLIDERS = [
   { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
   { key: 'outerOpacity', label: 'Outer Opacity', min: 0.12, max: 0.7, step: 0.01 },
-  { key: 'innerScale', label: 'Inner Scale', min: 0.65, max: 0.85, step: 0.01 },
+  { key: 'innerScale', label: 'Inner Scale', min: 0.85, max: 0.98, step: 0.01 },
   { key: 'innerContrast', label: 'Inner Contrast', min: 0.2, max: 1, step: 0.01 },
+]
+
+const LAYERED_COLORS = [
+  { key: 'outerColorA', label: 'Outer Low' },
+  { key: 'outerColorB', label: 'Outer High' },
+  { key: 'outerRimColor', label: 'Outer Rim' },
+  { key: 'innerColorA', label: 'Inner Cyan' },
+  { key: 'innerColorB', label: 'Inner Pink' },
 ]
 
 function formatValue(slider, value) {
@@ -113,7 +121,7 @@ function controlsFor(studyId) {
     return { sliders: BEHAVIOR_SLIDERS, colors: [], families: MATERIAL_FAMILIES, modes: null }
   }
   if (studyId === 'layered') {
-    return { sliders: LAYERED_SLIDERS, colors: [], families: null, modes: LAYER_MODES }
+    return { sliders: LAYERED_SLIDERS, colors: LAYERED_COLORS, families: null, modes: LAYER_MODES }
   }
   return { sliders: SURFACE_SLIDERS, colors: SURFACE_COLORS, families: null, modes: null }
 }
