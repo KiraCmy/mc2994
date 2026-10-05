@@ -3,8 +3,9 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import AdjustBar from './AdjustBar.jsx'
 import Hud from './Hud.jsx'
-import LayeredBody from './LayeredBody.jsx'
 import Specimen from './Specimen.jsx'
+import { ScatterField, INITIAL_SCATTER } from './scatter/index.js'
+import { isShaderMode } from './modes.js'
 import {
   INITIAL_DECAY,
   INITIAL_DEVELOPMENT,
@@ -36,6 +37,7 @@ function captureTrace(individuality, decay, age) {
 }
 
 export default function App() {
+  const [modeId, setModeId] = useState('shader')
   const [studyId, setStudyId] = useState('surface')
   const [surface, setSurface] = useState(INITIAL_SURFACE)
   const [individuality, setIndividuality] = useState(INITIAL_INDIVIDUALITY)
@@ -44,6 +46,7 @@ export default function App() {
   const [trace, setTrace] = useState(INITIAL_TRACE)
   const [material, setMaterial] = useState(INITIAL_MATERIAL)
   const [layered, setLayered] = useState(INITIAL_LAYERED)
+  const [scatter, setScatter] = useState(INITIAL_SCATTER)
   const [preserved, setPreserved] = useState(null)
   const [animating, setAnimating] = useState(false)
   const [isDead, setIsDead] = useState(false)
@@ -56,8 +59,11 @@ export default function App() {
   decayRef.current = decay
   isDeadRef.current = isDead
 
-  const params =
-    study.id === 'individuality'
+  const params = !isShaderMode(modeId)
+    ? modeId === 'scatter'
+      ? scatter
+      : {}
+    : study.id === 'individuality'
       ? individuality
       : study.id === 'development'
         ? development
@@ -67,22 +73,19 @@ export default function App() {
             ? trace
             : study.id === 'lifecycle'
               ? { age: development.age }
-              : isMaterialLifecycleStudy(study.id)
-                ? { ...material, age: development.age }
-                : study.id === 'layered'
-                  ? layered
+              : study.id === 'layered'
+                ? { ...layered, age: development.age }
+                : isMaterialLifecycleStudy(study.id)
+                  ? { ...material, age: development.age }
                   : surface
 
-  const age =
-    isLifecycleStudy(study.id)
-      ? development.age
-      : study.id === 'layered'
-        ? layered.age
-        : study.id === 'trace'
-          ? trace.age
-          : study.id === 'decay'
-            ? decay.age
-            : development.age
+  const age = isLifecycleStudy(study.id)
+    ? development.age
+    : study.id === 'trace'
+      ? trace.age
+      : study.id === 'decay'
+        ? decay.age
+        : development.age
   const ageRef = useRef(age)
   ageRef.current = age
 
@@ -111,28 +114,28 @@ export default function App() {
     }
   }
 
+  function selectMode(nextId) {
+    if (nextId !== 'shader') setAnimating(false)
+    setModeId(nextId)
+  }
+
   function selectStudy(nextId) {
-    if (nextId === 'lifecycle' || isMaterialLifecycleStudy(nextId)) {
+    if (nextId === 'lifecycle' || isMaterialLifecycleStudy(nextId) || nextId === 'layered') {
       setSharedAge(development.age, { force: true })
       if (development.age < 1) {
         setIsDead(false)
         isDeadRef.current = false
       }
-      if (isMaterialLifecycleStudy(nextId) && development.age >= 1) {
+      const autoPlay = isMaterialLifecycleStudy(nextId) || nextId === 'layered'
+      if (autoPlay && development.age >= 1) {
         setIsDead(false)
         isDeadRef.current = false
         setPreserved(null)
         setSharedAge(0, { force: true })
         setAnimating(true)
-      } else if (isMaterialLifecycleStudy(nextId) && !isDeadRef.current) {
+      } else if (autoPlay && !isDeadRef.current) {
         setAnimating(true)
       }
-    }
-    if (nextId === 'layered') {
-      // Full life scrub / Animate — start mid-life unless already playing a pass.
-      setIsDead(false)
-      isDeadRef.current = false
-      setSharedAge(layered.age ?? 0.45, { force: true })
     }
     setStudyId(nextId)
   }
@@ -147,7 +150,7 @@ export default function App() {
   }, [studyId])
 
   useEffect(() => {
-    if (!animating) return undefined
+    if (!animating || !isShaderMode(modeId)) return undefined
 
     let frame = 0
     let last = performance.now()
@@ -168,9 +171,24 @@ export default function App() {
 
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [animating])
+  }, [animating, modeId])
 
   function updateParam(key, value) {
+    if (!isShaderMode(modeId)) {
+      if (modeId === 'scatter') {
+        if (key === 'regenerate') {
+          setScatter((current) => ({
+            ...current,
+            generation: current.generation + 1,
+            seed: (current.seed * 1103515245 + 12345) >>> 0,
+          }))
+          return
+        }
+        setScatter((current) => ({ ...current, [key]: value }))
+      }
+      return
+    }
+
     if (key === 'age') {
       if (isDeadRef.current && isLifecycleStudy(studyId)) return
       setAnimating(false)
@@ -178,10 +196,6 @@ export default function App() {
       return
     }
     if (study.id === 'layered') {
-      if (key === 'mode') {
-        setLayered((current) => ({ ...current, mode: value }))
-        return
-      }
       setLayered((current) => ({ ...current, [key]: value }))
       return
     }
@@ -225,6 +239,7 @@ export default function App() {
   }
 
   function toggleAnimate() {
+    if (!isShaderMode(modeId)) return
     if (isLifecycleStudy(studyId) && isDeadRef.current) {
       startNewLife()
       return
@@ -262,8 +277,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  const stage = isLifecycleStudy(study.id) ? lifecycleStage(isDead ? 1 : age) : null
-  const lifecycleActive = isLifecycleStudy(study.id)
+  const stage =
+    isShaderMode(modeId) && isLifecycleStudy(study.id)
+      ? lifecycleStage(isDead ? 1 : age)
+      : null
+  const lifecycleActive = isShaderMode(modeId) && isLifecycleStudy(study.id)
+
+  // Non-shader modes keep a living development body as the shared base mesh.
+  const viewportStudyId = isShaderMode(modeId) ? study.id : 'development'
+  const viewportDead = lifecycleActive ? isDead : false
 
   return (
     <main className="stage">
@@ -276,33 +298,35 @@ export default function App() {
           gl.setClearColor(0x000000, 0)
         }}
       >
-        {study.id === 'layered' ? (
-          <LayeredBody
-            seed={individuality.seed}
-            age={layered.age}
-            mode={layered.mode}
-            outerOpacity={layered.outerOpacity}
-            innerScale={layered.innerScale}
-            innerContrast={layered.innerContrast}
-            outerColorA={layered.outerColorA}
-            outerColorB={layered.outerColorB}
-            outerRimColor={layered.outerRimColor}
-            innerColorA={layered.innerColorA}
-            innerColorB={layered.innerColorB}
+        <Specimen
+          studyId={viewportStudyId}
+          surface={surface}
+          individuality={individuality}
+          development={development}
+          decay={decay}
+          trace={trace}
+          material={material}
+          layered={layered}
+          preserved={preserved}
+          isDead={viewportDead}
+        />
+        {modeId === 'scatter' ? (
+          <ScatterField
+            density={scatter.density}
+            seed={scatter.seed}
+            generation={scatter.generation}
+            surfaceSeed={individuality.seed}
+            noiseScale={individuality.noiseScale}
+            age={development.age}
+            speed={development.speed}
+            pulseSpeed={development.pulseSpeed}
+            displacement={development.displacement}
+            noiseAmount={development.noiseAmount}
+            colorA={surface.colorA}
+            colorB={surface.colorB}
+            rimColor={surface.rimColor}
           />
-        ) : (
-          <Specimen
-            studyId={study.id}
-            surface={surface}
-            individuality={individuality}
-            development={development}
-            decay={decay}
-            trace={trace}
-            material={material}
-            preserved={preserved}
-            isDead={lifecycleActive ? isDead : false}
-          />
-        )}
+        ) : null}
         <OrbitControls
           enablePan={false}
           enableDamping
@@ -314,16 +338,18 @@ export default function App() {
         />
       </Canvas>
       <Hud
+        modeId={modeId}
         studyId={study.id}
         age={age}
         seed={individuality.seed}
         stage={stage}
         isDead={isDead && lifecycleActive}
         animating={animating}
+        onSelectMode={selectMode}
         onSelectStudy={selectStudy}
         onToggleAnimate={toggleAnimate}
       />
-      <AdjustBar study={study} params={params} onChange={updateParam} />
+      <AdjustBar modeId={modeId} study={study} params={params} onChange={updateParam} />
     </main>
   )
 }

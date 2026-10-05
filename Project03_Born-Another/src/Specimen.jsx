@@ -6,6 +6,7 @@ import {
   edgeAlpha,
   isLifecycleStudy,
   isMaterialLifecycleStudy,
+  layeredLifecycleVisualStudy,
   lifecycleVisualStudy,
   materialLifecycleVisualStudy,
 } from './surfaceParams.js'
@@ -16,6 +17,8 @@ import {
   developmentVertexShader,
   fragmentShader,
   individualityFragmentShader,
+  layeredFragmentShader,
+  layeredVertexShader,
   materialFragmentShader,
   traceBodyFragmentShader,
   traceFragmentShader,
@@ -63,6 +66,12 @@ function shadersFor(visualStudy, age = 0) {
     return {
       vertex: developmentVertexShader,
       fragment: developmentFragmentShader,
+    }
+  }
+  if (visualStudy === 'layered') {
+    return {
+      vertex: layeredVertexShader,
+      fragment: layeredFragmentShader,
     }
   }
   if (visualStudy === 'individuality') {
@@ -116,6 +125,13 @@ function createBodyUniforms(surface, individuality, development, decay, material
     uThinningRate: { value: bias.thinning },
     uFractureSharpness: { value: bias.fractureSharpness },
     uLateWarp: { value: bias.lateWarp },
+    uGlow: { value: 0.88 },
+    uFoil: { value: 0.62 },
+    uGrain: { value: 0.42 },
+    uGlowCyan: { value: new THREE.Color('#7ec8e8') },
+    uGlowPink: { value: new THREE.Color('#f0a8c8') },
+    uGlowYellow: { value: new THREE.Color('#f0e0a0') },
+    uFoilColor: { value: new THREE.Color('#2a2c32') },
   }
 }
 
@@ -126,9 +142,11 @@ function syncBodyUniforms(material, {
   development,
   decay,
   materialParams,
+  layered,
   age,
   isMaterialStudy,
   materialLifecycle,
+  isLayeredStudy,
 }) {
   const bias = decayBiasFor(materialParams)
 
@@ -136,7 +154,18 @@ function syncBodyUniforms(material, {
   material.uniforms.uColorB.value.set(surface.colorB)
   material.uniforms.uRimColor.value.set(surface.rimColor)
 
-  if (isMaterialStudy) {
+  if (isLayeredStudy) {
+    material.uniforms.uFresnelPower.value = 2.8
+    material.uniforms.uRimStrength.value = 0.48
+    material.uniforms.uBodyAlpha.value = 0.82
+    material.uniforms.uEdgeAlpha.value = edgeAlpha(0.82)
+    material.uniforms.uIridescence.value = layered.iridescence
+    if (material.uniforms.uGlow) material.uniforms.uGlow.value = layered.glow
+    if (material.uniforms.uFoil) material.uniforms.uFoil.value = layered.foil
+    if (material.uniforms.uGrain) material.uniforms.uGrain.value = layered.grain
+    if (material.uniforms.uLateWarp) material.uniforms.uLateWarp.value = 1
+    material.uniforms.uEdgeSoftness.value = decay.edgeSoftness
+  } else if (isMaterialStudy) {
     material.uniforms.uFresnelPower.value = materialParams.fresnelPower
     material.uniforms.uRimStrength.value = materialParams.rimStrength
     material.uniforms.uBodyAlpha.value = materialParams.bodyAlpha
@@ -177,17 +206,23 @@ function syncBodyUniforms(material, {
   material.uniforms.uPulseSpeed.value = development.pulseSpeed
   material.uniforms.uDisplacement.value = isMaterialStudy
     ? development.displacement * 0.55
-    : development.displacement
-  material.uniforms.uNoiseAmount.value = development.noiseAmount
+    : isLayeredStudy
+      ? development.displacement * 1.05
+      : development.displacement
+  material.uniforms.uNoiseAmount.value = isLayeredStudy
+    ? Math.max(development.noiseAmount, 1.45)
+    : development.noiseAmount
 
   material.uniforms.uDecayScale.value = decay.decayScale
   material.uniforms.uDecayStart.value = decay.decayStart
-  if (!isMaterialStudy) {
+  if (!isMaterialStudy && !isLayeredStudy) {
     material.uniforms.uEdgeSoftness.value = decay.edgeSoftness
   }
   material.uniforms.uBoundaryWidth.value = decay.boundaryWidth
   material.uniforms.uDiscardThreshold.value = decay.discardThreshold
-  material.uniforms.uDecayDisplacement.value = decay.decayDisplacement
+  material.uniforms.uDecayDisplacement.value = isLayeredStudy
+    ? Math.max(decay.decayDisplacement, 0.07)
+    : decay.decayDisplacement
   material.uniforms.uDecayAccent.value.set(decay.decayAccent)
 }
 
@@ -199,6 +234,7 @@ export default function Specimen({
   decay,
   trace,
   material: materialParams,
+  layered,
   preserved,
   isDead = false,
 }) {
@@ -219,9 +255,12 @@ export default function Specimen({
       ? lifecycleVisualStudy(age, isDead)
       : isMaterialLifecycleStudy(studyId)
         ? materialLifecycleVisualStudy(age, isDead)
-        : studyId
+        : studyId === 'layered'
+          ? layeredLifecycleVisualStudy(age, isDead)
+          : studyId
 
   const isMaterialStudy = visualStudy === 'material'
+  const isLayeredStudy = visualStudy === 'layered'
   const materialLifecycle = isMaterialLifecycleStudy(studyId)
   const showNoise = visualStudy !== 'surface'
   const shaders = shadersFor(visualStudy, age)
@@ -270,9 +309,11 @@ export default function Specimen({
       development,
       decay,
       materialParams,
+      layered,
       age,
       isMaterialStudy,
       materialLifecycle,
+      isLayeredStudy,
     })
   }, [
     showNoise,
@@ -281,11 +322,13 @@ export default function Specimen({
     development,
     decay,
     materialParams,
+    layered,
     age,
     showBody,
     visualStudy,
     isMaterialStudy,
     materialLifecycle,
+    isLayeredStudy,
   ])
 
   useLayoutEffect(() => {
@@ -329,6 +372,7 @@ export default function Specimen({
       visualStudy === 'decay' ||
       visualStudy === 'trace' ||
       visualStudy === 'material' ||
+      visualStudy === 'layered' ||
       isLifecycleStudy(studyId)
     ) {
       mat.uniforms.uTime.value = clock.getElapsedTime()

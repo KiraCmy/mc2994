@@ -1,20 +1,43 @@
 import { STUDIES, studyLabel } from './surfaceParams.js'
+import { MODES, isShaderMode } from './modes.js'
 
 export default function Hud({
+  modeId,
   studyId,
   age,
   seed,
   stage,
   isDead,
   animating,
+  onSelectMode,
   onSelectStudy,
   onToggleAnimate,
 }) {
   const animateLabel = isDead ? 'New Life' : animating ? 'Pause' : 'Animate'
+  const showShaderChrome = isShaderMode(modeId)
 
   return (
     <div className="hud">
       <p className="hud-title">Born Another</p>
+
+      <div className="hud-modes" role="tablist" aria-label="Modes">
+        {MODES.map((mode) => {
+          const active = mode.id === modeId
+          return (
+            <button
+              key={mode.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              className={`hud-mode-item${active ? ' is-active' : ''}`}
+              onClick={() => onSelectMode(mode.id)}
+            >
+              {mode.label}
+            </button>
+          )
+        })}
+      </div>
+
       <div className="hud-meta">
         <p>
           Age {Number(age).toFixed(2)}
@@ -27,32 +50,38 @@ export default function Hud({
             </>
           ) : null}
         </p>
-        <button
-          type="button"
-          className={`hud-animate${animating ? ' is-active' : ''}`}
-          aria-pressed={animating}
-          onClick={onToggleAnimate}
-        >
-          {animateLabel}
-        </button>
+        {showShaderChrome ? (
+          <button
+            type="button"
+            className={`hud-animate${animating ? ' is-active' : ''}`}
+            aria-pressed={animating}
+            onClick={onToggleAnimate}
+          >
+            {animateLabel}
+          </button>
+        ) : null}
       </div>
-      <div className="hud-studies" role="tablist" aria-label="Studies">
-        {STUDIES.map((item) => {
-          const active = item.id === studyId
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={`hud-study-item${active ? ' is-active' : ''}`}
-              onClick={() => onSelectStudy(item.id)}
-            >
-              {studyLabel(item)}
-            </button>
-          )
-        })}
-      </div>
+
+      {showShaderChrome ? (
+        <div className="hud-studies" role="tablist" aria-label="Studies">
+          {STUDIES.map((item) => {
+            const active = item.id === studyId
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`hud-study-item${active ? ' is-active' : ''}`}
+                onClick={() => onSelectStudy(item.id)}
+              >
+                {studyLabel(item)}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
       <div className="hud-life">
         <span>Birth</span>
         <div

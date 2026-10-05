@@ -56,6 +56,51 @@ body {
   line-height: 1.05;
 }
 
+.hud-modes {
+  position: absolute;
+  top: calc(4.2cqh + clamp(1.35rem, 3.6cqw, 2.9rem));
+  left: 3.4cqw;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.35em;
+  pointer-events: auto;
+}
+
+.hud-mode-item {
+  position: relative;
+  margin: 0;
+  padding: 0 0 0.35em;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-stretch: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.38;
+}
+
+.hud-mode-item.is-active {
+  opacity: 1;
+}
+
+.hud-mode-item.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.hud-mode-item:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 4px;
+}
+
 .hud-meta {
   position: absolute;
   top: 4.2cqh;
@@ -385,6 +430,38 @@ body {
 
 .adjust-toggle:focus-visible {
   outline: 1px solid rgba(255, 255, 255, 0.95);
+  outline-offset: 4px;
+}
+
+.adjust-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55em;
+  padding-top: 0.2cqh;
+}
+
+.adjust-action {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-stretch: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.adjust-action:hover {
+  opacity: 1;
+}
+
+.adjust-action:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.9);
   outline-offset: 4px;
 }
 

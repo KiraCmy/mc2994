@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LAYER_MODES, MATERIAL_FAMILIES } from './surfaceParams.js'
+import { MATERIAL_FAMILIES } from './surfaceParams.js'
 
 const SURFACE_SLIDERS = [
   { key: 'fresnelPower', label: 'Fresnel', min: 1, max: 6, step: 0.05 },
@@ -77,17 +77,14 @@ const BEHAVIOR_SLIDERS = [
 
 const LAYERED_SLIDERS = [
   { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
-  { key: 'outerOpacity', label: 'Outer Opacity', min: 0.12, max: 0.7, step: 0.01 },
-  { key: 'innerScale', label: 'Inner Scale', min: 0.85, max: 0.98, step: 0.01 },
-  { key: 'innerContrast', label: 'Inner Contrast', min: 0.2, max: 1, step: 0.01 },
+  { key: 'glow', label: 'Interior Glow', min: 0, max: 1.4, step: 0.01 },
+  { key: 'foil', label: 'Foil Fracture', min: 0, max: 1.2, step: 0.01 },
+  { key: 'iridescence', label: 'Iridescence', min: 0, max: 1, step: 0.01 },
+  { key: 'grain', label: 'Edge Grain', min: 0, max: 1, step: 0.01 },
 ]
 
-const LAYERED_COLORS = [
-  { key: 'outerColorA', label: 'Outer Low' },
-  { key: 'outerColorB', label: 'Outer High' },
-  { key: 'outerRimColor', label: 'Outer Rim' },
-  { key: 'innerColorA', label: 'Inner Cyan' },
-  { key: 'innerColorB', label: 'Inner Pink' },
+const SCATTER_SLIDERS = [
+  { key: 'density', label: 'Density', min: 0, max: 1, step: 0.01 },
 ]
 
 function formatValue(slider, value) {
@@ -98,7 +95,7 @@ function formatValue(slider, value) {
   return Number(value).toFixed(2)
 }
 
-function controlsFor(studyId) {
+function controlsForStudy(studyId) {
   if (studyId === 'individuality') {
     return { sliders: IDENTITY_SLIDERS, colors: IDENTITY_COLORS, families: null, modes: null }
   }
@@ -121,14 +118,55 @@ function controlsFor(studyId) {
     return { sliders: BEHAVIOR_SLIDERS, colors: [], families: MATERIAL_FAMILIES, modes: null }
   }
   if (studyId === 'layered') {
-    return { sliders: LAYERED_SLIDERS, colors: LAYERED_COLORS, families: null, modes: LAYER_MODES }
+    return { sliders: LAYERED_SLIDERS, colors: [], families: null, modes: null }
   }
   return { sliders: SURFACE_SLIDERS, colors: SURFACE_COLORS, families: null, modes: null }
 }
 
-export default function AdjustBar({ study, params, onChange }) {
+function controlsForMode(modeId, studyId) {
+  if (modeId === 'scatter') {
+    return {
+      heading: 'Scatter Parameters',
+      sliders: SCATTER_SLIDERS,
+      colors: [],
+      families: null,
+      modes: null,
+      actions: [{ key: 'regenerate', label: 'Regenerate' }],
+    }
+  }
+  if (modeId === 'path') {
+    return {
+      heading: 'Path Parameters',
+      sliders: [],
+      colors: [],
+      families: null,
+      modes: null,
+      actions: [],
+    }
+  }
+  if (modeId === 'particle') {
+    return {
+      heading: 'Particle Parameters',
+      sliders: [],
+      colors: [],
+      families: null,
+      modes: null,
+      actions: [],
+    }
+  }
+  const studyControls = controlsForStudy(studyId)
+  return {
+    heading: null,
+    ...studyControls,
+    actions: [],
+  }
+}
+
+export default function AdjustBar({ modeId = 'shader', study, params, onChange }) {
   const [open, setOpen] = useState(false)
-  const { sliders, colors, families, modes } = controlsFor(study.id)
+  const controls = controlsForMode(modeId, study.id)
+  const heading = controls.heading ?? study.heading
+  const { sliders, colors, families, modes, actions } = controls
 
   return (
     <form
@@ -137,7 +175,7 @@ export default function AdjustBar({ study, params, onChange }) {
     >
       {open && (
         <div className="adjust-panel">
-          <p className="adjust-heading">{study.heading}</p>
+          <p className="adjust-heading">{heading}</p>
 
           {modes && (
             <div className="adjust-families" role="tablist" aria-label="Layer visibility">
@@ -179,26 +217,43 @@ export default function AdjustBar({ study, params, onChange }) {
             </div>
           )}
 
-          <div className="adjust-sliders">
-            {sliders.map((slider) => (
-              <label key={slider.key} className="adjust-slider">
-                <span className="adjust-label">{slider.label}</span>
-                <input
-                  type="range"
-                  min={slider.min}
-                  max={slider.max}
-                  step={slider.step}
-                  value={params[slider.key]}
-                  aria-label={slider.label}
-                  onChange={(event) => {
-                    const next = Number(event.target.value)
-                    onChange(slider.key, slider.integers ? Math.round(next) : next)
-                  }}
-                />
-                <em className="adjust-value">{formatValue(slider, params[slider.key])}</em>
-              </label>
-            ))}
-          </div>
+          {sliders.length > 0 && (
+            <div className="adjust-sliders">
+              {sliders.map((slider) => (
+                <label key={slider.key} className="adjust-slider">
+                  <span className="adjust-label">{slider.label}</span>
+                  <input
+                    type="range"
+                    min={slider.min}
+                    max={slider.max}
+                    step={slider.step}
+                    value={params[slider.key]}
+                    aria-label={slider.label}
+                    onChange={(event) => {
+                      const next = Number(event.target.value)
+                      onChange(slider.key, slider.integers ? Math.round(next) : next)
+                    }}
+                  />
+                  <em className="adjust-value">{formatValue(slider, params[slider.key])}</em>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {actions.length > 0 && (
+            <div className="adjust-actions">
+              {actions.map((action) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  className="adjust-action"
+                  onClick={() => onChange(action.key, true)}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {colors.length > 0 && (
             <div className={`adjust-colors${colors.length === 1 ? ' is-single' : ''}`}>

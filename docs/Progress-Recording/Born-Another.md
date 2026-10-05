@@ -102,10 +102,38 @@ Hybrid at instability (age ~0.71): soft thinning with fracture pushed high—jag
 
 ## Study 09 — Layered
 
-Study 09 splits the specimen into two nested meshes that still share one seed and age: a soft translucent outer membrane and a denser inner core. The first pass read as a small opaque ball inside a glass bubble. The refine closes that gap—inner scale near 0.76, stronger low-frequency displacement on the core, lower core opacity, and a noise-driven cyan → soft blue → violet → pink → warm yellow field—so the colors sit *inside* the entity rather than on a separate sphere. Outer motion stays slow and soft; the inner body moves with a related but offset field. No particles, textures, or hard refraction.
+Study 09 no longer uses two nested meshes. The nested outer/inner pass read either as a ball in a glass bubble or as a pale haze; layered depth did not hold. The rewrite keeps **one mesh** and treats “layered” as material depth on a single life: Study 03–style breathing form, a fake interior glow (cyan → pink → yellow through milky flesh), and seed-locked dark foil fracture on the same silhouette. Soft edge grain stands in for a later particle rim.
 
-The lower-left list now includes Study 09. Layered parameters use the same floating overlay: Both / Outer / Inner visibility, plus age, outer opacity, inner scale, and inner contrast. Camera, pale background, and the Birth–Death marker stay unchanged.
+The lower-left list includes Study 09. Layered parameters use the same floating overlay: age, interior glow, foil fracture, iridescence, and edge grain. Camera, pale background, and the Birth–Death marker stay unchanged.
 
-Both layers at mid-life (age 0.45, inner scale 0.76): one soft translucent organism with irregular colorful interior visible through the membrane.
+Mid-life: one irregular organism with luminous interior color and crumpled dark regions—readable against the field without a second body.
 
 ![[born-another-study-09-layered.jpg]]
+
+### Study 09.1 — Lifecycle decay
+
+Study 09.1 connects the single-mesh layered body to the same Birth → Death clock as Study 06. Animate or Space advances age; the HUD shows the stage name; death is irreversible until New Life. The layered look stays through living stages, but disappearance is no longer a hard cut: after maturity, soft flesh thins and opens along the shared seed-locked decay field, foil patches fracture and linger, late-life warp increases, then the body exits and the Study 05 trace remains.
+
+At instability (age 0.62): interior glow and foil fracture still read on one silhouette while holes and thinning have begun—gradual mortality rather than an instant vanish.
+
+![[born-another-study-09-1-layered-lifecycle.jpg]]
+
+
+# Born Another — Scatter
+
+Top-level modes sit under the title: **Shader** (Studies 01–09), **Scatter**, **Path**, and **Particle**. Path and Particle are empty placeholders. Scatter is the first non-shader mode; it keeps the same viewport, camera, and pale field.
+
+## Step 1 — Surface instances
+
+Scatter reuses the development base body, randomly samples points on the unit sphere, and places a small sphere at each sample with `InstancedMesh`. Controls are only **Density** and **Regenerate**. Sampling is modular (`position`, `normal`, `uv`) so orientation, noise distribution, and other assets can land later without rewriting the mode shell.
+
+### Attachment to the deforming surface
+
+The base mesh deforms in the Study 03 vertex shader (`formField` + age/time envelope). The first Scatter pass stored fixed rest positions, so instances floated while the body breathed. The fix shares that displacement field: rest samples stay on the sphere; each frame the scatter shader runs the same `developmentDisplaceAmount` as the base mesh, using the same uniforms (`uTime`, `uAge`, seed, noise scale, speed, pulse, displacement). Density and Regenerate stay unchanged.
+
+**Note:** GPU deformation on the base cannot be read back cheaply. Reusing the shared GLSL field on the instances is what keeps them glued to the surface without a second approximation.
+
+Scatter at mid-life (age 0.50, density ~0.45): small white spheres sit on the breathing membrane and move with it.
+
+![[born-another-scatter-surface-instances.jpg]]
+

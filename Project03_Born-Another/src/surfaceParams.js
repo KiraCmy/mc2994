@@ -228,33 +228,29 @@ export function materialLifecycleVisualStudy(age, isDead) {
   return 'material'
 }
 
+/** Study 09: layered look for the living body; trace after death. */
+export function layeredLifecycleVisualStudy(age, isDead) {
+  if (isDead || age >= 0.95) return 'trace'
+  return 'layered'
+}
+
 export function isMaterialLifecycleStudy(studyId) {
   return studyId === 'material' || studyId === 'behavior'
 }
 
 export function isLifecycleStudy(studyId) {
-  return studyId === 'lifecycle' || isMaterialLifecycleStudy(studyId)
+  return (
+    studyId === 'lifecycle' ||
+    studyId === 'layered' ||
+    isMaterialLifecycleStudy(studyId)
+  )
 }
 
-export const LAYER_MODES = [
-  { id: 'both', label: 'Both' },
-  { id: 'outer', label: 'Outer' },
-  { id: 'inner', label: 'Inner' },
-]
-
+/** Study 09 — layered material on one mesh (glow + foil), not nested bodies. */
 export const INITIAL_LAYERED = {
-  mode: 'both',
-  age: 0.45,
-  outerOpacity: 0.22,
-  innerScale: 0.93,
-  innerContrast: 0.65,
-  // Pearly frosted membrane
-  outerColorA: '#ebe6ea',
-  outerColorB: '#dfe8ee',
-  outerRimColor: '#f7f4f8',
-  // Soft cyan ↔ pink core (reference iridescence)
-  innerColorA: '#7ec8e8',
-  innerColorB: '#f0a8c8',
+  age: 0,
+  glow: 0.88,
+  foil: 0.62,
+  iridescence: 0.72,
+  grain: 0.42,
 }
-
-export const INNER_SEED_OFFSET = 17.13
