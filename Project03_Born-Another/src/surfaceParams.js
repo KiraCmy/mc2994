@@ -56,19 +56,19 @@ export const STUDIES = [
 ]
 
 export const INITIAL_SURFACE = {
-  colorA: '#d9c8cd',
-  colorB: '#c9dbdf',
-  rimColor: '#f4e4ea',
+  colorA: '#e7b6c2',
+  colorB: '#a4e2e6',
+  rimColor: '#a8feff',
   fresnelPower: 2.6,
   rimStrength: 0.36,
-  opacity: 0.86,
+  opacity: 0.93,
 }
 
 export const INITIAL_INDIVIDUALITY = {
   seed: 884731,
   noiseScale: 2.8,
   patternContrast: 0.62,
-  accentColor: '#7f9aa6',
+  accentColor: '#ff0000',
   accentStrength: 0.72,
 }
 
@@ -82,8 +82,8 @@ export const INITIAL_DEVELOPMENT = {
 
 export const INITIAL_DECAY = {
   age: 0.78,
-  decayStart: 0.48,
-  edgeSoftness: 0.2,
+  decayStart: 0.8,
+  edgeSoftness: 0.28,
   boundaryWidth: 0.09,
   discardThreshold: 0.035,
   decayDisplacement: 0.055,
@@ -141,8 +141,8 @@ export const MATERIAL_PRESETS = {
     rimStrength: 0.35,
     iridescence: 0.28,
     internalContrast: 0.45,
-    transmission: 0.12,
-    bodyAlpha: 0.86,
+    transmission: 0.06,
+    bodyAlpha: 0.92,
     ...DECAY_BIAS.membrane,
   },
   crystal: {
@@ -194,7 +194,7 @@ export const LIFE_DURATION = 16
 export const PRESERVE_AGE = 0.95
 
 export function edgeAlpha(opacity) {
-  return Math.min(1, opacity + 0.11)
+  return Math.min(1, opacity + 0.06)
 }
 
 export function studyLabel(study) {
@@ -204,7 +204,7 @@ export function studyLabel(study) {
 export function lifecycleStage(age) {
   if (age >= 1) return 'trace'
   if (age >= 0.95) return 'death'
-  if (age >= 0.75) return 'decay'
+  if (age >= 0.8) return 'decay'
   if (age >= 0.55) return 'instability'
   if (age >= 0.25) return 'maturity'
   if (age > 0) return 'development'
@@ -214,7 +214,7 @@ export function lifecycleStage(age) {
 /** Map lifecycle age to an existing study material (no new GLSL). */
 export function lifecycleVisualStudy(age, isDead) {
   if (isDead || age >= 1) return 'trace'
-  if (age >= 0.55) return 'decay'
+  if (age >= 0.8) return 'decay'
   if (age > 0.02) return 'development'
   return 'individuality'
 }

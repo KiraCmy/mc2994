@@ -460,6 +460,12 @@ body {
   opacity: 1;
 }
 
+.adjust-action.is-active {
+  opacity: 1;
+  text-decoration: underline;
+  text-underline-offset: 0.28em;
+}
+
 .adjust-action:focus-visible {
   outline: 1px solid rgba(255, 255, 255, 0.9);
   outline-offset: 4px;

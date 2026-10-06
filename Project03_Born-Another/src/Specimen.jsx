@@ -157,8 +157,8 @@ function syncBodyUniforms(material, {
   if (isLayeredStudy) {
     material.uniforms.uFresnelPower.value = 2.8
     material.uniforms.uRimStrength.value = 0.48
-    material.uniforms.uBodyAlpha.value = 0.82
-    material.uniforms.uEdgeAlpha.value = edgeAlpha(0.82)
+    material.uniforms.uBodyAlpha.value = 0.9
+    material.uniforms.uEdgeAlpha.value = edgeAlpha(0.9)
     material.uniforms.uIridescence.value = layered.iridescence
     if (material.uniforms.uGlow) material.uniforms.uGlow.value = layered.glow
     if (material.uniforms.uFoil) material.uniforms.uFoil.value = layered.foil
@@ -391,7 +391,7 @@ export default function Specimen({
             fragmentShader={shaders.fragment}
             uniforms={bodyUniforms}
             transparent
-            depthWrite={false}
+            depthWrite
             side={THREE.FrontSide}
             toneMapped={false}
           />

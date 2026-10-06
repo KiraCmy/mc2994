@@ -56,9 +56,113 @@ export const noiseFunctions = /* glsl */ `
 `
 
 /**
+ * AGE-driven low-frequency body morphology — separate from Study 03 micro noise.
+ * Requires: noiseFunctions (valueNoise), uniforms uAge + uSeed.
+ * Export kept free of micro displace so scatter can later reuse position/normal.
+ */
+export const macroMorphologyGlsl = /* glsl */ `
+  vec3 macroSeedDir(float channel) {
+    float s = uSeed * 0.00137 + channel * 17.23;
+    vec3 d = vec3(
+      sin(s * 1.7 + 0.4),
+      cos(s * 1.3 + 1.1),
+      sin(s * 2.1 + 2.6)
+    );
+    float len = length(d);
+    return len > 1e-5 ? d / len : vec3(0.0, 1.0, 0.0);
+  }
+
+  float macroSoftLobe(vec3 n, vec3 axis, float power) {
+    return pow(max(0.0, dot(n, axis)), power);
+  }
+
+  /**
+   * Object-space offset for rest position p (typically on the unit sphere).
+   * Birth ≈ 0; development elongates; maturity opens 2–3 lobes; decay collapses.
+   */
+  vec3 macroMorphologyOffsetAt(vec3 p, float age) {
+    float a = clamp(age, 0.0, 1.0);
+    float rad = max(length(p), 1e-4);
+    vec3 n = p / rad;
+
+    // Smooth overlapping stage envelopes (not hard cuts).
+    float develop = smoothstep(0.02, 0.3, a) * (1.0 - smoothstep(0.7, 0.95, a));
+    float mature = smoothstep(0.2, 0.48, a) * (1.0 - smoothstep(0.65, 0.9, a));
+    float collapse = smoothstep(0.52, 0.78, a);
+
+    vec3 axisA = macroSeedDir(0.0);
+    vec3 axisB = macroSeedDir(1.0);
+    // Third lobe axis from the first two — stays deterministic and non-aligned.
+    vec3 axisC = normalize(cross(axisA, axisB) + axisB * 0.42 + axisA * 0.18);
+
+    // Very low-frequency variation (not surface noise scale).
+    float slow = valueNoise(n * 1.05 + vec3(uSeed * 0.061, 0.27, 1.4));
+    float slow2 = valueNoise(n * 0.72 + vec3(1.9, uSeed * 0.044, 0.55));
+
+    // Development: gentle elongation + soft asymmetry.
+    float along = dot(n, axisA);
+    vec3 developOffset =
+      axisA * (along * 0.11 + (slow - 0.5) * 0.04) * develop
+      + n * (slow2 - 0.5) * 0.035 * develop;
+
+    // Maturity: 2–3 large readable lobes (weights from seed).
+    float w1 = 0.5 + 0.2 * sin(uSeed * 0.019);
+    float w2 = 0.4 + 0.2 * cos(uSeed * 0.023);
+    float w3 = 0.32 + 0.18 * sin(uSeed * 0.029 + 1.2);
+    float lobe =
+      macroSoftLobe(n, axisA, 2.15) * w1
+      + macroSoftLobe(n, axisB, 2.35) * w2
+      + macroSoftLobe(n, axisC, 2.55) * w3;
+    vec3 matureOffset =
+      n * lobe * 0.24 * mature
+      + (axisB * (slow - 0.42) * 0.05 + axisC * (slow2 - 0.5) * 0.04) * mature;
+
+    // Instability / decay: uneven compression and partial collapse.
+    float hollow = 1.0 - lobe * 0.55 + (slow - 0.5) * 0.45;
+    float crush = pow(clamp(hollow, 0.0, 1.4), 1.35);
+    vec3 collapseOffset =
+      -n * crush * 0.2 * collapse
+      - axisA * (slow2 - 0.5) * 0.07 * collapse
+      + axisB * (slow - 0.5) * 0.045 * collapse;
+
+    return developOffset + matureOffset + collapseOffset;
+  }
+
+  vec3 macroMorphologyOffset(vec3 p) {
+    return macroMorphologyOffsetAt(p, uAge);
+  }
+
+  vec3 macroMorphologyPosition(vec3 p) {
+    return p + macroMorphologyOffset(p);
+  }
+
+  vec3 macroMorphologyPositionAt(vec3 p, float age) {
+    return p + macroMorphologyOffsetAt(p, age);
+  }
+
+  /** Finite-difference normal of the macro-deformed rest surface. */
+  vec3 macroMorphologyNormalAt(vec3 p, vec3 n0, float age) {
+    float e = 0.045;
+    vec3 t = normalize(cross(n0, abs(n0.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 b = normalize(cross(n0, t));
+    vec3 c = macroMorphologyPositionAt(p, age);
+    vec3 pT = macroMorphologyPositionAt(p + t * e, age);
+    vec3 pB = macroMorphologyPositionAt(p + b * e, age);
+    vec3 n = normalize(cross(pT - c, pB - c));
+    if (dot(n, n0) < 0.0) n = -n;
+    return n;
+  }
+
+  vec3 macroMorphologyNormal(vec3 p, vec3 n0) {
+    return macroMorphologyNormalAt(p, n0, uAge);
+  }
+`
+
+/**
  * Shared Study 03 displacement field — used by the base mesh and scatter attachment.
  * Requires uniforms: uTime, uAge, uSeed, uNoiseScale, uSpeed, uPulseSpeed,
  * uDisplacement, uNoiseAmount.
+ * Micro / breath only — macro morphology lives in macroMorphologyGlsl.
  */
 export const developmentDisplacementGlsl = /* glsl */ `
   ${noiseFunctions}
@@ -122,6 +226,7 @@ export const fragmentShader = /* glsl */ `
 
     vec3 finalColor = (bodyColor + fresnel * rim * uRimStrength) * light;
     float alpha = mix(uBodyAlpha, uEdgeAlpha, fresnel);
+    if (!gl_FrontFacing) alpha *= 0.28;
 
     gl_FragColor = vec4(finalColor, alpha);
     #include <colorspace_fragment>
@@ -182,6 +287,7 @@ export const individualityFragmentShader = /* glsl */ `
 
     vec3 finalColor = (identityColor + fresnel * rim * uRimStrength) * light;
     float alpha = mix(uBodyAlpha, uEdgeAlpha, fresnel);
+    if (!gl_FrontFacing) alpha *= 0.28;
 
     gl_FragColor = vec4(finalColor, alpha);
     #include <colorspace_fragment>
@@ -204,23 +310,27 @@ export const developmentVertexShader = /* glsl */ `
   varying vec3 vWorldNormal;
 
   ${developmentDisplacementGlsl}
+  ${macroMorphologyGlsl}
 
   void main() {
     float lifeEnvelope = smoothstep(0.0, 0.1, uAge) * (1.0 - smoothstep(0.88, 1.0, uAge));
     float noiseGain = mix(0.85, 2.1, clamp(uNoiseAmount * 0.5, 0.0, 1.0));
 
-    float amount = developmentDisplaceAmount(position);
-    vec3 displacedPosition = position + normal * amount;
+    // Macro morphology first (AGE + SEED), then existing micro / breath displace.
+    vec3 macroPos = macroMorphologyPosition(position);
+    vec3 macroN = macroMorphologyNormal(position, normal);
+    float amount = developmentDisplaceAmount(macroPos);
+    vec3 displacedPosition = macroPos + macroN * amount;
 
-    // Soft normal bend — strong perturbation caused muddy terminator bands.
+    // Soft normal bend from micro field on the macro surface.
     float e = 0.05;
-    vec3 tangent = normalize(cross(normal, abs(normal.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
-    vec3 bitangent = normalize(cross(normal, tangent));
-    float dT = (formField(position + tangent * e) - formField(position - tangent * e)) * 0.5;
-    float dB = (formField(position + bitangent * e) - formField(position - bitangent * e)) * 0.5;
+    vec3 tangent = normalize(cross(macroN, abs(macroN.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 bitangent = normalize(cross(macroN, tangent));
+    float dT = (formField(macroPos + tangent * e) - formField(macroPos - tangent * e)) * 0.5;
+    float dB = (formField(macroPos + bitangent * e) - formField(macroPos - bitangent * e)) * 0.5;
     float slope = clamp(uDisplacement * lifeEnvelope * noiseGain, 0.0, 0.35);
-    vec3 perturbed = normalize(normal - (tangent * dT + bitangent * dB) * slope);
-    vec3 displacedNormal = normalize(mix(normal, perturbed, 0.5));
+    vec3 perturbed = normalize(macroN - (tangent * dT + bitangent * dB) * slope);
+    vec3 displacedNormal = normalize(mix(macroN, perturbed, 0.5));
 
     vec4 worldPosition = modelMatrix * vec4(displacedPosition, 1.0);
     vec4 viewPosition = viewMatrix * worldPosition;
@@ -232,7 +342,7 @@ export const developmentVertexShader = /* glsl */ `
   }
 `
 
-/** Scatter buds: rest + orientation in instanceMatrix; same Study 03 displace. */
+/** Scatter membranes: footprint wrapped to base surface; same Study 03 displace. */
 export const scatterAttachmentVertexShader = /* glsl */ `
   uniform float uTime;
   uniform float uAge;
@@ -243,26 +353,55 @@ export const scatterAttachmentVertexShader = /* glsl */ `
   uniform float uDisplacement;
   uniform float uNoiseAmount;
 
+  attribute float aAttach;
+
   varying vec3 vViewPosition;
   varying vec3 vNormal;
+  varying vec3 vLocalPos;
+  varying vec3 vTangent;
+  varying vec3 vSurfaceRest;
+  varying float vAttach;
 
   ${developmentDisplacementGlsl}
 
   void main() {
-    // Rest sample on the undeformed base surface.
-    vec3 rest = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-    vec3 surfaceN = normalize(rest);
-    float amount = developmentDisplaceAmount(rest);
-    vec3 deformed = rest + surfaceN * amount;
-
-    // Instance basis: local +Y is growth (aligned to surface normal in JS).
+    // Attachment rest sample on the undeformed base surface.
+    vec3 restOrigin = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    float radius = length(restOrigin);
     mat3 basis = mat3(instanceMatrix);
-    vec3 worldPosition = deformed + basis * position;
-    vec3 worldNormal = normalize(basis * normal);
+
+    // Split local offset into surface footprint (XZ) and lift (Y / normal).
+    vec3 footOffset = basis * vec3(position.x, 0.0, position.z);
+    vec3 liftOffset = basis * vec3(0.0, position.y, 0.0);
+
+    // Wrap the footprint onto the sphere so the apron follows host curvature
+    // instead of sitting on a flat tangent plane.
+    vec3 surfaceRest = normalize(restOrigin + footOffset) * radius;
+    vec3 surfaceN = normalize(surfaceRest);
+
+    // Near the root, stay glued to the surface; free edge keeps its lift.
+    float attach = clamp(aAttach, 0.0, 1.0);
+    float glue = pow(attach, 0.72);
+    vec3 restPos = surfaceRest + liftOffset * (1.0 - glue * 0.92);
+
+    // Same Study 03 displacement as the base mesh, sampled on the footprint.
+    float amount = developmentDisplaceAmount(surfaceRest);
+    vec3 worldPosition = restPos + surfaceN * amount;
+
+    // Rigid free orientation for shading, blended toward surface normal at root.
+    vec3 rigidN = normalize(basis * normal);
+    vec3 worldNormal = normalize(mix(rigidN, surfaceN, glue * 0.85));
+
+    // Local +X is the vane growth axis — used for grain and anisotropic rim.
+    vec3 worldTangent = normalize(basis * vec3(1.0, 0.0, 0.0));
 
     vec4 mvPosition = modelViewMatrix * vec4(worldPosition, 1.0);
     vViewPosition = mvPosition.xyz;
     vNormal = normalize(normalMatrix * worldNormal);
+    vTangent = normalize(normalMatrix * worldTangent);
+    vLocalPos = position;
+    vSurfaceRest = surfaceRest;
+    vAttach = attach;
     gl_Position = projectionMatrix * mvPosition;
   }
 `
@@ -274,21 +413,90 @@ export const scatterAttachmentFragmentShader = /* glsl */ `
   uniform float uBodyAlpha;
   uniform float uFresnelPower;
   uniform float uRimStrength;
+  uniform float uAge;
+  uniform float uSeed;
+  uniform float uDecayStart;
+  uniform float uDecayScale;
+  uniform float uDiscardThreshold;
 
   varying vec3 vViewPosition;
   varying vec3 vNormal;
+  varying vec3 vLocalPos;
+  varying vec3 vTangent;
+  varying vec3 vSurfaceRest;
+  varying float vAttach;
+
+  ${noiseFunctions}
 
   void main() {
     vec3 normal = normalize(vNormal);
     if (!gl_FrontFacing) normal = -normal;
     vec3 viewDirection = normalize(-vViewPosition);
+    float attach = clamp(vAttach, 0.0, 1.0);
+    float free = 1.0 - attach;
+
+    // Stable tangent frame along the feather vane (local +X).
+    vec3 tangent = normalize(vTangent);
+    tangent = normalize(tangent - normal * dot(tangent, normal));
+    vec3 bitangent = cross(normal, tangent);
+
+    // Soft low-frequency fold shading — keep large surfaces readable.
+    float n1 = sin(vLocalPos.x * 28.0 + vLocalPos.z * 14.0);
+    float n2 = sin(vLocalPos.x * 46.0 - vLocalPos.z * 22.0 + 1.1);
+    normal = normalize(
+      normal +
+      (tangent * n1 + bitangent * n2) * 0.045 * free
+    );
+
     float facing = max(dot(normal, viewDirection), 0.0);
     float fresnel = pow(1.0 - facing, uFresnelPower);
 
-    // Soft milky gradient along the view — belongs with the membrane palette.
+    // Fake thickness: root denser, free edge thinner / more transmitting.
+    float thickness = mix(0.35, 1.0, attach);
+    float transmit = pow(1.0 - facing, 1.35) * (1.0 - thickness) * mix(0.12, 0.4, free);
+    vec3 interior = mix(uColorA, uColorB, 0.62);
+    interior = mix(interior, uRimColor, 0.2);
+
     vec3 body = mix(uColorA, uColorB, facing * 0.55 + fresnel * 0.25);
-    vec3 color = body + uRimColor * fresnel * uRimStrength;
-    float alpha = mix(uBodyAlpha * 0.72, min(0.92, uBodyAlpha + 0.12), fresnel);
+    body = mix(body, interior, transmit * 0.32);
+
+    // Thin-film iridescence on grazing angles.
+    float film = fresnel * fresnel;
+    vec3 irid = mix(vec3(0.72, 0.9, 0.96), vec3(0.96, 0.78, 0.88), facing);
+    irid = mix(irid, uRimColor, 0.4);
+
+    // Soft anisotropic highlight along the lobe.
+    vec3 lightDir = normalize(vec3(0.4, 0.75, 0.5));
+    vec3 halfDir = normalize(viewDirection + lightDir);
+    float aniso = pow(max(0.0, 1.0 - abs(dot(tangent, halfDir))), 4.0);
+    aniso *= 0.25 + 0.55 * free;
+
+    vec3 color = body;
+    color += uRimColor * fresnel * uRimStrength;
+    color += irid * film * 0.28 * (0.4 + 0.6 * free);
+    color += uRimColor * aniso * 0.14;
+
+    float alpha = mix(uBodyAlpha * 0.96, min(1.0, uBodyAlpha + 0.04), fresnel);
+    alpha *= mix(1.0, 0.88, transmit);
+    // Soften the rooted apron so it dissolves into the host surface.
+    alpha *= mix(1.0, 0.78, pow(attach, 1.25));
+    if (!gl_FrontFacing) alpha *= 0.22;
+
+    // Study 06-style decay: open along the shared seed field, then exit with the body.
+    float age = clamp(uAge, 0.0, 1.0);
+    vec3 seedOffset = vec3(uSeed * 0.137, uSeed * 0.219, uSeed * 0.311);
+    float decayField = fbm(vSurfaceRest * uDecayScale * 0.85 + seedOffset * 1.7);
+    float lobe = fbm(vSurfaceRest * uDecayScale * 0.42 + seedOffset * 2.1);
+    decayField = mix(decayField, lobe, 0.55);
+    float decayProgress = smoothstep(uDecayStart, 1.0, age);
+    // Wide soft threshold so dying opens gradually, not as a hard cut.
+    float edge = 0.28;
+    float remaining = smoothstep(decayProgress - edge, decayProgress + edge, decayField);
+    remaining = mix(remaining, remaining * remaining, smoothstep(0.9, 0.98, age) * 0.4);
+    // Final exit only at the very end — dying itself is the gradual remaining field.
+    float bodyExit = 1.0 - smoothstep(0.94, 0.995, age);
+    alpha *= remaining * bodyExit;
+    if (alpha < uDiscardThreshold) discard;
 
     gl_FragColor = vec4(color, alpha);
     #include <colorspace_fragment>
@@ -363,6 +571,7 @@ export const developmentFragmentShader = /* glsl */ `
 
     vec3 finalColor = (identityColor + fresnel * rim * uRimStrength) * light;
     float alpha = mix(uBodyAlpha, uEdgeAlpha, fresnel);
+    if (!gl_FrontFacing) alpha *= 0.28;
 
     gl_FragColor = vec4(finalColor, alpha);
     #include <colorspace_fragment>
@@ -388,6 +597,7 @@ export const decayVertexShader = /* glsl */ `
   varying vec3 vWorldNormal;
 
   ${noiseFunctions}
+  ${macroMorphologyGlsl}
 
   float formField(vec3 p) {
     float moving = fbm(p * uNoiseScale + vec3(0.0, uTime * uSpeed, uSeed * 0.137));
@@ -404,26 +614,29 @@ export const decayVertexShader = /* glsl */ `
     float noiseGain = mix(0.85, 2.1, clamp(uNoiseAmount * 0.5, 0.0, 1.0));
     float warpBias = max(uLateWarp, 0.001);
 
-    float field = formField(position);
+    vec3 macroPos = macroMorphologyPosition(position);
+    vec3 macroN = macroMorphologyNormal(position, normal);
+
+    float field = formField(macroPos);
     float breath = (field * 0.92 + (pulse - 0.5) * 0.18) * uDisplacement * lifeEnvelope * noiseGain;
 
-    float decayNoise = fbm(position * uDecayScale + vec3(uSeed * 0.41, uSeed * 0.17, 2.3));
+    float decayNoise = fbm(macroPos * uDecayScale + vec3(uSeed * 0.41, uSeed * 0.17, 2.3));
     // Crystal bias uses a harder ridge so late warp feels brittle, not rubbery.
-    float brittle = fbm(position * uDecayScale * 2.8 + vec3(uSeed * 0.11, 5.2, 1.4));
+    float brittle = fbm(macroPos * uDecayScale * 2.8 + vec3(uSeed * 0.11, 5.2, 1.4));
     float warpField = mix(decayNoise, abs(brittle - 0.5) * 2.0, clamp(warpBias - 0.7, 0.0, 1.0));
     float instability = smoothstep(0.65, 1.0, uAge);
     float lateWarp = (warpField * 2.0 - 1.0) * uDecayDisplacement * instability * warpBias;
 
-    vec3 displacedPosition = position + normal * (breath + lateWarp);
+    vec3 displacedPosition = macroPos + macroN * (breath + lateWarp);
 
     float e = 0.05;
-    vec3 tangent = normalize(cross(normal, abs(normal.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
-    vec3 bitangent = normalize(cross(normal, tangent));
-    float dT = (formField(position + tangent * e) - formField(position - tangent * e)) * 0.5;
-    float dB = (formField(position + bitangent * e) - formField(position - bitangent * e)) * 0.5;
+    vec3 tangent = normalize(cross(macroN, abs(macroN.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 bitangent = normalize(cross(macroN, tangent));
+    float dT = (formField(macroPos + tangent * e) - formField(macroPos - tangent * e)) * 0.5;
+    float dB = (formField(macroPos + bitangent * e) - formField(macroPos - bitangent * e)) * 0.5;
     float slope = clamp(uDisplacement * lifeEnvelope * noiseGain + uDecayDisplacement * instability * warpBias, 0.0, 0.4);
-    vec3 perturbed = normalize(normal - (tangent * dT + bitangent * dB) * slope);
-    vec3 displacedNormal = normalize(mix(normal, perturbed, 0.5));
+    vec3 perturbed = normalize(macroN - (tangent * dT + bitangent * dB) * slope);
+    vec3 displacedNormal = normalize(mix(macroN, perturbed, 0.5));
 
     vec4 worldPosition = modelMatrix * vec4(displacedPosition, 1.0);
     vec4 viewPosition = viewMatrix * worldPosition;
@@ -517,7 +730,7 @@ export const decayFragmentShader = /* glsl */ `
     float decayProgress = smoothstep(uDecayStart, 1.0, uAge);
     float edge = max(uEdgeSoftness, 0.001);
     float remaining = smoothstep(decayProgress - edge, decayProgress + edge, decayField);
-    remaining = mix(remaining, remaining * remaining, smoothstep(0.7, 0.92, uAge) * 0.55);
+    remaining = mix(remaining, remaining * remaining, smoothstep(0.9, 0.98, uAge) * 0.4);
 
     float boundaryWidth = max(uBoundaryWidth, 0.001);
     float boundary = 1.0 - smoothstep(0.0, boundaryWidth, abs(decayField - decayProgress));
@@ -526,6 +739,7 @@ export const decayFragmentShader = /* glsl */ `
     vec3 finalColor = mix(uDecayAccent, baseColor, remaining);
     finalColor = mix(finalColor, uDecayAccent, boundary * 0.45);
     float alpha = baseAlpha * remaining;
+    if (!gl_FrontFacing) alpha *= 0.28;
 
     if (alpha < uDiscardThreshold) discard;
 
@@ -615,18 +829,19 @@ export const traceBodyFragmentShader = /* glsl */ `
     float decayProgress = smoothstep(uDecayStart, 1.0, uAge);
     float edge = max(uEdgeSoftness, 0.001);
     float remaining = smoothstep(decayProgress - edge, decayProgress + edge, decayField);
-    remaining = mix(remaining, remaining * remaining, smoothstep(0.7, 0.92, uAge) * 0.55);
+    remaining = mix(remaining, remaining * remaining, smoothstep(0.9, 0.98, uAge) * 0.4);
 
     float boundaryWidth = max(uBoundaryWidth, 0.001);
     float boundary = 1.0 - smoothstep(0.0, boundaryWidth, abs(decayField - decayProgress));
     boundary *= smoothstep(0.0, 0.08, decayProgress);
 
     // Living body exits completely near death so only the trace remains.
-    float bodyPresence = 1.0 - smoothstep(0.82, 0.98, uAge);
+    float bodyPresence = 1.0 - smoothstep(0.94, 0.995, uAge);
 
     vec3 finalColor = mix(uDecayAccent, baseColor, remaining);
     finalColor = mix(finalColor, uDecayAccent, boundary * 0.45);
     float alpha = baseAlpha * remaining * bodyPresence;
+    if (!gl_FrontFacing) alpha *= 0.28;
 
     if (alpha < uDiscardThreshold) discard;
 
@@ -641,6 +856,7 @@ export const traceVertexShader = /* glsl */ `
   uniform float uDecayScale;
   uniform float uDecayDisplacement;
   uniform float uPreservedAge;
+  uniform float uAge;
 
   varying vec3 vPosition;
   varying vec3 vViewPosition;
@@ -648,20 +864,25 @@ export const traceVertexShader = /* glsl */ `
   varying vec3 vWorldNormal;
 
   ${noiseFunctions}
+  ${macroMorphologyGlsl}
 
   void main() {
-    // Frozen geometry — no living time motion, only a static late-life imprint.
-    float decayNoise = fbm(position * uDecayScale + vec3(uSeed * 0.41, uSeed * 0.17, 2.3));
-    float instability = smoothstep(0.65, 1.0, uPreservedAge);
+    // Frozen geometry — macro locked to preserved age, plus static late-life imprint.
+    float freezeAge = max(uPreservedAge, uAge);
+    vec3 macroPos = macroMorphologyPositionAt(position, freezeAge);
+    vec3 macroN = macroMorphologyNormalAt(position, normal, freezeAge);
+
+    float decayNoise = fbm(macroPos * uDecayScale + vec3(uSeed * 0.41, uSeed * 0.17, 2.3));
+    float instability = smoothstep(0.65, 1.0, freezeAge);
     float lateWarp = (decayNoise * 2.0 - 1.0) * uDecayDisplacement * instability * 0.85;
-    vec3 displacedPosition = position + normal * lateWarp;
+    vec3 displacedPosition = macroPos + macroN * lateWarp;
 
     vec4 worldPosition = modelMatrix * vec4(displacedPosition, 1.0);
     vec4 viewPosition = viewMatrix * worldPosition;
     vPosition = position;
     vViewPosition = viewPosition.xyz;
-    vNormal = normalize(normalMatrix * normal);
-    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+    vNormal = normalize(normalMatrix * macroN);
+    vWorldNormal = normalize(mat3(modelMatrix) * macroN);
     gl_Position = projectionMatrix * viewPosition;
   }
 `
@@ -775,7 +996,7 @@ export const materialFragmentShader = /* glsl */ `
     float thinEdge = smoothstep(0.32, 0.52, age);
     float holeOpen = smoothstep(uDecayStart, 0.9, age);
     float fragment = smoothstep(0.72, 0.94, age);
-    float bodyExit = 1.0 - smoothstep(0.88, 0.98, age);
+    float bodyExit = 1.0 - smoothstep(0.94, 0.995, age);
 
     float thinning = clamp(uThinningRate, 0.0, 1.0);
     float fracture = clamp(uFractureSharpness, 0.0, 1.0);
@@ -850,6 +1071,7 @@ export const materialFragmentShader = /* glsl */ `
     vec3 finalColor = (surfaceColor + rim * rimStrength * (fresnel + irid * 0.85)) * light;
     float edgeAlpha = min(1.0, bodyAlpha + 0.12 + fresnel * 0.22 * transmission);
     float alpha = mix(bodyAlpha, edgeAlpha, fresnel);
+    if (!gl_FrontFacing) alpha *= 0.28;
 
     // Shared decay field; material bias reshapes soft dissolve vs brittle fracture.
     float decayField = fbm(vPosition * uDecayScale * 0.85 + seedOffset * 1.7);
@@ -927,6 +1149,7 @@ export const layeredVertexShader = /* glsl */ `
   varying float vFoilMask;
 
   ${noiseFunctions}
+  ${macroMorphologyGlsl}
 
   float formField(vec3 p) {
     float moving = fbm(p * uNoiseScale + vec3(0.0, uTime * uSpeed, uSeed * 0.137));
@@ -953,34 +1176,37 @@ export const layeredVertexShader = /* glsl */ `
     float noiseGain = mix(0.85, 2.1, clamp(uNoiseAmount * 0.5, 0.0, 1.0));
     float warpBias = max(uLateWarp, 0.001);
 
-    float field = formField(position);
-    float foilMask = foilField(position);
+    vec3 macroPos = macroMorphologyPosition(position);
+    vec3 macroN = macroMorphologyNormal(position, normal);
+
+    float field = formField(macroPos);
+    float foilMask = foilField(macroPos);
     vFoilMask = foilMask;
 
     float breath = (field * 0.92 + (pulse - 0.5) * 0.18) * uDisplacement * lifeEnvelope * noiseGain;
-    float foilWarp = (fbm(position * uNoiseScale * 4.2 + vec3(uSeed * 0.33, 1.1, 2.8)) * 2.0 - 1.0);
+    float foilWarp = (fbm(macroPos * uNoiseScale * 4.2 + vec3(uSeed * 0.33, 1.1, 2.8)) * 2.0 - 1.0);
     foilWarp *= uDisplacement * 0.85 * uFoil * foilMask;
 
-    float decayNoise = fbm(position * uDecayScale + vec3(uSeed * 0.41, uSeed * 0.17, 2.3));
-    float brittle = fbm(position * uDecayScale * 2.8 + vec3(uSeed * 0.11, 5.2, 1.4));
+    float decayNoise = fbm(macroPos * uDecayScale + vec3(uSeed * 0.41, uSeed * 0.17, 2.3));
+    float brittle = fbm(macroPos * uDecayScale * 2.8 + vec3(uSeed * 0.11, 5.2, 1.4));
     float warpField = mix(decayNoise, abs(brittle - 0.5) * 2.0, clamp(foilMask, 0.0, 1.0));
     float instability = smoothstep(0.55, 1.0, age);
     float lateWarp = (warpField * 2.0 - 1.0) * uDecayDisplacement * instability * warpBias;
 
-    vec3 displacedPosition = position + normal * (breath + foilWarp + lateWarp);
+    vec3 displacedPosition = macroPos + macroN * (breath + foilWarp + lateWarp);
 
     float e = 0.05;
-    vec3 tangent = normalize(cross(normal, abs(normal.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
-    vec3 bitangent = normalize(cross(normal, tangent));
-    float dT = (formField(position + tangent * e) - formField(position - tangent * e)) * 0.5;
-    float dB = (formField(position + bitangent * e) - formField(position - bitangent * e)) * 0.5;
+    vec3 tangent = normalize(cross(macroN, abs(macroN.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 bitangent = normalize(cross(macroN, tangent));
+    float dT = (formField(macroPos + tangent * e) - formField(macroPos - tangent * e)) * 0.5;
+    float dB = (formField(macroPos + bitangent * e) - formField(macroPos - bitangent * e)) * 0.5;
     float slope = clamp(
       uDisplacement * lifeEnvelope * noiseGain + uFoil * foilMask * 0.2 + uDecayDisplacement * instability,
       0.0,
       0.45
     );
-    vec3 perturbed = normalize(normal - (tangent * dT + bitangent * dB) * slope);
-    vec3 displacedNormal = normalize(mix(normal, perturbed, mix(0.5, 0.72, max(foilMask * uFoil, instability * 0.5))));
+    vec3 perturbed = normalize(macroN - (tangent * dT + bitangent * dB) * slope);
+    vec3 displacedNormal = normalize(mix(macroN, perturbed, mix(0.5, 0.72, max(foilMask * uFoil, instability * 0.5))));
 
     vec4 worldPosition = modelMatrix * vec4(displacedPosition, 1.0);
     vec4 viewPosition = viewMatrix * worldPosition;
@@ -1049,7 +1275,7 @@ export const layeredFragmentShader = /* glsl */ `
     float lateFoil = mix(1.0, 1.35, smoothstep(0.5, 0.88, age));
     float holeOpen = smoothstep(uDecayStart, 0.9, age);
     float fragment = smoothstep(0.72, 0.94, age);
-    float bodyExit = 1.0 - smoothstep(0.88, 0.98, age);
+    float bodyExit = 1.0 - smoothstep(0.94, 0.995, age);
 
     float gradient = smoothstep(uLow, uHigh, vPosition.y);
     vec3 bodyColor = mix(uColorA, uColorB, gradient);
@@ -1114,6 +1340,7 @@ export const layeredFragmentShader = /* glsl */ `
     float alpha = mix(uBodyAlpha, uEdgeAlpha, fresnel);
     alpha = mix(alpha, min(1.0, alpha + 0.18), foilMask * 0.7);
     alpha *= mix(0.7, 1.0, smoothstep(0.0, 0.1, age));
+    if (!gl_FrontFacing) alpha *= 0.28;
 
     // Gradual mortality — same shared decay field as Studies 04 / 06.
     float decayField = fbm(vPosition * uDecayScale * 0.85 + seedOffset * 1.7);

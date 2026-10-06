@@ -5,6 +5,7 @@ import AdjustBar from './AdjustBar.jsx'
 import Hud from './Hud.jsx'
 import Specimen from './Specimen.jsx'
 import { ScatterField, INITIAL_SCATTER } from './scatter/index.js'
+import { PathField, INITIAL_PATH } from './path/index.js'
 import { isShaderMode } from './modes.js'
 import {
   INITIAL_DECAY,
@@ -47,9 +48,11 @@ export default function App() {
   const [material, setMaterial] = useState(INITIAL_MATERIAL)
   const [layered, setLayered] = useState(INITIAL_LAYERED)
   const [scatter, setScatter] = useState(INITIAL_SCATTER)
+  const [path, setPath] = useState(INITIAL_PATH)
   const [preserved, setPreserved] = useState(null)
   const [animating, setAnimating] = useState(false)
   const [isDead, setIsDead] = useState(false)
+  const controlsRef = useRef(null)
 
   const study = STUDIES.find((item) => item.id === studyId) ?? STUDIES[0]
   const individualityRef = useRef(individuality)
@@ -61,8 +64,10 @@ export default function App() {
 
   const params = !isShaderMode(modeId)
     ? modeId === 'scatter'
-      ? scatter
-      : {}
+      ? { ...scatter, age: development.age }
+      : modeId === 'path'
+        ? { ...path, age: development.age }
+        : {}
     : study.id === 'individuality'
       ? individuality
       : study.id === 'development'
@@ -115,7 +120,15 @@ export default function App() {
   }
 
   function selectMode(nextId) {
-    if (nextId !== 'shader') setAnimating(false)
+    // Keep the age clock available in Scatter / Path; stop it for empty modes.
+    if (nextId !== 'shader' && nextId !== 'scatter' && nextId !== 'path') {
+      setAnimating(false)
+    }
+    if (nextId !== 'path') {
+      setPath((current) =>
+        current.drawing ? { ...current, drawing: false } : current,
+      )
+    }
     setModeId(nextId)
   }
 
@@ -150,7 +163,10 @@ export default function App() {
   }, [studyId])
 
   useEffect(() => {
-    if (!animating || !isShaderMode(modeId)) return undefined
+    if (!animating) return undefined
+    if (!isShaderMode(modeId) && modeId !== 'scatter' && modeId !== 'path') {
+      return undefined
+    }
 
     let frame = 0
     let last = performance.now()
@@ -184,7 +200,38 @@ export default function App() {
           }))
           return
         }
+        if (key === 'age') {
+          setAnimating(false)
+          if (value < 1) {
+            setIsDead(false)
+            isDeadRef.current = false
+          }
+          setSharedAge(value, { force: true })
+          return
+        }
         setScatter((current) => ({ ...current, [key]: value }))
+        return
+      }
+      if (modeId === 'path') {
+        if (key === 'clear') {
+          setPath((current) => ({ ...current, strokes: [] }))
+          return
+        }
+        if (key === 'draw') {
+          setPath((current) => ({ ...current, drawing: !current.drawing }))
+          return
+        }
+        if (key === 'age') {
+          setAnimating(false)
+          if (value < 1) {
+            setIsDead(false)
+            isDeadRef.current = false
+          }
+          setSharedAge(value, { force: true })
+          return
+        }
+        setPath((current) => ({ ...current, [key]: value }))
+        return
       }
       return
     }
@@ -239,8 +286,11 @@ export default function App() {
   }
 
   function toggleAnimate() {
-    if (!isShaderMode(modeId)) return
-    if (isLifecycleStudy(studyId) && isDeadRef.current) {
+    if (!isShaderMode(modeId) && modeId !== 'scatter' && modeId !== 'path') {
+      return
+    }
+    const surfaceLife = modeId === 'scatter' || modeId === 'path'
+    if ((isLifecycleStudy(studyId) || surfaceLife) && isDeadRef.current) {
       startNewLife()
       return
     }
@@ -249,7 +299,7 @@ export default function App() {
       return
     }
     if (ageRef.current >= 0.999) {
-      if (isLifecycleStudy(studyId)) {
+      if (isLifecycleStudy(studyId) || surfaceLife) {
         startNewLife()
         return
       }
@@ -277,15 +327,27 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  const scatterLifecycle = modeId === 'scatter'
+  const pathLifecycle = modeId === 'path'
+  const surfaceLifecycle = scatterLifecycle || pathLifecycle
   const stage =
-    isShaderMode(modeId) && isLifecycleStudy(study.id)
+    (isShaderMode(modeId) && isLifecycleStudy(study.id)) || surfaceLifecycle
       ? lifecycleStage(isDead ? 1 : age)
       : null
-  const lifecycleActive = isShaderMode(modeId) && isLifecycleStudy(study.id)
+  const lifecycleActive =
+    (isShaderMode(modeId) && isLifecycleStudy(study.id)) || surfaceLifecycle
 
-  // Non-shader modes keep a living development body as the shared base mesh.
-  const viewportStudyId = isShaderMode(modeId) ? study.id : 'development'
+  // Scatter / Path reuse Study 06 lifecycle visuals (development → decay → trace).
+  const viewportStudyId = isShaderMode(modeId)
+    ? study.id
+    : surfaceLifecycle
+      ? 'lifecycle'
+      : 'development'
   const viewportDead = lifecycleActive ? isDead : false
+
+  const showScatterGrowths =
+    scatterLifecycle && !isDead && development.age < 0.995
+  const showPathDrawing = pathLifecycle && !isDead && development.age < 0.995
 
   return (
     <main className="stage">
@@ -310,9 +372,11 @@ export default function App() {
           preserved={preserved}
           isDead={viewportDead}
         />
-        {modeId === 'scatter' ? (
+        {showScatterGrowths ? (
           <ScatterField
+            growthType={scatter.growthType}
             density={scatter.density}
+            size={scatter.size}
             seed={scatter.seed}
             generation={scatter.generation}
             surfaceSeed={individuality.seed}
@@ -322,15 +386,40 @@ export default function App() {
             pulseSpeed={development.pulseSpeed}
             displacement={development.displacement}
             noiseAmount={development.noiseAmount}
+            decayStart={decay.decayStart}
+            decayScale={decay.decayScale}
             colorA={surface.colorA}
             colorB={surface.colorB}
             rimColor={surface.rimColor}
           />
         ) : null}
+        {showPathDrawing ? (
+          <PathField
+            strokes={path.strokes}
+            drawing={path.drawing}
+            onStrokesChange={(strokes) =>
+              setPath((current) => ({ ...current, strokes }))
+            }
+            surfaceOffset={path.surfaceOffset}
+            lineRadius={path.lineRadius}
+            sampleSpacing={path.sampleSpacing}
+            surfaceSeed={individuality.seed}
+            noiseScale={individuality.noiseScale}
+            age={development.age}
+            speed={development.speed}
+            pulseSpeed={development.pulseSpeed}
+            displacement={development.displacement}
+            noiseAmount={development.noiseAmount}
+            controlsRef={controlsRef}
+          />
+        ) : null}
         <OrbitControls
+          ref={controlsRef}
           enablePan={false}
           enableDamping
           dampingFactor={0.06}
+          autoRotate={!showPathDrawing || !path.drawing}
+          autoRotateSpeed={0.35}
           minDistance={4.2}
           maxDistance={8.5}
           minPolarAngle={0.35}

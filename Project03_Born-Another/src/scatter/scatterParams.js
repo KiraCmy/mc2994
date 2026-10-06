@@ -1,6 +1,18 @@
-/** Scatter mode defaults — keep lean; expand later (orientation, noise, assets). */
+/** Scatter growth morphologies — switch assets without reshuffling samples. */
+export const SCATTER_GROWTH_TYPES = [
+  { id: 'membrane', label: 'Membrane' },
+  { id: 'plume', label: 'Plume' },
+  { id: 'pod', label: 'Pod' },
+]
+
+/** Scatter mode defaults — localized growth clusters with room to pack denser. */
 export const INITIAL_SCATTER = {
-  density: 0.45,
+  /** Active scatter asset family. */
+  growthType: 'membrane',
+  /** Mid-sparse default; Density slider can cover the surface more fully. */
+  density: 0.35,
+  /** Base cluster scale; per-instance jitter multiplies on top. */
+  size: 1,
   /** Bumped by Regenerate to reshuffle surface samples. */
   generation: 0,
   seed: 884731,
@@ -8,8 +20,9 @@ export const INITIAL_SCATTER = {
 
 export const SCATTER_INSTANCE_RADIUS = 0.028
 
-/** Map density 0–1 → instance count. Tunable without touching sampling code. */
+/** Map density 0–1 → cluster count. Tunable without touching sampling code. */
 export function scatterCountFromDensity(density) {
   const t = Math.min(1, Math.max(0, density))
-  return Math.round(40 + t * 460)
+  // Default ≈127; max ≈360 so the surface can be packed more densely.
+  return Math.round(20 + t * 340)
 }

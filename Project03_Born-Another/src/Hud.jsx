@@ -15,6 +15,8 @@ export default function Hud({
 }) {
   const animateLabel = isDead ? 'New Life' : animating ? 'Pause' : 'Animate'
   const showShaderChrome = isShaderMode(modeId)
+  const showAnimate =
+    showShaderChrome || modeId === 'scatter' || modeId === 'path'
 
   return (
     <div className="hud">
@@ -50,7 +52,7 @@ export default function Hud({
             </>
           ) : null}
         </p>
-        {showShaderChrome ? (
+        {showAnimate ? (
           <button
             type="button"
             className={`hud-animate${animating ? ' is-active' : ''}`}

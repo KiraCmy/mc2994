@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MATERIAL_FAMILIES } from './surfaceParams.js'
+import { SCATTER_GROWTH_TYPES } from './scatter/scatterParams.js'
 
 const SURFACE_SLIDERS = [
   { key: 'fresnelPower', label: 'Fresnel', min: 1, max: 6, step: 0.05 },
@@ -32,7 +33,7 @@ const DEVELOPMENT_SLIDERS = [
 
 const DECAY_SLIDERS = [
   { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
-  { key: 'decayStart', label: 'Decay Start', min: 0.2, max: 0.9, step: 0.01 },
+  { key: 'decayStart', label: 'Decay Start', min: 0.2, max: 0.95, step: 0.01 },
   { key: 'edgeSoftness', label: 'Edge Softness', min: 0.02, max: 0.35, step: 0.01 },
   { key: 'boundaryWidth', label: 'Boundary', min: 0.02, max: 0.2, step: 0.005 },
   { key: 'discardThreshold', label: 'Discard', min: 0.01, max: 0.25, step: 0.01 },
@@ -84,7 +85,13 @@ const LAYERED_SLIDERS = [
 ]
 
 const SCATTER_SLIDERS = [
+  { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
   { key: 'density', label: 'Density', min: 0, max: 1, step: 0.01 },
+  { key: 'size', label: 'Size', min: 0.35, max: 2.2, step: 0.01 },
+]
+
+const PATH_SLIDERS = [
+  { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
 ]
 
 function formatValue(slider, value) {
@@ -129,7 +136,9 @@ function controlsForMode(modeId, studyId) {
       heading: 'Scatter Parameters',
       sliders: SCATTER_SLIDERS,
       colors: [],
-      families: null,
+      families: SCATTER_GROWTH_TYPES,
+      familyKey: 'growthType',
+      familyLabel: 'Growth type',
       modes: null,
       actions: [{ key: 'regenerate', label: 'Regenerate' }],
     }
@@ -137,11 +146,14 @@ function controlsForMode(modeId, studyId) {
   if (modeId === 'path') {
     return {
       heading: 'Path Parameters',
-      sliders: [],
+      sliders: PATH_SLIDERS,
       colors: [],
       families: null,
       modes: null,
-      actions: [],
+      actions: [
+        { key: 'draw', label: 'Draw', toggle: true, activeKey: 'drawing' },
+        { key: 'clear', label: 'Clear Path' },
+      ],
     }
   }
   if (modeId === 'particle') {
@@ -167,6 +179,8 @@ export default function AdjustBar({ modeId = 'shader', study, params, onChange }
   const controls = controlsForMode(modeId, study.id)
   const heading = controls.heading ?? study.heading
   const { sliders, colors, families, modes, actions } = controls
+  const familyKey = controls.familyKey ?? 'family'
+  const familyLabel = controls.familyLabel ?? 'Material family'
 
   return (
     <form
@@ -198,9 +212,9 @@ export default function AdjustBar({ modeId = 'shader', study, params, onChange }
           )}
 
           {families && (
-            <div className="adjust-families" role="tablist" aria-label="Material family">
+            <div className="adjust-families" role="tablist" aria-label={familyLabel}>
               {families.map((family) => {
-                const active = params.family === family.id
+                const active = params[familyKey] === family.id
                 return (
                   <button
                     key={family.id}
@@ -208,7 +222,7 @@ export default function AdjustBar({ modeId = 'shader', study, params, onChange }
                     role="tab"
                     aria-selected={active}
                     className={`adjust-family${active ? ' is-active' : ''}`}
-                    onClick={() => onChange('family', family.id)}
+                    onClick={() => onChange(familyKey, family.id)}
                   >
                     {family.label}
                   </button>
@@ -242,16 +256,29 @@ export default function AdjustBar({ modeId = 'shader', study, params, onChange }
 
           {actions.length > 0 && (
             <div className="adjust-actions">
-              {actions.map((action) => (
-                <button
-                  key={action.key}
-                  type="button"
-                  className="adjust-action"
-                  onClick={() => onChange(action.key, true)}
-                >
-                  {action.label}
-                </button>
-              ))}
+              {actions.map((action) => {
+                const active =
+                  action.toggle && action.activeKey
+                    ? Boolean(params[action.activeKey])
+                    : false
+                const label =
+                  action.toggle && action.key === 'draw'
+                    ? active
+                      ? 'Draw · On'
+                      : 'Draw · Off'
+                    : action.label
+                return (
+                  <button
+                    key={action.key}
+                    type="button"
+                    className={`adjust-action${active ? ' is-active' : ''}`}
+                    aria-pressed={action.toggle ? active : undefined}
+                    onClick={() => onChange(action.key, true)}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
             </div>
           )}
 

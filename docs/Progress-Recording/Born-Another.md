@@ -137,3 +137,120 @@ Scatter at mid-life (age 0.50, density ~0.45): small white spheres sit on the br
 
 ![[born-another-scatter-surface-instances.jpg]]
 
+## Step 2 — Membrane growths
+
+Step 1 proved attachment. Step 2 replaces the placeholder spheres with assets that read as localized surface differentiation of the same organism—not decorations stuck on top.
+
+### From buds and flowers to membranes
+
+Early asset passes tried droplet buds (stalk + bulb) and abstract multi-petal flowers. Both still read as separate objects: viral spikes, botanical silhouettes, or cards sitting on the sphere. The keep direction is a single thin irregular membrane/fold—somewhere between tissue, mineral growth, and synthetic artifact—with no stem, bulb, leaf, or recognizable flower.
+
+The procedural `MembraneAsset` builds a feather-like vane in local space (origin at attachment, `+Y` along the surface normal): a flush root apron, longer reach along the surface, soft open tip, mid-fold crease, and slight curl. Default density is sparse (~0.08). **Density** and **Regenerate** stay; a **Size** slider scales all instances uniformly without reshuffling sample positions.
+
+### Natural transition into the host
+
+Rigid tangent offsets made growths look placed. Two fixes:
+
+1. **Geometry** — a wide, slightly inset root apron that stays near the surface longer before lifting.
+2. **Scatter shader** — each vertex footprint wraps onto the unit sphere; lift blends by `aAttach` (1 at root → 0 at free edge). Displacement still uses the shared Study 03 field sampled on that footprint, so aprons follow host curvature and breath.
+
+Root alpha softens into the base membrane so the join dissolves rather than drawing a hard seam.
+
+### Resolution and shading
+
+Low segment counts made the vane look faceted. Tessellation rose (now ~72×36), with multi-octave micro-ripples and vane grain on the free membrane, and normals finite-differenced from the same procedural field so detail shades smoothly. The base BORN ANOTHER mesh stays intentionally faceted; only scatter membranes were refined.
+
+The scatter fragment path is still lean (palette + Fresnel + root fade). Further “Cynora-like” resolution would add per-pixel normal perturbation, fake thickness/transmission, and light iridescence in the scatter shaders—not another subdivision pass alone.
+
+Surface and individuality defaults were retuned for the pale field: lower pink `#e7b6c2`, upper cyan `#a4e2e6`, rim `#a8feff`, accent `#ff0000`.
+
+Scatter sampling, normal alignment, deformation follow, and the random distribution shell are unchanged. Noise-based clustering and lifecycle animation for growths are still later work.
+
+Scatter near late life (age 0.93, density 1.00, size 2.20): dense feather-like membranes cover the host; Density, Size, and Regenerate sit in the floating overlay.
+
+![[born-another-scatter-membrane-growths.jpg]]
+
+## Step 3 — Growth clusters and shared life
+
+Step 2’s single membranes still read as many flat translucent pieces. Step 3 replaces each sample with a **GrowthCluster** and connects Scatter to the same Birth → Death clock as Study 06.
+
+### GrowthCluster morphology
+
+Each scatter point is one cluster with a shared root on the surface, built from **2–3 broad membrane lobes**. Lobes rise along the surface normal and unfold in slightly different directions. After a spiky first pass, the form was simplified: large continuous sheets, rounded asymmetric silhouettes, gentle curl only—no thin spikes, sharp tips, or heavy edge noise. Tessellation stays dense enough for smooth shading. Seven deterministic cluster variants (lobe count, height, width, curl, lean) plus a spin around the normal keep instances in one morphological family without looking identical.
+
+**Size** scales the whole cluster. A stable per-instance jitter (~0.55×–1.5×) adds random scale; Regenerate reshuffles positions and sizes together. Density was opened so the slider can pack the surface more fully (default mid-sparse, max on the order of a few hundred clusters).
+
+### Study 06 lifecycle in Scatter
+
+Scatter no longer freezes on a mid-life development body. The viewport uses the Study 06 lifecycle path: individuality → development → decay openings → body exit → trace residue. **Animate / Pause**, **Space**, the Birth–Death marker, stage name, and **New Life** after death match the shader lifecycle studies. An **Age** slider in Scatter Parameters scrubs the shared clock and pauses playback.
+
+Growth clusters dissolve on the same seed-locked decay field as the host, fade with late-life exit, and unmount near death so they do not float over the trace.
+
+### Scatter shading vs base color
+
+The base body still owns cyan/pink/red: vertical `uColorA`/`uColorB` from object-space Y, red accent blotches from object-space `fbm` (`uAccentColor`), rim from Fresnel. Scatter instances use a **separate** attachment material that reuses the surface palette (lower / upper / rim) but mixes by facing and transmission—no identity noise blotches. Soft fold shading and Study 06-style remaining/exit live in that scatter fragment path only.
+
+### Camera
+
+Orbit controls keep mouse orbit and add a slow `autoRotate` so the organism turns on its own without blocking drag.
+
+Sampling, footprint wrapping, Density / Size / Regenerate, and the faceted base mesh stay in place. Noise-based clustering of samples is still later work.
+
+Scatter in early development (age 0.23, density 0.42, size 2.08): growth clusters sit on the living host while Age, Density, and Size share the floating overlay.
+
+![[born-another-scatter-growth-clusters.jpg]]
+
+## Step 4 — Growth types: Membrane, Plume, Pod
+
+Scatter Parameters gains a **Growth Type** control: **Membrane | Plume | Pod**. Switching type replaces the instanced asset only—sample positions stay put—so Density, Size, and Regenerate keep working across all three. Attachment still uses the shared Study 03 displace field and footprint wrap; the translucent scatter material (surface lower / upper / rim) is unchanged. Material readability was tightened earlier: higher body opacity, less transmission, depth write on the host, and denser scatter alpha so growths separate from the milky core.
+
+### Membrane
+
+Membrane is the Step 3 GrowthCluster kept as the default growth type: each sample is one cluster of **2–3 broad membrane lobes** with a shared root, soft unfolding, and mild size/facing jitter. It reads as crumpled secondary tissue close to the host—not stalks, flowers, or feather vanes.
+
+Scatter in early development (age 0.14, density 1.00, size 2.20), Growth Type **Membrane**: dense overlapping translucent lobes pack the silhouette while Membrane / Plume / Pod sit above the Age–Density–Size row.
+
+![[born-another-scatter-type-membrane.jpg]]
+
+### Plume
+
+Plume is a separate elongated asset—one complete form per sample. A central spine starts along the surface normal and sweeps into the spin-tangent flow; two asymmetric side vanes broaden mid-length and taper to a soft tip. Edge ruffle and light vein detail keep it feather-like without becoming a recognizable bird feather or a flat membrane sheet. Instance yaw jitter stays mild so the field keeps a coherent rotational comb.
+
+Scatter in early development (age 0.15, density 1.00, size 1.22), Growth Type **Plume**: directional translucent fins extend from the host and trail with the auto-rotate flow.
+
+![[born-another-scatter-type-plume.jpg]]
+
+### Pod
+
+Pod is a localized surface swelling, not an object on a stem. Each sample is one low asymmetric dome: broad rim on the host, peak height kept below the footprint width, soft elliptical deformation, no neck or separate bulb. Pods are larger than membrane/plume pieces, so at the same Density slider value their count is scaled down (~20%) to keep the silhouette readable. Size jitter stays tight so extremes do not break the blister family.
+
+Scatter in early development (age 0.09, density 1.00, size 1.87), Growth Type **Pod**: soft translucent domes inflate from the membrane surface and merge into the body’s outline.
+
+![[born-another-scatter-type-pod.jpg]]
+
+
+# Born Another — Spline
+
+Top-level **Path** sits beside Shader, Scatter, and Particle. It reuses the same viewport, camera, pale field, Birth–Death clock, and living body as Scatter—Study 06 lifecycle visuals with Age, Animate / Space, and New Life—without scatter growths.
+
+## Step 1 — Surface path drawing
+
+The first Path pass lets the user draw strokes on the deforming organism. Path data is modular: each stroke stores ordered **rest-space** samples on the unit sphere so later stages can drive growth or deformation from the same points.
+
+### Draw vs orbit
+
+Drawing is not always on. Path Parameters include a **Draw** toggle (**Draw · Off** / **Draw · On**, underlined when active) plus **Clear Path** and **Age**. With Draw off, the pointer only orbits and zooms. With Draw on, the canvas uses a crosshair, orbit is disabled for the session, and click-drag samples the surface. Leaving Path or turning Draw off cancels an unfinished stroke and restores orbit.
+
+### Raycast → rest samples → deformed spline
+
+Pointer hits use a **unit-sphere raycast** (same rest frame as Scatter attachment), not screen-space ink. Samples are spaced in rest space, thinned on stroke end, then smoothed with a Catmull-Rom curve. Each frame the rest samples run through the shared AGE/time displace field (macro morphology + Study 03 micro / breath), matching the body shader, and the ribbon is lifted slightly along the deformed normal so it stays readable above the membrane.
+
+### Visibility
+
+Thin WebGL lines were hard to see. Strokes now render as short **tube ribbons** (white, translucent, depthWrite off) so the path reads clearly against the milky body while the organism breathes and ages.
+
+No growth, branching, or path-driven body deformation yet—only capture, follow, and display of surface splines.
+
+Path in early development (age 0.05), Draw · On: a thick white surface spline follows the breathing membrane while Age, Draw, and Clear Path sit in the floating overlay.
+
+![[born-another-spline-path-draw.jpg]]
