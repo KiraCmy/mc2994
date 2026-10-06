@@ -6,6 +6,7 @@ import Hud from './Hud.jsx'
 import Specimen from './Specimen.jsx'
 import { ScatterField, INITIAL_SCATTER } from './scatter/index.js'
 import { PathField, INITIAL_PATH } from './path/index.js'
+import { ParticleField, INITIAL_PARTICLE } from './particle/index.js'
 import { isShaderMode } from './modes.js'
 import {
   INITIAL_DECAY,
@@ -49,6 +50,7 @@ export default function App() {
   const [layered, setLayered] = useState(INITIAL_LAYERED)
   const [scatter, setScatter] = useState(INITIAL_SCATTER)
   const [path, setPath] = useState(INITIAL_PATH)
+  const [particle, setParticle] = useState(INITIAL_PARTICLE)
   const [preserved, setPreserved] = useState(null)
   const [animating, setAnimating] = useState(false)
   const [isDead, setIsDead] = useState(false)
@@ -67,7 +69,9 @@ export default function App() {
       ? { ...scatter, age: development.age }
       : modeId === 'path'
         ? { ...path, age: development.age }
-        : {}
+        : modeId === 'particle'
+          ? { ...particle, age: development.age }
+          : {}
     : study.id === 'individuality'
       ? individuality
       : study.id === 'development'
@@ -120,8 +124,13 @@ export default function App() {
   }
 
   function selectMode(nextId) {
-    // Keep the age clock available in Scatter / Path; stop it for empty modes.
-    if (nextId !== 'shader' && nextId !== 'scatter' && nextId !== 'path') {
+    // Keep the age clock available in Scatter / Path / Particle; stop it elsewhere.
+    if (
+      nextId !== 'shader' &&
+      nextId !== 'scatter' &&
+      nextId !== 'path' &&
+      nextId !== 'particle'
+    ) {
       setAnimating(false)
     }
     if (nextId !== 'path') {
@@ -164,7 +173,12 @@ export default function App() {
 
   useEffect(() => {
     if (!animating) return undefined
-    if (!isShaderMode(modeId) && modeId !== 'scatter' && modeId !== 'path') {
+    if (
+      !isShaderMode(modeId) &&
+      modeId !== 'scatter' &&
+      modeId !== 'path' &&
+      modeId !== 'particle'
+    ) {
       return undefined
     }
 
@@ -233,6 +247,26 @@ export default function App() {
         setPath((current) => ({ ...current, [key]: value }))
         return
       }
+      if (modeId === 'particle') {
+        if (key === 'age') {
+          setAnimating(false)
+          if (value < 1) {
+            setIsDead(false)
+            isDeadRef.current = false
+          }
+          setSharedAge(value, { force: true })
+          return
+        }
+        if (key === 'count') {
+          setParticle((current) => ({
+            ...current,
+            count: Math.round(value),
+          }))
+          return
+        }
+        setParticle((current) => ({ ...current, [key]: value }))
+        return
+      }
       return
     }
 
@@ -286,10 +320,16 @@ export default function App() {
   }
 
   function toggleAnimate() {
-    if (!isShaderMode(modeId) && modeId !== 'scatter' && modeId !== 'path') {
+    if (
+      !isShaderMode(modeId) &&
+      modeId !== 'scatter' &&
+      modeId !== 'path' &&
+      modeId !== 'particle'
+    ) {
       return
     }
-    const surfaceLife = modeId === 'scatter' || modeId === 'path'
+    const surfaceLife =
+      modeId === 'scatter' || modeId === 'path' || modeId === 'particle'
     if ((isLifecycleStudy(studyId) || surfaceLife) && isDeadRef.current) {
       startNewLife()
       return
@@ -329,7 +369,9 @@ export default function App() {
 
   const scatterLifecycle = modeId === 'scatter'
   const pathLifecycle = modeId === 'path'
-  const surfaceLifecycle = scatterLifecycle || pathLifecycle
+  const particleLifecycle = modeId === 'particle'
+  const surfaceLifecycle =
+    scatterLifecycle || pathLifecycle || particleLifecycle
   const stage =
     (isShaderMode(modeId) && isLifecycleStudy(study.id)) || surfaceLifecycle
       ? lifecycleStage(isDead ? 1 : age)
@@ -337,17 +379,15 @@ export default function App() {
   const lifecycleActive =
     (isShaderMode(modeId) && isLifecycleStudy(study.id)) || surfaceLifecycle
 
-  // Scatter / Path reuse Study 06 lifecycle visuals (development → decay → trace).
-  const viewportStudyId = isShaderMode(modeId)
-    ? study.id
-    : surfaceLifecycle
-      ? 'lifecycle'
-      : 'development'
+  // Scatter / Path / Particle reuse Study 06 lifecycle visuals.
+  const viewportStudyId = isShaderMode(modeId) ? study.id : 'lifecycle'
   const viewportDead = lifecycleActive ? isDead : false
 
   const showScatterGrowths =
     scatterLifecycle && !isDead && development.age < 0.995
   const showPathDrawing = pathLifecycle && !isDead && development.age < 0.995
+  const showParticles =
+    particleLifecycle && !isDead && development.age < 0.995
 
   return (
     <main className="stage">
@@ -371,6 +411,12 @@ export default function App() {
           layered={layered}
           preserved={preserved}
           isDead={viewportDead}
+          bodyDepthWrite={!showScatterGrowths && !showPathDrawing}
+          pathStrokes={showPathDrawing ? path.strokes : null}
+          pathGrowthStrength={showPathDrawing ? path.growthStrength : 0}
+          pathGrowthRadius={showPathDrawing ? path.growthRadius : 0.32}
+          pathGrowthDuration={path.growthDuration}
+          pathExtensionDuration={path.extensionDuration}
         />
         {showScatterGrowths ? (
           <ScatterField
@@ -403,6 +449,12 @@ export default function App() {
             surfaceOffset={path.surfaceOffset}
             lineRadius={path.lineRadius}
             sampleSpacing={path.sampleSpacing}
+            growthStrength={path.growthStrength}
+            growthRadius={path.growthRadius}
+            growthDuration={path.growthDuration}
+            extensionLength={path.extensionLength}
+            extensionDuration={path.extensionDuration}
+            extensionWander={path.extensionWander}
             surfaceSeed={individuality.seed}
             noiseScale={individuality.noiseScale}
             age={development.age}
@@ -411,6 +463,22 @@ export default function App() {
             displacement={development.displacement}
             noiseAmount={development.noiseAmount}
             controlsRef={controlsRef}
+          />
+        ) : null}
+        {showParticles ? (
+          <ParticleField
+            count={particle.count}
+            seed={particle.seed}
+            surfaceSeed={individuality.seed}
+            noiseScale={individuality.noiseScale}
+            age={development.age}
+            speed={development.speed}
+            pulseSpeed={development.pulseSpeed}
+            displacement={development.displacement}
+            noiseAmount={development.noiseAmount}
+            decayScale={decay.decayScale}
+            decayDisplacement={decay.decayDisplacement}
+            lateWarp={material.lateWarp}
           />
         ) : null}
         <OrbitControls

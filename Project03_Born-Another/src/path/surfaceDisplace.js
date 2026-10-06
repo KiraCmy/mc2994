@@ -1,8 +1,10 @@
 /**
- * JS port of Study 03 micro displace + AGE macro morphology.
+ * JS port of Study 03 micro displace + AGE macro morphology + path growth.
  * Used so path samples stay on the same deformed surface as the body shader.
  * Rest positions are on the unit sphere (object space).
  */
+
+import { applyPathGrowth } from './pathGrowth.js'
 
 function fract(x) {
   return x - Math.floor(x)
@@ -82,9 +84,52 @@ function macroSeedDir(seed, channel) {
   ])
 }
 
-function macroSoftLobe(n, axis, power) {
-  const d = n[0] * axis[0] + n[1] * axis[1] + n[2] * axis[2]
-  return Math.pow(Math.max(0, d), power)
+function macroRegion(n, center, width) {
+  const d =
+    1 -
+    Math.max(
+      0,
+      n[0] * center[0] + n[1] * center[1] + n[2] * center[2],
+    )
+  const w = Math.max(width, 0.08)
+  return Math.exp(-(d * d) / (w * w))
+}
+
+/** Seed-locked anisotropic body proportions (volume soft-normalized). */
+function macroBodyScale(seed) {
+  const ux = Math.sin(seed * 0.0113) * 0.5 + 0.5
+  const uy = Math.cos(seed * 0.0147 + 1.7) * 0.5 + 0.5
+  const uz = Math.sin(seed * 0.0091 + 2.3) * 0.5 + 0.5
+  let sx = 0.9 + (1.12 - 0.9) * ux
+  let sy = 0.88 + (1.14 - 0.88) * uy
+  let sz = 0.9 + (1.12 - 0.9) * uz
+  const vol = Math.max(sx * sy * sz, 1e-4)
+  const norm = Math.pow(1 / vol, 1 / 3)
+  sx *= norm
+  sy *= norm
+  sz *= norm
+  const overall =
+    0.97 + (1.04 - 0.97) * (Math.sin(seed * 0.0077 + 0.9) * 0.5 + 0.5)
+  return [sx * overall, sy * overall, sz * overall]
+}
+
+/** Seed-locked region radius (falloff width) for channel 0–5. */
+function macroRegionWidth(seed, channel) {
+  const t =
+    Math.sin(seed * (0.041 + channel * 0.013) + channel * 2.17) * 0.5 + 0.5
+  const lo = 0.22 + (0.38 - 0.22) * (channel * 0.12)
+  const hi = 0.55 + (0.95 - 0.55) * (channel * 0.14)
+  return lo + (hi - lo) * t
+}
+
+/** Seed-locked signed amplitude for region channel (before dominant boost). */
+function macroRegionAmp(seed, channel) {
+  const phase = seed * (0.017 + channel * 0.0073) + channel * 1.91
+  const unit = Math.sin(phase) * 0.5 + 0.5
+  const signBit =
+    fract(Math.sin(phase * 1.7 + 0.3) * 43758.5453) >= 0.5 ? 1 : 0
+  const mag = 0.28 + (0.62 - 0.28) * unit
+  return signBit ? mag : -mag
 }
 
 function macroMorphologyOffset(p, age, seed) {
@@ -92,69 +137,155 @@ function macroMorphologyOffset(p, age, seed) {
   const rad = Math.hypot(p[0], p[1], p[2]) || 1e-4
   const n = [p[0] / rad, p[1] / rad, p[2] / rad]
 
-  const develop = smoothstep(0.02, 0.3, a) * (1 - smoothstep(0.7, 0.95, a))
-  const mature = smoothstep(0.2, 0.48, a) * (1 - smoothstep(0.65, 0.9, a))
+  const develop = smoothstep(0.02, 0.28, a) * (1 - smoothstep(0.72, 0.96, a))
+  const mature = smoothstep(0.12, 0.4, a) * (1 - smoothstep(0.68, 0.92, a))
   const collapse = smoothstep(0.52, 0.78, a)
+  const present = Math.max(develop, mature)
 
-  const axisA = macroSeedDir(seed, 0)
-  const axisB = macroSeedDir(seed, 1)
-  const axisC = normalize3([
-    axisA[1] * axisB[2] - axisA[2] * axisB[1] + axisB[0] * 0.42 + axisA[0] * 0.18,
-    axisA[2] * axisB[0] - axisA[0] * axisB[2] + axisB[1] * 0.42 + axisA[1] * 0.18,
-    axisA[0] * axisB[1] - axisA[1] * axisB[0] + axisB[2] * 0.42 + axisA[2] * 0.18,
+  // Seed-locked active region count in {3,4,5,6}.
+  const countUnit = fract(Math.sin(seed * 0.0129 + 4.1) * 43758.5453)
+  const regionCount = Math.floor(3 + countUnit * 3.999)
+
+  const c0 = macroSeedDir(seed, 0)
+  const c1 = macroSeedDir(seed, 1)
+  const c2 = normalize3([
+    c0[1] * c1[2] - c0[2] * c1[1] + c1[0] * 0.38 + c0[0] * 0.22,
+    c0[2] * c1[0] - c0[0] * c1[2] + c1[1] * 0.38 + c0[1] * 0.22,
+    c0[0] * c1[1] - c0[1] * c1[0] + c1[2] * 0.38 + c0[2] * 0.22,
   ])
+  const c3 = normalize3([
+    c0[0] * -0.55 + c1[0] * 0.35 + c2[0] * 0.75,
+    c0[1] * -0.55 + c1[1] * 0.35 + c2[1] * 0.75,
+    c0[2] * -0.55 + c1[2] * 0.35 + c2[2] * 0.75,
+  ])
+  const d4 = macroSeedDir(seed, 4)
+  const c4 = normalize3([
+    d4[0] * 0.65 + c2[0] * -0.45 + c3[0] * 0.4,
+    d4[1] * 0.65 + c2[1] * -0.45 + c3[1] * 0.4,
+    d4[2] * 0.65 + c2[2] * -0.45 + c3[2] * 0.4,
+  ])
+  const d5 = macroSeedDir(seed, 5)
+  const c5 = normalize3([
+    d5[0] * 0.7 + c0[0] * 0.35 + c3[0] * -0.5,
+    d5[1] * 0.7 + c0[1] * 0.35 + c3[1] * -0.5,
+    d5[2] * 0.7 + c0[2] * 0.35 + c3[2] * -0.5,
+  ])
+  const centers = [c0, c1, c2, c3, c4, c5]
 
-  const slow = valueNoise(n[0] * 1.05 + seed * 0.061, n[1] * 1.05 + 0.27, n[2] * 1.05 + 1.4)
-  const slow2 = valueNoise(n[0] * 0.72 + 1.9, n[1] * 0.72 + seed * 0.044, n[2] * 0.72 + 0.55)
+  // 1–2 dominant regions get a stronger push/pull.
+  const dualDom =
+    fract(Math.sin(seed * 0.0211 + 2.6) * 43758.5453) >= 0.42 ? 1 : 0
+  let domA = Math.floor(
+    fract(Math.sin(seed * 0.0337 + 0.8) * 43758.5453) * regionCount,
+  )
+  let domB = Math.floor(
+    fract(Math.sin(seed * 0.0283 + 5.2) * 43758.5453) * regionCount,
+  )
+  if (Math.abs(domA - domB) < 0.5) {
+    domB = (domA + 1 + Math.floor(regionCount * 0.5)) % regionCount
+  }
 
-  const along = n[0] * axisA[0] + n[1] * axisA[1] + n[2] * axisA[2]
+  const boost = 1.72
+  const amps = []
+  for (let i = 0; i < 6; i += 1) {
+    let amp = macroRegionAmp(seed, i)
+    if (i === domA) amp *= 1 + boost
+    if (dualDom && i === domB) amp *= 1 + boost
+    if (i >= regionCount) amp = 0
+    amps.push(amp)
+  }
+
+  let coverage = 0
+  let radial = 0
+  for (let i = 0; i < 6; i += 1) {
+    if (i >= regionCount) continue
+    const r = macroRegion(n, centers[i], macroRegionWidth(seed, i))
+    coverage += r
+    radial += r * amps[i]
+  }
+
+  const slow = valueNoise(
+    n[0] * 0.35 + seed * 0.061,
+    n[1] * 0.35 + 0.27,
+    n[2] * 0.35 + 1.4,
+  )
+  const slow2 = valueNoise(
+    n[0] * 0.22 + 1.9,
+    n[1] * 0.22 + seed * 0.044,
+    n[2] * 0.22 + 0.55,
+  )
+  let mass = (slow - 0.5) * 0.16 + (slow2 - 0.5) * 0.1
+  const calmGate = smoothstep(0.08, 0.45, coverage)
+  mass *= 0.25 + (1 - 0.25) * calmGate
+
+  const along = n[0] * c0[0] + n[1] * c0[1] + n[2] * c0[2]
   const developOffset = [
-    (axisA[0] * (along * 0.11 + (slow - 0.5) * 0.04) + n[0] * (slow2 - 0.5) * 0.035) * develop,
-    (axisA[1] * (along * 0.11 + (slow - 0.5) * 0.04) + n[1] * (slow2 - 0.5) * 0.035) * develop,
-    (axisA[2] * (along * 0.11 + (slow - 0.5) * 0.04) + n[2] * (slow2 - 0.5) * 0.035) * develop,
+    (c0[0] * (along * 0.32 + (slow - 0.5) * 0.08) +
+      n[0] * (radial * 0.38 + mass * 0.35) +
+      c1[0] * (slow2 - 0.5) * 0.06) *
+      develop,
+    (c0[1] * (along * 0.32 + (slow - 0.5) * 0.08) +
+      n[1] * (radial * 0.38 + mass * 0.35) +
+      c1[1] * (slow2 - 0.5) * 0.06) *
+      develop,
+    (c0[2] * (along * 0.32 + (slow - 0.5) * 0.08) +
+      n[2] * (radial * 0.38 + mass * 0.35) +
+      c1[2] * (slow2 - 0.5) * 0.06) *
+      develop,
   ]
-
-  const w1 = 0.5 + 0.2 * Math.sin(seed * 0.019)
-  const w2 = 0.4 + 0.2 * Math.cos(seed * 0.023)
-  const w3 = 0.32 + 0.18 * Math.sin(seed * 0.029 + 1.2)
-  const lobe =
-    macroSoftLobe(n, axisA, 2.15) * w1 +
-    macroSoftLobe(n, axisB, 2.35) * w2 +
-    macroSoftLobe(n, axisC, 2.55) * w3
 
   const matureOffset = [
-    (n[0] * lobe * 0.24 +
-      (axisB[0] * (slow - 0.42) * 0.05 + axisC[0] * (slow2 - 0.5) * 0.04)) *
+    (n[0] * (radial * 0.88 + mass * 0.75) +
+      (c1[0] * (slow - 0.42) * 0.1 + c2[0] * (slow2 - 0.5) * 0.08) +
+      c0[0] * along * 0.08) *
       mature,
-    (n[1] * lobe * 0.24 +
-      (axisB[1] * (slow - 0.42) * 0.05 + axisC[1] * (slow2 - 0.5) * 0.04)) *
+    (n[1] * (radial * 0.88 + mass * 0.75) +
+      (c1[1] * (slow - 0.42) * 0.1 + c2[1] * (slow2 - 0.5) * 0.08) +
+      c0[1] * along * 0.08) *
       mature,
-    (n[2] * lobe * 0.24 +
-      (axisB[2] * (slow - 0.42) * 0.05 + axisC[2] * (slow2 - 0.5) * 0.04)) *
+    (n[2] * (radial * 0.88 + mass * 0.75) +
+      (c1[2] * (slow - 0.42) * 0.1 + c2[2] * (slow2 - 0.5) * 0.08) +
+      c0[2] * along * 0.08) *
       mature,
   ]
 
-  const hollow = 1 - lobe * 0.55 + (slow - 0.5) * 0.45
-  const crush = Math.pow(Math.min(1.4, Math.max(0, hollow)), 1.35)
+  const shellOffset = [
+    n[0] * mass * 0.45 * present,
+    n[1] * mass * 0.45 * present,
+    n[2] * mass * 0.45 * present,
+  ]
+
+  const hollow =
+    1 -
+    Math.max(radial, 0) * 0.45 +
+    Math.max(-radial, 0) * 0.55 +
+    (slow - 0.5) * 0.4
+  const crush = Math.pow(Math.min(1.5, Math.max(0, hollow)), 1.2)
   const collapseOffset = [
-    (-n[0] * crush * 0.2 -
-      axisA[0] * (slow2 - 0.5) * 0.07 +
-      axisB[0] * (slow - 0.5) * 0.045) *
+    (-n[0] * crush * 0.32 -
+      c0[0] * (slow2 - 0.5) * 0.1 +
+      c1[0] * (slow - 0.5) * 0.07) *
       collapse,
-    (-n[1] * crush * 0.2 -
-      axisA[1] * (slow2 - 0.5) * 0.07 +
-      axisB[1] * (slow - 0.5) * 0.045) *
+    (-n[1] * crush * 0.32 -
+      c0[1] * (slow2 - 0.5) * 0.1 +
+      c1[1] * (slow - 0.5) * 0.07) *
       collapse,
-    (-n[2] * crush * 0.2 -
-      axisA[2] * (slow2 - 0.5) * 0.07 +
-      axisB[2] * (slow - 0.5) * 0.045) *
+    (-n[2] * crush * 0.32 -
+      c0[2] * (slow2 - 0.5) * 0.1 +
+      c1[2] * (slow - 0.5) * 0.07) *
       collapse,
   ]
 
+  const localOffset = [
+    developOffset[0] + matureOffset[0] + shellOffset[0] + collapseOffset[0],
+    developOffset[1] + matureOffset[1] + shellOffset[1] + collapseOffset[1],
+    developOffset[2] + matureOffset[2] + shellOffset[2] + collapseOffset[2],
+  ]
+  const bodyScale = macroBodyScale(seed)
   return [
-    developOffset[0] + matureOffset[0] + collapseOffset[0],
-    developOffset[1] + matureOffset[1] + collapseOffset[1],
-    developOffset[2] + matureOffset[2] + collapseOffset[2],
+    (p[0] + localOffset[0]) * bodyScale[0] - p[0],
+    (p[1] + localOffset[1]) * bodyScale[1] - p[1],
+    (p[2] + localOffset[2]) * bodyScale[2] - p[2],
   ]
 }
 
@@ -192,7 +323,8 @@ function developmentDisplaceAmount(p, uniforms) {
   const lifeEnvelope = smoothstep(0, 0.1, age) * (1 - smoothstep(0.88, 1, age))
   const noiseGain = 0.85 + Math.min(1, Math.max(0, noiseAmount * 0.5)) * (2.1 - 0.85)
   const field = formField(p, time, seed, noiseScale, speed)
-  return (field * 0.92 + (pulse - 0.5) * 0.18) * displacement * lifeEnvelope * noiseGain
+  // Secondary surface variation — macro regions own the silhouette.
+  return (field * 0.42 + (pulse - 0.5) * 0.1) * displacement * lifeEnvelope * noiseGain
 }
 
 /**
@@ -205,7 +337,7 @@ export function deformRestPoint(rest, uniforms, surfaceOffset = 0) {
   const restN = normalize3(rest)
 
   // Finite-difference macro normal (matches shader).
-  const e = 0.045
+  const e = 0.07
   const up = Math.abs(restN[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]
   const t = normalize3([
     restN[1] * up[2] - restN[2] * up[1],
@@ -248,11 +380,29 @@ export function deformRestPoint(rest, uniforms, surfaceOffset = 0) {
   }
 
   const amount = developmentDisplaceAmount(macroPos, uniforms)
-  const position = [
-    macroPos[0] + macroN[0] * (amount + surfaceOffset),
-    macroPos[1] + macroN[1] * (amount + surfaceOffset),
-    macroPos[2] + macroN[2] * (amount + surfaceOffset),
+  let position = [
+    macroPos[0] + macroN[0] * amount,
+    macroPos[1] + macroN[1] * amount,
+    macroPos[2] + macroN[2] * amount,
   ]
+
+  // Path growth swell (same field as the body shader), then optional ribbon lift.
+  position = applyPathGrowth(
+    rest,
+    position,
+    macroN,
+    uniforms.pathPoints,
+    uniforms.pathGrowthStrength,
+    uniforms.pathGrowthRadius,
+    uniforms.pathPointProgress,
+  )
+  if (surfaceOffset) {
+    position = [
+      position[0] + macroN[0] * surfaceOffset,
+      position[1] + macroN[1] * surfaceOffset,
+      position[2] + macroN[2] * surfaceOffset,
+    ]
+  }
   return { position, normal: macroN }
 }
 

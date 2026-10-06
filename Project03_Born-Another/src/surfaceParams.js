@@ -68,7 +68,7 @@ export const INITIAL_INDIVIDUALITY = {
   seed: 884731,
   noiseScale: 2.8,
   patternContrast: 0.62,
-  accentColor: '#ff0000',
+  accentColor: '#ff8800',
   accentStrength: 0.72,
 }
 

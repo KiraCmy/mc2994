@@ -16,7 +16,10 @@ export default function Hud({
   const animateLabel = isDead ? 'New Life' : animating ? 'Pause' : 'Animate'
   const showShaderChrome = isShaderMode(modeId)
   const showAnimate =
-    showShaderChrome || modeId === 'scatter' || modeId === 'path'
+    showShaderChrome ||
+    modeId === 'scatter' ||
+    modeId === 'path' ||
+    modeId === 'particle'
 
   return (
     <div className="hud">

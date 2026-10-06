@@ -6,6 +6,14 @@ import {
   consolidateRestStroke,
   createStrokeId,
 } from './pathSpline.js'
+import { packPathRestPoints, PATH_GROWTH_DURATION } from './pathGrowth.js'
+import {
+  PATH_EXTENSION_DURATION,
+  PATH_EXTENSION_LENGTH,
+  PATH_EXTENSION_WANDER,
+  planSurfaceExtension,
+  extensionRibbonPoints,
+} from './pathExtend.js'
 import { raycastUnitSphere } from './surfaceDisplace.js'
 
 /**
@@ -13,6 +21,7 @@ import { raycastUnitSphere } from './surfaceDisplace.js'
  *
  * Drawing only runs while `drawing` is true (Draw button). Otherwise orbit /
  * zoom stay free. Strokes are rest-space samples so later stages can reuse them.
+ * After a stroke closes, a planned surface extension grows from the tip over time.
  */
 export default function PathField({
   strokes = [],
@@ -21,6 +30,12 @@ export default function PathField({
   surfaceOffset = 0.045,
   lineRadius = 0.016,
   sampleSpacing = 0.045,
+  growthStrength = 0.28,
+  growthRadius = 0.32,
+  growthDuration = PATH_GROWTH_DURATION,
+  extensionLength = PATH_EXTENSION_LENGTH,
+  extensionDuration = PATH_EXTENSION_DURATION,
+  extensionWander = PATH_EXTENSION_WANDER,
   surfaceSeed = 884731,
   noiseScale = 2.8,
   age = 0.5,
@@ -39,9 +54,17 @@ export default function PathField({
   const strokesRef = useRef(strokes)
   const onChangeRef = useRef(onStrokesChange)
   const drawingEnabledRef = useRef(drawing)
+  const surfaceSeedRef = useRef(surfaceSeed)
+  const sampleSpacingRef = useRef(sampleSpacing)
+  const extensionLengthRef = useRef(extensionLength)
+  const extensionWanderRef = useRef(extensionWander)
   strokesRef.current = strokes
   onChangeRef.current = onStrokesChange
   drawingEnabledRef.current = drawing
+  surfaceSeedRef.current = surfaceSeed
+  sampleSpacingRef.current = sampleSpacing
+  extensionLengthRef.current = extensionLength
+  extensionWanderRef.current = extensionWander
 
   const raycaster = useMemo(() => new THREE.Raycaster(), [])
   const ndc = useMemo(() => new THREE.Vector2(), [])
@@ -56,6 +79,10 @@ export default function PathField({
       pulseSpeed,
       displacement,
       noiseAmount,
+      pathPoints: [],
+      pathPointProgress: [],
+      pathGrowthStrength: growthStrength,
+      pathGrowthRadius: growthRadius,
     }),
     [],
   )
@@ -69,6 +96,17 @@ export default function PathField({
     uniforms.pulseSpeed = pulseSpeed
     uniforms.displacement = displacement
     uniforms.noiseAmount = noiseAmount
+    const now = performance.now()
+    const packed = packPathRestPoints(
+      strokes,
+      now,
+      growthDuration,
+      extensionDuration,
+    )
+    uniforms.pathPoints = packed.points
+    uniforms.pathPointProgress = packed.progresses
+    uniforms.pathGrowthStrength = growthStrength
+    uniforms.pathGrowthRadius = growthRadius
 
     updateRibbonMesh(
       draftMeshRef.current,
@@ -139,9 +177,22 @@ export default function PathField({
     if (draftMeshRef.current) draftMeshRef.current.visible = false
 
     if (consolidated.length < 2) return
+    const bornAt = performance.now()
+    // User stroke stays frozen; organism continues from the tip on the sphere.
+    const extensionPlan = planSurfaceExtension(consolidated, {
+      seed: surfaceSeedRef.current,
+      step: sampleSpacingRef.current,
+      maxLength: extensionLengthRef.current,
+      wander: extensionWanderRef.current,
+    })
     onChangeRef.current?.([
       ...strokesRef.current,
-      { id: createStrokeId(), restPoints: consolidated },
+      {
+        id: createStrokeId(),
+        restPoints: consolidated,
+        bornAt,
+        extensionPlan,
+      },
     ])
   }
 
@@ -210,13 +261,21 @@ export default function PathField({
   return (
     <group>
       {strokes.map((stroke) => (
-        <PathStrokeRibbon
-          key={stroke.id}
-          restPoints={stroke.restPoints}
-          uniforms={uniforms}
-          surfaceOffset={surfaceOffset}
-          lineRadius={lineRadius}
-        />
+        <group key={stroke.id}>
+          <PathStrokeRibbon
+            restPoints={stroke.restPoints}
+            uniforms={uniforms}
+            surfaceOffset={surfaceOffset}
+            lineRadius={lineRadius}
+          />
+          <PathExtensionRibbon
+            stroke={stroke}
+            extensionDuration={extensionDuration}
+            uniforms={uniforms}
+            surfaceOffset={surfaceOffset}
+            lineRadius={lineRadius * 0.92}
+          />
+        </group>
       ))}
       <mesh ref={draftMeshRef} visible={false} renderOrder={4}>
         <primitive object={draftGeometry} attach="geometry" />
@@ -229,6 +288,54 @@ export default function PathField({
         />
       </mesh>
     </group>
+  )
+}
+
+function PathExtensionRibbon({
+  stroke,
+  extensionDuration,
+  uniforms,
+  surfaceOffset,
+  lineRadius,
+}) {
+  const meshRef = useRef(null)
+  const geometry = useMemo(() => new THREE.BufferGeometry(), [])
+
+  useFrame(() => {
+    const pts = extensionRibbonPoints(
+      stroke,
+      performance.now(),
+      extensionDuration,
+    )
+    updateRibbonMesh(
+      meshRef.current,
+      pts,
+      uniforms,
+      surfaceOffset,
+      lineRadius,
+      6,
+    )
+  })
+
+  useEffect(
+    () => () => {
+      const mesh = meshRef.current
+      if (mesh?.geometry) mesh.geometry.dispose()
+    },
+    [],
+  )
+
+  return (
+    <mesh ref={meshRef} renderOrder={4}>
+      <primitive object={geometry} attach="geometry" />
+      <meshBasicMaterial
+        color="#ffffff"
+        transparent
+        opacity={0.88}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </mesh>
   )
 }
 

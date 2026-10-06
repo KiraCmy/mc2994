@@ -9,8 +9,8 @@ export const SCATTER_GROWTH_TYPES = [
 export const INITIAL_SCATTER = {
   /** Active scatter asset family. */
   growthType: 'membrane',
-  /** Mid-sparse default; Density slider can cover the surface more fully. */
-  density: 0.35,
+  /** Default dense enough that growths read across the whole surface. */
+  density: 0.65,
   /** Base cluster scale; per-instance jitter multiplies on top. */
   size: 1,
   /** Bumped by Regenerate to reshuffle surface samples. */

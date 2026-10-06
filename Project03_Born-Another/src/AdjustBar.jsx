@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { MATERIAL_FAMILIES } from './surfaceParams.js'
 import { SCATTER_GROWTH_TYPES } from './scatter/scatterParams.js'
+import {
+  PARTICLE_COUNT_MAX,
+  PARTICLE_COUNT_MIN,
+} from './particle/particleParams.js'
 
 const SURFACE_SLIDERS = [
   { key: 'fresnelPower', label: 'Fresnel', min: 1, max: 6, step: 0.05 },
@@ -92,6 +96,20 @@ const SCATTER_SLIDERS = [
 
 const PATH_SLIDERS = [
   { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
+  { key: 'growthStrength', label: 'Growth Strength', min: 0, max: 0.85, step: 0.01 },
+  { key: 'growthRadius', label: 'Growth Radius', min: 0.06, max: 0.85, step: 0.01 },
+]
+
+const PARTICLE_SLIDERS = [
+  { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
+  {
+    key: 'count',
+    label: 'Particle Count',
+    min: PARTICLE_COUNT_MIN,
+    max: PARTICLE_COUNT_MAX,
+    step: 50,
+    integers: true,
+  },
 ]
 
 function formatValue(slider, value) {
@@ -159,7 +177,7 @@ function controlsForMode(modeId, studyId) {
   if (modeId === 'particle') {
     return {
       heading: 'Particle Parameters',
-      sliders: [],
+      sliders: PARTICLE_SLIDERS,
       colors: [],
       families: null,
       modes: null,

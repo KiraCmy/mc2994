@@ -4,12 +4,21 @@ import * as THREE from 'three'
  * Procedural GrowthCluster for Scatter.
  * Local space: origin at shared root, +Y = surface normal (outward).
  * 2–3 broad, smooth membrane lobes — calm secondary growth, not spikes or petals.
- * Vertex `aAttach` (1→0) drives GPU surface wrapping in the scatter shader.
+ * Vertex `aAttach` (1→0) blends shading toward the host surface normal.
  */
+export const GROWTH_CLUSTER_DEFAULTS = {
+  height: 0.078,
+  // Wider apron so face-on samples cover the disc, not only the silhouette.
+  spread: 0.11,
+  lengthSegments: 36,
+  widthSegments: 20,
+  variantCount: 7,
+}
+
 export function createGrowthClusterGeometry({
   seed = 1,
-  height = 0.078,
-  spread = 0.07,
+  height = GROWTH_CLUSTER_DEFAULTS.height,
+  spread = GROWTH_CLUSTER_DEFAULTS.spread,
   lengthSegments = 36,
   widthSegments = 20,
 } = {}) {
@@ -96,10 +105,18 @@ export function createGrowthClusterGeometry({
 }
 
 /** Build a small pool of deterministic cluster variants for instancing. */
-export function createGrowthClusterVariants(count = 7, baseSeed = 44017) {
+export function createGrowthClusterVariants(
+  count = 7,
+  baseSeed = 44017,
+  defaults = GROWTH_CLUSTER_DEFAULTS,
+) {
   const n = Math.max(1, Math.floor(count))
   return Array.from({ length: n }, (_, i) =>
-    createGrowthClusterGeometry({ seed: (baseSeed + i * 7919) >>> 0 }),
+    createGrowthClusterGeometry({
+      seed: (baseSeed + i * 7919) >>> 0,
+      height: defaults.height,
+      spread: defaults.spread,
+    }),
   )
 }
 
@@ -163,10 +180,3 @@ function mulberry32(a) {
   }
 }
 
-export const GROWTH_CLUSTER_DEFAULTS = {
-  height: 0.078,
-  spread: 0.07,
-  lengthSegments: 36,
-  widthSegments: 20,
-  variantCount: 7,
-}

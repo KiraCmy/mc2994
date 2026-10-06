@@ -24,9 +24,9 @@ function resolveGrowthType(growthType) {
 
 /**
  * Instanced scatter growths attached to the deforming base surface.
- * Rest samples stay on the unit sphere; the scatter shader wraps each
- * footprint onto the host. `growthType` swaps asset geometry without
- * reshuffling samples. `size` scales whole instances.
+ * Rest samples stay on the unit sphere; the scatter shader deforms each
+ * instance with the shared macro/micro pipeline. `growthType` swaps asset
+ * geometry without reshuffling samples. `size` scales whole instances.
  */
 export default function ScatterField({
   growthType = 'membrane',
@@ -67,8 +67,13 @@ export default function ScatterField({
   )
 
   const membraneGeometries = useMemo(
-    () => createGrowthClusterVariants(VARIANT_COUNT, 44017),
-    [],
+    () =>
+      createGrowthClusterVariants(
+        VARIANT_COUNT,
+        44017,
+        GROWTH_CLUSTER_DEFAULTS,
+      ),
+    [VARIANT_COUNT],
   )
 
   const plumeGeometries = useMemo(
@@ -110,12 +115,12 @@ export default function ScatterField({
       uColorA: { value: new THREE.Color(colorA) },
       uColorB: { value: new THREE.Color(colorB) },
       uRimColor: { value: new THREE.Color(rimColor) },
-      uBodyAlpha: { value: 0.99 },
-      uFresnelPower: { value: 2.55 },
-      uRimStrength: { value: 0.46 },
+      uBodyAlpha: { value: 0.78 },
+      uFresnelPower: { value: 3.1 },
+      uRimStrength: { value: 1.05 },
       uDecayStart: { value: decayStart },
       uDecayScale: { value: decayScale },
-      uDiscardThreshold: { value: 0.04 },
+      uDiscardThreshold: { value: 0.025 },
     }),
     [],
   )
@@ -128,10 +133,13 @@ export default function ScatterField({
         uniforms,
         transparent: true,
         depthWrite: false,
+        // Body depthWrite is off in scatter mode; skip depth so the full
+        // front hemisphere composites on top of the soft shell.
+        depthTest: false,
         side: THREE.DoubleSide,
         toneMapped: false,
       }),
-    [uniforms],
+    [uniforms, scatterAttachmentVertexShader, scatterAttachmentFragmentShader],
   )
 
   useLayoutEffect(() => {
@@ -201,7 +209,15 @@ export default function ScatterField({
             Math.PI *
             2
           twistQ.setFromAxisAngle(UP, twist)
-          dummy.quaternion.copy(baseQ).multiply(twistQ)
+          // Lie near the tangent plane so the camera sees lobe faces across the
+          // front of the body — upright lobes only read as a silhouette ring.
+          const tip =
+            isPod
+              ? 0.12
+              : 0.06 +
+                ((Math.imul(index + 19, 2246822519) >>> 0) / 4294967296) * 0.1
+          pitchQ.setFromAxisAngle(axis.set(0, 0, 1), tip)
+          dummy.quaternion.copy(baseQ).multiply(twistQ).multiply(pitchQ)
         }
 
         // Per-instance size jitter (stable until Regenerate); Size slider is the base.
@@ -275,13 +291,13 @@ export default function ScatterField({
         const capacity = Math.max(buckets[v].length, 1)
         return (
           <instancedMesh
-            key={`${type}-${v}-${capacity}`}
+            key={`${type}-${v}-${capacity}-surface-growth`}
             ref={(node) => {
               meshRefs.current[v] = node
             }}
             args={[geometry, material, capacity]}
             frustumCulled={false}
-            renderOrder={2}
+            renderOrder={10}
           />
         )
       })}

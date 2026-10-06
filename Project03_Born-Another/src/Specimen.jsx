@@ -25,6 +25,12 @@ import {
   traceVertexShader,
   vertexShader,
 } from './surfaceShader.js'
+import {
+  PATH_GROWTH_MAX,
+  PATH_GROWTH_DURATION,
+  packPathRestPoints,
+} from './path/pathGrowth.js'
+import { PATH_EXTENSION_DURATION } from './path/pathExtend.js'
 
 function familyMode(family) {
   if (family === 'crystal') return 1
@@ -132,7 +138,48 @@ function createBodyUniforms(surface, individuality, development, decay, material
     uGlowPink: { value: new THREE.Color('#f0a8c8') },
     uGlowYellow: { value: new THREE.Color('#f0e0a0') },
     uFoilColor: { value: new THREE.Color('#2a2c32') },
+    uPathPointCount: { value: 0 },
+    uPathPoints: {
+      value: Array.from({ length: PATH_GROWTH_MAX }, () => new THREE.Vector3()),
+    },
+    uPathPointProgress: {
+      value: Array.from({ length: PATH_GROWTH_MAX }, () => 0),
+    },
+    uPathGrowthStrength: { value: 0 },
+    uPathGrowthRadius: { value: 0.32 },
   }
+}
+
+/** Upload packed path samples + per-sample growth maturity (0→1 after draw). */
+function syncPathGrowthUniforms(material, {
+  strokes,
+  growthStrength,
+  growthRadius,
+  growthDuration,
+  extensionDuration,
+}) {
+  if (!material?.uniforms?.uPathPoints) return
+  const points = material.uniforms.uPathPoints.value
+  const progresses = material.uniforms.uPathPointProgress?.value
+  const packed = packPathRestPoints(
+    strokes ?? [],
+    performance.now(),
+    growthDuration ?? PATH_GROWTH_DURATION,
+    extensionDuration ?? PATH_EXTENSION_DURATION,
+  )
+  const count = Math.min(packed.points.length, PATH_GROWTH_MAX)
+  for (let i = 0; i < PATH_GROWTH_MAX; i += 1) {
+    if (i < count) {
+      points[i].set(packed.points[i][0], packed.points[i][1], packed.points[i][2])
+      if (progresses) progresses[i] = packed.progresses[i]
+    } else {
+      points[i].set(0, 0, 0)
+      if (progresses) progresses[i] = 0
+    }
+  }
+  material.uniforms.uPathPointCount.value = count
+  material.uniforms.uPathGrowthStrength.value = growthStrength
+  material.uniforms.uPathGrowthRadius.value = growthRadius
 }
 
 function syncBodyUniforms(material, {
@@ -237,9 +284,25 @@ export default function Specimen({
   layered,
   preserved,
   isDead = false,
+  bodyDepthWrite = true,
+  pathStrokes = null,
+  pathGrowthStrength = 0,
+  pathGrowthRadius = 0.32,
+  pathGrowthDuration = PATH_GROWTH_DURATION,
+  pathExtensionDuration = PATH_EXTENSION_DURATION,
 }) {
   const bodyRef = useRef(null)
   const residueRef = useRef(null)
+  const pathStrokesRef = useRef(pathStrokes)
+  const pathGrowthStrengthRef = useRef(pathGrowthStrength)
+  const pathGrowthRadiusRef = useRef(pathGrowthRadius)
+  const pathGrowthDurationRef = useRef(pathGrowthDuration)
+  const pathExtensionDurationRef = useRef(pathExtensionDuration)
+  pathStrokesRef.current = pathStrokes
+  pathGrowthStrengthRef.current = pathGrowthStrength
+  pathGrowthRadiusRef.current = pathGrowthRadius
+  pathGrowthDurationRef.current = pathGrowthDuration
+  pathExtensionDurationRef.current = pathExtensionDuration
 
   const age =
     isLifecycleStudy(studyId)
@@ -332,6 +395,26 @@ export default function Specimen({
   ])
 
   useLayoutEffect(() => {
+    const material = bodyRef.current
+    if (!material?.uniforms?.uPathPoints) return
+    syncPathGrowthUniforms(material, {
+      strokes: pathStrokes,
+      growthStrength: pathGrowthStrength,
+      growthRadius: pathGrowthRadius,
+      growthDuration: pathGrowthDuration,
+      extensionDuration: pathExtensionDuration,
+    })
+  }, [
+    pathStrokes,
+    pathGrowthStrength,
+    pathGrowthRadius,
+    pathGrowthDuration,
+    pathExtensionDuration,
+    showBody,
+    visualStudy,
+  ])
+
+  useLayoutEffect(() => {
     const material = residueRef.current
     if (!material || !showResidue) return
 
@@ -377,6 +460,16 @@ export default function Specimen({
     ) {
       mat.uniforms.uTime.value = clock.getElapsedTime()
     }
+    // Path growth maturity advances in wall-clock time after each stroke closes.
+    if (mat.uniforms?.uPathPoints && pathStrokesRef.current?.length) {
+      syncPathGrowthUniforms(mat, {
+        strokes: pathStrokesRef.current,
+        growthStrength: pathGrowthStrengthRef.current,
+        growthRadius: pathGrowthRadiusRef.current,
+        growthDuration: pathGrowthDurationRef.current,
+        extensionDuration: pathExtensionDurationRef.current,
+      })
+    }
   })
 
   return (
@@ -391,8 +484,7 @@ export default function Specimen({
             fragmentShader={shaders.fragment}
             uniforms={bodyUniforms}
             transparent
-            depthWrite
-            side={THREE.FrontSide}
+            depthWrite={bodyDepthWrite}
             toneMapped={false}
           />
         </mesh>

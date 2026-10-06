@@ -121,7 +121,7 @@ At instability (age 0.62): interior glow and foil fracture still read on one sil
 
 # Born Another — Scatter
 
-Top-level modes sit under the title: **Shader** (Studies 01–09), **Scatter**, **Path**, and **Particle**. Path and Particle are empty placeholders. Scatter is the first non-shader mode; it keeps the same viewport, camera, and pale field.
+Top-level modes sit under the title: **Shader** (Studies 01–09), **Scatter**, **Path**, and **Particle**. Scatter was the first non-shader mode; Path and Particle follow the same viewport, camera, and pale field.
 
 ## Step 1 — Surface instances
 
@@ -249,8 +249,49 @@ Pointer hits use a **unit-sphere raycast** (same rest frame as Scatter attachmen
 
 Thin WebGL lines were hard to see. Strokes now render as short **tube ribbons** (white, translucent, depthWrite off) so the path reads clearly against the milky body while the organism breathes and ages.
 
-No growth, branching, or path-driven body deformation yet—only capture, follow, and display of surface splines.
-
 Path in early development (age 0.05), Draw · On: a thick white surface spline follows the breathing membrane while Age, Draw, and Clear Path sit in the floating overlay.
 
 ![[born-another-spline-path-draw.jpg]]
+
+## Step 2 — Path as growth influence
+
+Step 1 only drew on the surface. Step 2 lets closed strokes also reshape the living body: vertices near the path swell outward along the deformed normal so the organism reads as growing along the trail, not as a tube stuck on top.
+
+### Growth field
+
+Path Parameters add **Growth Strength** and **Growth Radius**. Packed rest-space samples from the strokes feed a soft influence field (chord distance on the unit sphere). Strength sets how far the shell lifts; radius sets how wide the swell falls off. AGE macro morphology and Study 03 micro / breath stay underneath—the path does not replace the life-cycle form. The same field is mirrored in GLSL on the body and in JS `deformRestPoint` so Path ribbons stay glued while the shell swells.
+
+No branching or secondary scatter objects. Draw / Clear Path / orbit behavior from Step 1 is unchanged.
+
+### Body vanishing on Animate
+
+With path growth wired in, Path (and any study using the development / decay / layered vertex path) went blank as soon as the life clock left birth: the white ribbon still drew, but the main form disappeared. The growth shader used a variable named `active`, which is reserved in GLSL, so the vertex program failed to compile. Renaming it restored the body through development and decay while Animate runs. Path uniforms also sit at the top of those vertex shaders (before helper functions), and unused path-point slots are not normalized, so empty slots cannot turn the mesh into NaNs.
+
+Path in early development (age 0.10), Growth Strength 0.28, Growth Radius 0.32: a white surface stroke sits on the living body while the membrane swells along the trail; Age, growth sliders, Draw, and Clear Path sit in the floating overlay.
+
+![[born-another-spline-path-growth.jpg]]
+
+
+# Born Another — Particle
+
+Top-level **Particle** sits beside Shader, Scatter, and Path. It reuses the same viewport, camera, pale field, Birth–Death clock, and living body as Scatter and Path—Study 06 lifecycle visuals with Age, Animate / Space, and New Life—without scatter growths or path strokes.
+
+## Step 1 — Near-surface particle layer
+
+The first Particle pass covers the living membrane with a dense grit of small glowing points. Samples are Fibonacci points on the unit sphere (same rest frame as Scatter attachment). Each sample is a tiny instanced sphere; the GPU applies the shared AGE macro morphology plus Study 03 micro / breath so the layer tracks the deforming body instead of floating as a separate cloud.
+
+### Birth alignment
+
+At birth (age ≤ 0.02) the body still uses the individuality vertex path—an undeformed unit sphere—while an early particle shader already applied macro body scale. That mismatch read as a larger spherical halo around the soft silhouette. The particle vertex path now mirrors the lifecycle surface: unit sphere at birth, then the same development / decay displace as the host, with back-facing grit culled so the layer reads on the front membrane.
+
+### Float, size, and glow
+
+Grit is lifted a short distance along the deformed normal so it clears the membrane and reads as a floating skin that still follows form change. Size was tuned down from an oversized first pass to a finer fleck; the fragment path uses additive blending with a soft camera-facing hotspot (bright core, luminous falloff) so particles glow rather than reading as hard white beads.
+
+### Controls and life clock
+
+Particle Parameters use the same floating overlay: **Age** scrubs the shared clock and pauses playback; **Particle Count** sets how many rest samples are drawn (default mid-dense, max **16000**). **Animate / Pause**, **Space**, the Birth–Death marker, stage name, and **New Life** after death match Scatter and Path. Particles unmount near death so they do not linger over the trace residue.
+
+Particle in early development (age 0.19, count 16000): a dense glowing grit floats just above the irregular membrane while Age and Particle Count sit in the floating overlay.
+
+![[born-another-particle-surface-layer.jpg]]
