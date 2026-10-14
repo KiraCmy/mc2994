@@ -614,10 +614,230 @@ export const scatterAttachmentVertexShader = /* glsl */ `
 `
 
 /**
- * Particle layer — track the body surface with a slight float lift.
+ * Particle current simulation (GPGPU, one texel per particle).
+ * State = rest point on the unit sphere (xyz) + life progress (w). Each frame
+ * the rest point is advected by a tangent flow derived from the live body
+ * relief (macro morphology + Study 03 micro displace at the current AGE), so
+ * currents bend around lobes, slide into dents and part over bulges. Particles
+ * are re-seeded at the end of their life so sinks never clump forever.
+ */
+export const particleFlowSimShader = /* glsl */ `
+  uniform float uTime;
+  uniform float uDelta;
+  uniform float uAge;
+  uniform float uSeed;
+  uniform float uNoiseScale;
+  uniform float uSpeed;
+  uniform float uPulseSpeed;
+  uniform float uDisplacement;
+  uniform float uNoiseAmount;
+  uniform float uFieldComplexity;
+  uniform float uFlowSpeed;
+  uniform float uLifeMin;
+  uniform float uLifeMax;
+
+  ${developmentDisplacementGlsl}
+  ${macroMorphologyGlsl}
+
+  /** Broad regional direction from low-frequency spatial noise. */
+  vec3 particleBroadFlow(vec3 p, float complexity) {
+    float freq = mix(0.38, 1.05, complexity);
+    vec3 sampleP = p * freq + vec3(uSeed * 0.011, uSeed * 0.0073, 1.9);
+    float ax = fbm(sampleP + vec3(0.0, 17.2, 4.1));
+    float ay = fbm(sampleP + vec3(29.4, 0.0, 11.7));
+    float az = fbm(sampleP + vec3(8.3, 21.6, 0.0));
+    vec3 v = vec3(ax, ay, az) * 2.0 - 1.0;
+    float len = length(v);
+    return len > 1e-4 ? v / len : vec3(0.0, 1.0, 0.0);
+  }
+
+  /** Approximate curl of a scalar noise field — local swirl / vortex. */
+  vec3 particleCurlFlow(vec3 p, float complexity) {
+    float freq = mix(0.7, 2.35, complexity);
+    float e = mix(0.18, 0.09, complexity);
+    vec3 sampleP = p * freq + vec3(uTime * 0.045, uSeed * 0.019, 3.4);
+
+    float n = fbm(sampleP);
+    float nx = fbm(sampleP + vec3(e, 0.0, 0.0));
+    float ny = fbm(sampleP + vec3(0.0, e, 0.0));
+    float nz = fbm(sampleP + vec3(0.0, 0.0, e));
+    vec3 grad = vec3(nx - n, ny - n, nz - n) / max(e, 1e-4);
+    vec3 curl = vec3(
+      grad.z - grad.y,
+      grad.x - grad.z,
+      grad.y - grad.x
+    );
+    float len = length(curl);
+    return len > 1e-4 ? curl / len : vec3(0.0, 0.0, 1.0);
+  }
+
+  /** Signed height of the live body above the rest sphere (macro + micro). */
+  float particleSurfaceRelief(vec3 n) {
+    if (uAge <= 0.02) return 0.0;
+    vec3 macro = macroMorphologyOffsetAt(n, uAge);
+    vec3 macroPos = n + macro;
+    return dot(macro, n) + developmentDisplaceAmount(macroPos) * 0.6;
+  }
+
+  vec3 tangentOf(vec3 v, vec3 n) {
+    return v - n * dot(v, n);
+  }
+
+  /**
+   * Stream function of the currents: the body's own relief (so streams wrap
+   * bulges and run along ridges and dents) plus a slowly drifting regional
+   * field and finer eddies.
+   */
+  float particleStream(vec3 n, float complexity) {
+    vec3 s = vec3(uSeed * 0.011, uSeed * 0.0073, 1.9);
+    float regional = fbm(n * mix(0.55, 1.2, complexity) + s + vec3(uTime * 0.011, 0.0, 0.0));
+    float eddies = fbm(n * mix(1.5, 2.9, complexity) + s.yzx + vec3(0.0, uTime * 0.027, 0.0));
+    return particleSurfaceRelief(n) * 2.4 + regional + eddies * mix(0.18, 0.5, complexity);
+  }
+
+  /**
+   * Rest-space tangent velocity. The rotated stream gradient (n × ∇ψ) is
+   * divergence-free, so currents circulate and shear past each other without
+   * draining into sinks; a weak downhill term lets them gather in dents and
+   * part over bulges (local converge / diverge).
+   */
+  vec3 particleSurfaceFlow(vec3 n, float complexity) {
+    vec3 t = normalize(cross(n, abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 b = cross(n, t);
+    float e = 0.04;
+    vec3 nt0 = normalize(n + t * e);
+    vec3 nt1 = normalize(n - t * e);
+    vec3 nb0 = normalize(n + b * e);
+    vec3 nb1 = normalize(n - b * e);
+    vec3 gradPsi = (
+      t * (particleStream(nt0, complexity) - particleStream(nt1, complexity)) +
+      b * (particleStream(nb0, complexity) - particleStream(nb1, complexity))
+    ) / (2.0 * e);
+    vec3 gradH = (
+      t * (particleSurfaceRelief(nt0) - particleSurfaceRelief(nt1)) +
+      b * (particleSurfaceRelief(nb0) - particleSurfaceRelief(nb1))
+    ) / (2.0 * e);
+
+    vec3 v = cross(n, gradPsi) - gradH * mix(0.25, 0.45, complexity);
+    v = tangentOf(v, n);
+    float len = length(v);
+    if (len < 1e-5) return vec3(0.0);
+    // Linear below the cap (keeps the field divergence-free), capped above.
+    return v * (uFlowSpeed / max(len, 0.9)) * 1.4;
+  }
+
+  vec3 particleRespawnPoint(vec2 uv, float salt) {
+    float u = hash31(vec3(uv * 91.7, salt * 1.37 + 0.3)) * 2.0 - 1.0;
+    float a = hash31(vec3(uv.yx * 57.1, salt * 2.11 + 4.7)) * 6.2831853;
+    float r = sqrt(max(0.0, 1.0 - u * u));
+    return vec3(cos(a) * r, u, sin(a) * r);
+  }
+
+  /**
+   * Target density of the field. Lanes follow the stream function, so a
+   * particle keeps its density as it rides a current; a broad patch field
+   * groups lanes into dense flowing regions and quiet gaps.
+   */
+  float particleFieldDensity(vec3 p, float complexity) {
+    float psi = particleStream(p, complexity);
+    float lane = smoothstep(0.3, 0.85, 0.5 + 0.5 * sin(psi * 8.5 + uSeed * 0.0137));
+    float patchField = fbm(p * 1.15 + vec3(uSeed * 0.0091, 4.2, uSeed * 0.0057));
+    float regions = smoothstep(0.32, 0.68, patchField);
+    return clamp(lane * mix(0.3, 1.0, regions) + regions * 0.1, 0.0, 1.0);
+  }
+
+  #ifdef PARTICLE_DENSITY
+  void main() {
+    vec2 uv = gl_FragCoord.xy / resolution.xy;
+    vec3 p = normalize(texture2D(textureParticleState, uv).xyz);
+    float density = particleFieldDensity(p, clamp(uFieldComplexity, 0.0, 1.0));
+    gl_FragColor = vec4(density, 0.0, 0.0, 1.0);
+  }
+  #else
+  void main() {
+    vec2 uv = gl_FragCoord.xy / resolution.xy;
+    vec4 state = texture2D(textureParticleState, uv);
+    vec3 p = normalize(state.xyz);
+    float life = state.w;
+
+    float lifespan = mix(uLifeMin, uLifeMax, hash31(vec3(uv * 13.7, 2.9)));
+    life += uDelta / max(lifespan, 0.1);
+
+    if (life >= 1.0) {
+      // Re-seed at the densest of three candidates so lanes stay populated.
+      float complexity = clamp(uFieldComplexity, 0.0, 1.0);
+      p = particleRespawnPoint(uv, uTime);
+      float best = particleFieldDensity(p, complexity);
+      for (int i = 1; i < 3; i++) {
+        vec3 candidate = particleRespawnPoint(uv, uTime + float(i) * 17.31);
+        float d = particleFieldDensity(candidate, complexity);
+        if (d > best) {
+          best = d;
+          p = candidate;
+        }
+      }
+      life = 0.0;
+    } else {
+      float complexity = clamp(uFieldComplexity, 0.0, 1.0);
+      // Midpoint step keeps tight eddies from spiralling outward.
+      vec3 v1 = particleSurfaceFlow(p, complexity);
+      vec3 mid = normalize(p + v1 * (uDelta * 0.5));
+      vec3 v2 = particleSurfaceFlow(mid, complexity);
+      p = normalize(p + v2 * uDelta);
+    }
+
+    gl_FragColor = vec4(p, life);
+  }
+  #endif
+`
+
+/**
+ * Stable per-particle appearance from aVariant (x size, y brightness,
+ * z tint, w pulse phase). Every term is 1 / white when its control is 0.
+ */
+const particleVariantGlsl = /* glsl */ `
+  uniform float uSizeVariation;
+  uniform float uBrightnessVariation;
+  uniform float uPulseStrength;
+  uniform sampler2D uParticleDensity;
+
+  attribute vec4 aVariant;
+
+  // 85% fine grains, 15% slightly larger ones.
+  float particleSizeMul(vec4 variant) {
+    float grain = variant.x < 0.85
+      ? mix(0.82, 1.0, variant.x / 0.85)
+      : mix(1.3, 1.55, (variant.x - 0.85) / 0.15);
+    return mix(1.0, grain, clamp(uSizeVariation, 0.0, 1.0));
+  }
+
+  // Mostly faint, a few bright; larger grains lean slightly brighter.
+  float particleBrightness(vec4 variant, float time) {
+    float r = mix(variant.y, variant.x, 0.3);
+    float base = mix(1.0, 0.45 + 0.75 * pow(r, 2.2), clamp(uBrightnessVariation, 0.0, 1.0));
+    // Slow breathing, each particle on its own period (≈ 7–21 s) and phase.
+    float period = mix(7.0, 21.0, fract(variant.w * 7.31 + variant.y * 3.17));
+    float breath = sin(time * 6.2831853 / period + variant.w * 6.2831853);
+    return base * (1.0 + clamp(uPulseStrength, 0.0, 1.0) * 0.55 * breath);
+  }
+
+  // Each particle shows only where the field is denser than its own fixed
+  // threshold, so dense lanes fill in and sparse regions thin out.
+  float particleDensityVisibility(vec2 stateUv, vec4 variant) {
+    float density = pow(clamp(texture2D(uParticleDensity, stateUv).r, 0.0, 1.0), 0.6);
+    float threshold = mix(0.0, 0.8, fract(variant.y * 3.71 + variant.z * 1.37));
+    return smoothstep(threshold - 0.12, threshold + 0.12, density);
+  }
+`
+
+/**
+ * Particle volumetric field — surface-aware height on the live body.
  * Study 06 birth (age ≤ 0.02) uses the individuality vertex path (unit sphere);
- * after that, match development / decay displace. Centers sit above the membrane
- * so grit reads as a floating skin, not buried dust.
+ * after that, match development / decay displace. Each instance reads its
+ * advected rest point from the current simulation (particleFlowSimShader) and
+ * is placed on the deformed surface exactly like the body mesh, so it rides
+ * the changing normals and curvature as AGE moves. `aHeight` (0–1) is biased
+ * toward the membrane; `uFieldThickness` scales outer reach.
  */
 export const particleSurfaceVertexShader = /* glsl */ `
   uniform float uTime;
@@ -632,18 +852,31 @@ export const particleSurfaceVertexShader = /* glsl */ `
   uniform float uDecayDisplacement;
   uniform float uLateWarp;
   uniform float uFloatOffset;
+  uniform float uFieldThickness;
+  uniform sampler2D uParticleState;
+  uniform float uViewportHeight;
+  uniform float uPixelRatio;
+  uniform float uMaxPixelRadius;
+
+  attribute float aHeight;
+  attribute vec2 aStateUv;
 
   varying float vAlpha;
   varying float vGlow;
+  varying float vBright;
+  varying vec2 vTint;
 
   ${developmentDisplacementGlsl}
   ${macroMorphologyGlsl}
+  ${particleVariantGlsl}
 
   void main() {
-    // Rest sample on the undeformed unit sphere (same as Scatter attachment).
-    vec3 restOrigin = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    vec4 state = texture2D(uParticleState, aStateUv);
+    vec3 restOrigin = normalize(state.xyz);
+    float life = state.w;
     float instScale = max(length(instanceMatrix[1].xyz), 1e-4);
-    vec3 restN = normalize(restOrigin);
+    vec3 restN = restOrigin;
+    float height = clamp(aHeight, 0.0, 1.0);
 
     vec3 surfacePos;
     vec3 surfaceN;
@@ -678,19 +911,58 @@ export const particleSurfaceVertexShader = /* glsl */ `
       gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
       vAlpha = 0.0;
       vGlow = 0.0;
+      vBright = 0.0;
+      vTint = vec2(0.0);
       return;
     }
 
-    // Lift so the grit clears the membrane (bottom ≈ uFloatOffset above surface).
-    vec3 local = position * instScale;
-    float lift = max(uFloatOffset, 0.0) + instScale;
-    vec3 worldPosition = surfacePos + surfaceN * lift + local;
+    // Base clearance + per-particle field height along the deformed normal.
+    float sizeMul = particleSizeMul(aVariant);
+    float lift =
+      max(uFloatOffset, 0.0) +
+      max(uFieldThickness, 0.0) * height +
+      instScale * max(sizeMul, 1.0);
+    vBright = particleBrightness(aVariant, uTime);
+    vTint = aVariant.zw;
 
-    vec4 mvPosition = modelViewMatrix * vec4(worldPosition, 1.0);
+    vec3 center = surfacePos + surfaceN * lift;
+    // Keep grains fine on screen: capped up close, and below ~half a pixel
+    // they fade instead of shrinking away.
+    vec4 mvCenter = modelViewMatrix * vec4(center, 1.0);
+    float pixelWorld = 2.0 * max(-mvCenter.z, 1e-3) / (projectionMatrix[1][1] * max(uViewportHeight, 1.0));
+    float radius = instScale * sizeMul;
+    float minRadius = 0.55 * uPixelRatio * pixelWorld;
+    float maxRadius = max(uMaxPixelRadius * uPixelRatio * sizeMul * pixelWorld, minRadius);
+    float drawRadius = clamp(radius, minRadius, maxRadius);
+    float coverage = min(1.0, (radius * radius) / (drawRadius * drawRadius));
+
+    vec4 mvPosition = modelViewMatrix * vec4(center + position * drawRadius, 1.0);
     gl_Position = projectionMatrix * mvPosition;
-    vAlpha = mix(0.5, 1.0, smoothstep(0.04, 0.5, viewFacing));
-    // Soft hotspot toward camera on each grit sphere.
+
+    // Outer fringe reads thinner so the silhouette stays body-shaped.
+    float depthFade = mix(1.0, 0.28, smoothstep(0.12, 1.0, height));
+    // Fade across re-seeding so particles never pop in or out.
+    float lifeFade = smoothstep(0.0, 0.12, life) * (1.0 - smoothstep(0.82, 1.0, life));
+    vAlpha = mix(0.5, 1.0, smoothstep(0.04, 0.5, viewFacing)) * depthFade * lifeFade;
+    vAlpha *= coverage * particleDensityVisibility(aStateUv, aVariant);
     vGlow = pow(max(dot(normalize(normalMatrix * normal), vec3(0.0, 0.0, 1.0)), 0.0), 1.65);
+  }
+`
+
+/**
+ * Faint tint toward one of the organism's own colours (rim cyan, accent,
+ * lower pink), picked and weighted per particle; white stays dominant.
+ */
+const particleTintGlsl = /* glsl */ `
+  uniform float uColorInfluence;
+  uniform vec3 uTintCool;
+  uniform vec3 uTintWarm;
+  uniform vec3 uTintSoft;
+
+  vec3 particleTint(vec3 base, vec2 tint) {
+    vec3 hue = tint.x < 0.55 ? uTintCool : tint.x < 0.82 ? uTintWarm : uTintSoft;
+    float amount = clamp(uColorInfluence, 0.0, 1.0) * mix(0.08, 0.42, fract(tint.x * 5.37 + tint.y * 1.91));
+    return mix(base, base * hue * 1.25, amount);
   }
 `
 
@@ -701,16 +973,175 @@ export const particleSurfaceFragmentShader = /* glsl */ `
 
   varying float vAlpha;
   varying float vGlow;
+  varying float vBright;
+  varying vec2 vTint;
+
+  ${particleTintGlsl}
 
   void main() {
     float core = smoothstep(0.08, 0.95, vGlow);
     float halo = pow(vGlow, 0.55);
     float glow = mix(halo * 0.55, 1.0, core);
-    float alpha = uOpacity * vAlpha * glow;
-    if (alpha < 0.02) discard;
+    float alpha = uOpacity * vAlpha * glow * min(vBright, 1.0);
+    if (alpha < 0.012) discard;
 
     // Hot white core with a soft luminous falloff.
     vec3 color = uColor * (0.55 + uGlowStrength * (0.7 + core * 1.35));
+    color = particleTint(color, vTint) * max(vBright, 1.0);
+    gl_FragColor = vec4(color, alpha);
+  }
+`
+
+/** Copies the live particle state into one slot of the trail history atlas. */
+export const particleTrailCopyVertexShader = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`
+
+export const particleTrailCopyFragmentShader = /* glsl */ `
+  uniform sampler2D uSource;
+  varying vec2 vUv;
+  void main() {
+    gl_FragColor = texture2D(uSource, vUv);
+  }
+`
+
+/**
+ * Motion trails: a thin camera-facing ribbon through each particle's recorded
+ * rest points (sample 0 = live state, 1… = history ring, newest first). Every
+ * sample is placed on the deformed surface exactly like particleSurfaceVertexShader,
+ * so trails hug the current body. Samples recorded before a re-seed are
+ * collapsed so a trail never jumps across the body.
+ */
+export const particleTrailVertexShader = /* glsl */ `
+  uniform float uTime;
+  uniform float uAge;
+  uniform float uSeed;
+  uniform float uNoiseScale;
+  uniform float uSpeed;
+  uniform float uPulseSpeed;
+  uniform float uDisplacement;
+  uniform float uNoiseAmount;
+  uniform float uDecayScale;
+  uniform float uDecayDisplacement;
+  uniform float uLateWarp;
+  uniform float uFloatOffset;
+  uniform float uFieldThickness;
+  uniform sampler2D uParticleState;
+  uniform sampler2D uTrailHistory;
+  uniform float uTrailSlots;
+  uniform float uTrailHead;
+  uniform float uTrailSamples;
+  uniform float uTrailWidth;
+  uniform float uParticleRadius;
+  uniform float uViewportHeight;
+
+  attribute float aSample;
+  attribute float aSide;
+  attribute float aHeight;
+  attribute vec2 aStateUv;
+
+  varying float vAlpha;
+  varying vec2 vTint;
+
+  ${developmentDisplacementGlsl}
+  ${macroMorphologyGlsl}
+  ${particleVariantGlsl}
+
+  vec3 particleSurfacePoint(vec3 restOrigin, out vec3 surfaceN) {
+    if (uAge <= 0.02) {
+      surfaceN = restOrigin;
+      return restOrigin;
+    }
+    vec3 macroPos = macroMorphologyPosition(restOrigin);
+    vec3 macroN = macroMorphologyNormal(restOrigin, restOrigin);
+    float amount = developmentDisplaceAmount(macroPos);
+    float lateWarp = 0.0;
+    if (uAge >= 0.8) {
+      float warpBias = max(uLateWarp, 0.001);
+      float decayNoise = fbm(macroPos * uDecayScale + vec3(uSeed * 0.41, uSeed * 0.17, 2.3));
+      float brittle = fbm(macroPos * uDecayScale * 2.8 + vec3(uSeed * 0.11, 5.2, 1.4));
+      float warpField = mix(decayNoise, abs(brittle - 0.5) * 2.0, clamp(warpBias - 0.7, 0.0, 1.0));
+      float instability = smoothstep(0.65, 1.0, uAge);
+      lateWarp = (warpField * 2.0 - 1.0) * uDecayDisplacement * instability * warpBias;
+    }
+    surfaceN = macroN;
+    return macroPos + macroN * (amount + lateWarp);
+  }
+
+  vec4 trailState(float k) {
+    if (k < 0.5) return texture2D(uParticleState, aStateUv);
+    float slot = mod(uTrailHead - (k - 1.0) + uTrailSlots, uTrailSlots);
+    return texture2D(uTrailHistory, vec2((slot + aStateUv.x) / uTrailSlots, aStateUv.y));
+  }
+
+  void main() {
+    float k = aSample;
+    vec4 head = trailState(0.0);
+    float kNb = k < 0.5 ? 1.0 : k - 1.0;
+    vec4 s = trailState(k);
+    vec4 sNb = trailState(kNb);
+    // Life only grows between re-seeds, so an older sample with more life
+    // belongs to the particle's previous run.
+    bool valid = s.w <= head.w + 1e-4;
+    if (!valid) s = sNb;
+
+    float height = clamp(aHeight, 0.0, 1.0);
+    float lift = max(uFloatOffset, 0.0) + max(uFieldThickness, 0.0) * height + uParticleRadius;
+    vec3 n0;
+    vec3 n1;
+    vec3 p = particleSurfacePoint(normalize(s.xyz), n0);
+    p += n0 * lift;
+    vec3 q = particleSurfacePoint(normalize(sNb.xyz), n1);
+    q += n1 * lift;
+
+    float viewFacing = max(dot(n0, normalize(cameraPosition - p)), 0.0);
+
+    vec4 mvP = modelViewMatrix * vec4(p, 1.0);
+    vec4 mvQ = modelViewMatrix * vec4(q, 1.0);
+    vec3 d = mvP.xyz - mvQ.xyz;
+    vec3 side = cross(d, normalize(-mvP.xyz));
+    float sideLen = length(side);
+    side = sideLen > 1e-7 ? side / sideLen : vec3(0.0);
+
+    float t = k / max(uTrailSamples - 1.0, 1.0);
+    float width = uTrailWidth * mix(1.0, 0.3, t);
+    // Never narrower than a pixel; sub-pixel width fades instead of shimmering.
+    float pixelWorld = 2.0 * max(-mvP.z, 1e-3) / (projectionMatrix[1][1] * max(uViewportHeight, 1.0));
+    float drawWidth = max(width, pixelWorld);
+    float coverage = width / drawWidth;
+    mvP.xyz += side * aSide * drawWidth * 0.5;
+    gl_Position = projectionMatrix * mvP;
+
+    float tailFade = pow(1.0 - t, 1.6);
+    float depthFade = mix(1.0, 0.28, smoothstep(0.12, 1.0, height));
+    float lifeFade = smoothstep(0.0, 0.12, head.w) * (1.0 - smoothstep(0.82, 1.0, head.w));
+    float facing = smoothstep(0.02, 0.1, viewFacing) * mix(0.5, 1.0, smoothstep(0.04, 0.5, viewFacing));
+    vAlpha = valid ? tailFade * coverage * depthFade * lifeFade * facing : 0.0;
+    vAlpha *= particleBrightness(aVariant, uTime) * particleDensityVisibility(aStateUv, aVariant);
+    vTint = aVariant.zw;
+  }
+`
+
+export const particleTrailFragmentShader = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uOpacity;
+  uniform float uGlowStrength;
+  uniform float uTrailOpacity;
+
+  varying float vAlpha;
+  varying vec2 vTint;
+
+  ${particleTintGlsl}
+
+  void main() {
+    float alpha = uOpacity * uTrailOpacity * vAlpha;
+    if (alpha < 0.003) discard;
+    // Same tint as the particle halo, without the hot core.
+    vec3 color = particleTint(uColor * (0.55 + uGlowStrength * 0.7), vTint);
     gl_FragColor = vec4(color, alpha);
   }
 `

@@ -1,0 +1,799 @@
+/*
+ * CONCEPT — editorial page. Proportions follow the reference layout
+ * (682px wide). Sections span the full width (rules, bands, atmosphere) while
+ * their grid sits in a centered content box whose edges match the header
+ * inset (3.4cqw). --u equals 1cqw until the box reaches --c-max, then freezes,
+ * so the composition scales with the window without spreading past the box.
+ */
+
+.concept-root {
+  position: absolute;
+  inset: 0;
+  background: #f0f0ee;
+}
+
+.concept {
+  --c-margin: 3.4cqw;
+  --c-max: 1560px;
+  --c-content: min(100cqw - 2 * var(--c-margin), var(--c-max));
+  --u: calc(var(--c-content) / (100 - 2 * 3.4));
+  --c-gutter: max(var(--c-margin), (100% - var(--c-content)) / 2);
+  --c-col-num: minmax(max-content, calc(2.9 * var(--u)));
+  --c-col-text: calc(25.6 * var(--u));
+  --c-gap: calc(1.4 * var(--u));
+  --c-rule: #c9c9c7;
+  --c-rule-soft: #c9c9c7;
+  --c-label: clamp(0.58rem, calc(0.78 * var(--u)), 0.86rem);
+  --c-body: clamp(0.72rem, calc(0.9 * var(--u)), 1.02rem);
+  --c-note: clamp(0.62rem, calc(0.8 * var(--u)), 0.9rem);
+  --c-white: #181816;
+  --c-ink: #71716f;
+  --c-muted: #929290;
+
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding-top: calc(var(--site-header-h) + 1px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: var(--c-ink);
+  font-family: Anybody, sans-serif;
+  background: #f0f0ee;
+  scroll-behavior: smooth;
+}
+
+.concept p,
+.concept h1,
+.concept h2,
+.concept blockquote,
+.concept ul {
+  margin: 0;
+}
+
+/*
+ * Auto-hiding header bar above the scroller. Child positions still come from
+ * .hud (cqw/cqh of .stage), so the layout matches the experiment tabs.
+ */
+.hud.concept-hud {
+  color: #181816;
+  background: #f0f0ee;
+  border-bottom: 1px solid #c9c9c7;
+}
+
+.hud.concept-hud .hud-mode-item.is-active::after {
+  background: #181816;
+}
+
+.hud.concept-hud .hud-mode-item:focus-visible {
+  outline-color: #181816;
+}
+
+.concept-hud.is-scrolled {
+  background-color: rgb(240 240 238 / 0.96);
+}
+
+/* Section grid: number gutter | text column | content. */
+.concept-section {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--c-col-num) var(--c-col-text) 1fr;
+  column-gap: var(--c-gap);
+  align-items: start;
+  min-height: calc(19 * var(--u));
+  padding: calc(3.6 * var(--u)) var(--c-gutter);
+}
+
+.concept-num {
+  padding-top: 0.1em;
+  font-size: clamp(1rem, calc(2.05 * var(--u)), 2.2rem);
+  font-weight: 400;
+  font-stretch: semi-condensed;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.concept-text {
+  display: flex;
+  flex-direction: column;
+  gap: calc(1.05 * var(--u));
+  min-width: 0;
+}
+
+.concept-label {
+  font-size: var(--c-label);
+  font-weight: 600;
+  font-stretch: semi-expanded;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.concept-label--center {
+  text-align: center;
+}
+
+.concept-heading {
+  font-size: clamp(1.3rem, calc(2.25 * var(--u)), 2.6rem);
+  font-weight: 480;
+  font-stretch: normal;
+  font-variation-settings: 'wdth' 100, 'wght' 480;
+  letter-spacing: -0.018em;
+  line-height: 1.08;
+  text-transform: none;
+}
+
+.concept-heading--hero {
+  margin-top: calc(0.4 * var(--u));
+  font-size: clamp(1.8rem, calc(3.5 * var(--u)), 3.25rem);
+  font-weight: 400;
+  font-stretch: normal;
+  font-variation-settings: 'wdth' 100, 'wght' 400;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+  text-transform: none;
+  text-align: left;
+}
+
+.concept-heading--caps {
+  font-stretch: semi-expanded;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.concept-body,
+.concept-note,
+.concept-list,
+.concept-cite,
+.concept-node-copy {
+  font-stretch: normal;
+  font-variation-settings: 'wdth' 100;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.65;
+}
+
+.concept-body {
+  max-width: calc(24 * var(--u));
+  font-family: Anybody, sans-serif;
+  font-size: var(--c-body);
+  font-weight: 430;
+  opacity: 0.92;
+}
+
+.concept-body--lead {
+  opacity: 1;
+}
+
+.concept-note {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--c-note);
+  text-align: center;
+  opacity: 0.85;
+}
+
+.concept-rule {
+  display: block;
+  width: 62%;
+  height: 1px;
+  background: var(--c-rule);
+}
+
+.concept-arrow {
+  align-self: center;
+  font-size: clamp(0.9rem, calc(1.4 * var(--u)), 1.5rem);
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+/* Image placeholders. */
+.concept-ph {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--c-rule-soft);
+  background:
+    radial-gradient(circle at 38% 32%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.14) 46%, rgba(255, 255, 255, 0.05) 100%),
+    rgba(214, 210, 230, 0.18);
+}
+
+.concept-ph--organism,
+.concept-ph--bubble {
+  border-radius: 50%;
+  aspect-ratio: 1;
+  background:
+    radial-gradient(circle at 36% 30%, rgba(255, 255, 255, 0.78) 0%, rgba(232, 226, 248, 0.42) 32%, rgba(210, 204, 236, 0.18) 64%, rgba(255, 255, 255, 0.06) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+    0 calc(0.6 * var(--u)) calc(2 * var(--u)) rgba(120, 118, 160, 0.12);
+  border: 0;
+}
+
+.concept-ph-label {
+  max-width: 82%;
+  padding: 0 0.6em;
+  font-size: calc(var(--c-note) * 0.88);
+  font-weight: 600;
+  font-stretch: semi-expanded;
+  letter-spacing: 0.14em;
+  line-height: 1.35;
+  text-align: center;
+  text-transform: uppercase;
+  opacity: 0.62;
+}
+
+.concept-ph--bubble .concept-ph-label {
+  display: none;
+}
+
+/* 01 — Premise */
+.concept-premise {
+  min-height: calc(33 * var(--u));
+  padding-top: 0;
+  padding-bottom: calc(3.6 * var(--u));
+}
+
+.concept-premise .concept-num,
+.concept-premise-text {
+  padding-top: calc(2.4 * var(--u));
+}
+
+.concept-premise-text {
+  gap: calc(1.3 * var(--u));
+  align-self: stretch;
+}
+
+.concept-scroll {
+  margin-top: auto;
+  padding-left: calc(1.2 * var(--u));
+  border-left: 1px solid var(--c-rule);
+  font-size: calc(var(--c-label) * 0.9);
+  font-weight: 600;
+  font-stretch: semi-expanded;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.concept-premise-visual {
+  position: relative;
+  align-self: stretch;
+  min-height: calc(30.9 * var(--u));
+  overflow: hidden;
+}
+
+.concept-premise-image {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 28% 45%;
+  opacity: 0.5;
+  transform: scale(1.18);
+  pointer-events: none;
+  user-select: none;
+}
+
+.concept-terms {
+  position: absolute;
+  top: calc(2.6 * var(--u));
+  right: calc(3.2 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(1.15 * var(--u));
+  padding: calc(0.2 * var(--u)) 0 calc(0.2 * var(--u)) calc(1.4 * var(--u));
+  border-left: 1px solid var(--c-rule);
+  list-style: none;
+  font-size: calc(var(--c-label) * 0.92);
+  font-weight: 600;
+  font-stretch: semi-expanded;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.concept-premise-coda {
+  position: absolute;
+  right: calc(3.2 * var(--u));
+  bottom: calc(0.4 * var(--u));
+  font-size: calc(var(--c-label) * 0.88);
+  font-weight: 600;
+  font-stretch: semi-expanded;
+  letter-spacing: 0.16em;
+  line-height: 1.6;
+  text-align: right;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+/* 02 — Conceptual Origin (dark band) */
+.concept-origin {
+  grid-template-columns: var(--c-col-num) var(--c-col-text) 1fr calc(25 * var(--u));
+  min-height: calc(20.8 * var(--u));
+  padding-top: 0;
+  padding-bottom: 0;
+  background: #222329;
+}
+
+.concept-origin .concept-num,
+.concept-origin .concept-text {
+  padding-top: calc(2.2 * var(--u));
+  padding-bottom: calc(2.2 * var(--u));
+}
+
+.concept-origin-still {
+  display: block;
+  align-self: stretch;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+  /* Keep Batty's face and the dove in frame as the column narrows. */
+  object-position: 54% 34%;
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.concept-origin-quote {
+  display: flex;
+  flex-direction: column;
+  gap: calc(0.9 * var(--u));
+  padding: calc(2.6 * var(--u)) 0 calc(2.2 * var(--u)) calc(1.2 * var(--u));
+}
+
+.concept-origin-quote blockquote {
+  font-size: clamp(0.95rem, calc(1.5 * var(--u)), 1.7rem);
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.32;
+}
+
+.concept-cite {
+  margin-bottom: calc(0.8 * var(--u)) !important;
+  font-size: var(--c-note);
+  opacity: 0.78;
+}
+
+.concept-origin-quote .concept-body {
+  max-width: none;
+}
+
+/* Shared horizontal flows (03, 05, 07). */
+.concept-flow {
+  display: grid;
+  align-items: stretch;
+  column-gap: calc(1.1 * var(--u));
+  min-width: 0;
+}
+
+.concept-flow--3 {
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+}
+
+.concept-flow--5 {
+  grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr auto 1fr;
+  column-gap: calc(0.55 * var(--u));
+}
+
+/* 03 — Translation */
+.concept-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(0.7 * var(--u));
+  padding: calc(0.2 * var(--u)) calc(0.9 * var(--u)) calc(0.9 * var(--u));
+  border-left: 1px solid var(--c-rule-soft);
+}
+
+.concept-card:first-child {
+  border-left: 0;
+}
+
+.concept-card-ph {
+  width: 100%;
+  margin-top: calc(0.4 * var(--u));
+  aspect-ratio: 1.55;
+}
+
+.concept-card-ph.concept-ph--organism {
+  width: 62%;
+  aspect-ratio: 1;
+}
+
+/* 04 — Life cycle */
+.concept-lifecycle {
+  display: flex;
+  flex-direction: column;
+  gap: calc(1.4 * var(--u));
+  min-width: 0;
+}
+
+.concept-stages {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  column-gap: calc(0.8 * var(--u));
+}
+
+.concept-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(0.25 * var(--u));
+}
+
+.concept-stage-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  margin-top: calc(0.8 * var(--u));
+}
+
+.concept-stage-ph {
+  width: calc(100% * var(--stage-scale, 1));
+}
+
+.concept-stage-ph .concept-ph-label {
+  display: none;
+}
+
+.concept-axis {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: calc(1 * var(--u));
+  font-size: calc(var(--c-label) * 0.9);
+  font-weight: 600;
+  font-stretch: semi-expanded;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.concept-axis-line {
+  position: relative;
+  height: 1px;
+  margin: 0 calc(100% / 14);
+  background: var(--c-rule);
+}
+
+.concept-axis-line i {
+  position: absolute;
+  top: 50%;
+  width: calc(0.42 * var(--u));
+  height: calc(0.42 * var(--u));
+  min-width: 5px;
+  min-height: 5px;
+  border-radius: 50%;
+  background: rgb(24 24 22 / 0.45);
+  transform: translate(-50%, -50%);
+}
+
+.concept-axis-line i.is-active {
+  width: calc(0.7 * var(--u));
+  height: calc(0.7 * var(--u));
+  background: #181816;
+  box-shadow: 0 0 0 calc(0.25 * var(--u)) rgb(24 24 22 / 0.2);
+}
+
+/* 05 — User experience */
+.concept-step {
+  position: relative;
+  min-width: 0;
+}
+
+.concept-step-ph {
+  width: 100%;
+  height: 100%;
+  min-height: calc(15.6 * var(--u));
+  align-items: flex-end;
+  padding-bottom: calc(1.4 * var(--u));
+}
+
+.concept-step.is-highlight .concept-step-ph {
+  border-color: #c9c9c7;
+  background:
+    radial-gradient(circle at 50% 58%, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.2) 40%, rgba(255, 255, 255, 0.08) 100%),
+    rgba(214, 210, 230, 0.28);
+}
+
+.concept-step-frame {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  width: 52%;
+  aspect-ratio: 1;
+  border: 1px solid #181816;
+  transform: translate(-50%, -30%);
+}
+
+.concept-step-copy {
+  position: absolute;
+  top: calc(0.9 * var(--u));
+  left: calc(0.9 * var(--u));
+  right: calc(0.9 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(0.35 * var(--u));
+}
+
+.concept-step-copy .concept-note {
+  align-items: flex-start;
+  text-align: left;
+}
+
+/* 06 — Memory & lineage */
+.concept-lineage {
+  grid-template-columns: var(--c-col-num) var(--c-col-text) 1fr calc(20 * var(--u));
+  min-height: calc(17.6 * var(--u));
+}
+
+.concept-graph {
+  position: relative;
+  align-self: stretch;
+  min-height: calc(15 * var(--u));
+}
+
+.concept-graph svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.concept-graph path {
+  fill: none;
+  stroke: rgb(24 24 22 / 0.45);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.concept-node {
+  position: absolute;
+  width: calc(4.6 * var(--u));
+  transform: translate(-50%, -50%);
+}
+
+.concept-node-ph .concept-ph-label {
+  display: none;
+}
+
+.concept-node-copy {
+  position: absolute;
+  top: 100%;
+  left: 85%;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--c-note);
+  white-space: nowrap;
+  opacity: 0.88;
+}
+
+.concept-node-copy span {
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+.concept-aside {
+  display: flex;
+  flex-direction: column;
+  gap: calc(1 * var(--u));
+  padding-top: calc(2 * var(--u));
+}
+
+.concept-aside .concept-body {
+  max-width: none;
+}
+
+/* 07 — Future vision */
+.concept-future {
+  grid-template-columns: var(--c-col-num) var(--c-col-text) 1fr calc(18 * var(--u));
+  min-height: calc(15.2 * var(--u));
+}
+
+.concept-flow--future {
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: start;
+}
+
+.concept-future-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(0.4 * var(--u));
+}
+
+.concept-future-quote,
+.concept-future-ph {
+  width: 100%;
+  height: calc(8.6 * var(--u));
+  margin-bottom: calc(0.6 * var(--u));
+}
+
+.concept-future-quote {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--c-rule);
+  font-size: clamp(0.78rem, calc(1.05 * var(--u)), 1.15rem);
+  font-style: italic;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.concept-aside--ruled {
+  align-self: stretch;
+  padding: calc(0.2 * var(--u)) 0 0 calc(1.4 * var(--u));
+  border-left: 1px solid var(--c-rule);
+}
+
+/* 08 — Open question / care exploration */
+.concept-care {
+  grid-template-columns: var(--c-col-num) var(--c-col-text) 1fr;
+  min-height: calc(14 * var(--u));
+  padding-bottom: calc(4.2 * var(--u));
+}
+
+.concept-care .concept-text {
+  gap: calc(1.15 * var(--u));
+}
+
+.concept-care-visual {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(1.6 * var(--u));
+  align-self: stretch;
+  width: min(100%, calc(26 * var(--u)));
+  max-width: calc(28 * var(--u));
+  margin-left: auto;
+  margin-right: calc(1.2 * var(--u));
+  padding-top: calc(0.6 * var(--u));
+}
+
+.concept-care-diagram {
+  display: block;
+  width: min(100%, calc(18.5 * var(--u)));
+  margin: 0 auto;
+  background: transparent;
+}
+
+.concept-care-diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.concept-care-diagram-edge {
+  stroke: rgb(24 24 22 / 0.28);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.concept-care-diagram-node {
+  fill: var(--c-ink);
+  font-family: Anybody, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.concept-care-diagram-center {
+  fill: var(--c-muted);
+  font-family: Anybody, sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.concept-care-question {
+  max-width: none;
+  margin: 0;
+  font-style: italic;
+}
+
+@media (max-width: 900px) {
+  .concept-care-visual {
+    width: 100%;
+    max-width: none;
+    margin-right: 0;
+    margin-left: 0;
+    padding-top: calc(1.2 * var(--u));
+  }
+
+  .concept-care-diagram {
+    width: min(100%, calc(20 * var(--u)));
+  }
+}
+
+.concept-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(0.5 * var(--u));
+  padding: 0;
+  list-style: none;
+  font-size: var(--c-note);
+}
+
+.concept-list li {
+  padding-bottom: calc(0.5 * var(--u));
+  border-bottom: 1px solid var(--c-rule-soft);
+}
+
+.concept-list li:last-child {
+  border-bottom: 0;
+}
+
+/*
+ * Color hierarchy: near-black for titles, muted gray for reading text and
+ * captions. Section 02 (origin) stays white on charcoal.
+ */
+.concept {
+  color: var(--c-ink);
+}
+
+.concept-num,
+.concept-heading {
+  color: var(--c-white);
+}
+
+.concept-num {
+  opacity: 1;
+}
+
+.concept-body,
+.concept-body--lead,
+.concept-future-quote {
+  color: var(--c-ink);
+  opacity: 1;
+}
+
+.concept-label,
+.concept-step-copy .concept-label {
+  color: var(--c-muted);
+}
+
+.concept-note,
+.concept-scroll,
+.concept-terms,
+.concept-premise-coda,
+.concept-axis,
+.concept-node-copy,
+.concept-list,
+.concept-arrow,
+.concept-ph-label {
+  color: var(--c-muted);
+  opacity: 1;
+}
+
+.concept-node-copy span {
+  color: var(--c-ink);
+}
+
+.concept-origin,
+.concept-origin .concept-num,
+.concept-origin .concept-heading,
+.concept-origin .concept-label,
+.concept-origin .concept-body,
+.concept-origin .concept-ph-label {
+  color: #ffffff;
+}
+
+.concept-origin .concept-cite,
+.concept-origin .concept-ph-label {
+  color: rgb(255 255 255 / 0.78);
+}
+
+.concept-origin .concept-rule {
+  background: rgb(255 255 255 / 0.55);
+}

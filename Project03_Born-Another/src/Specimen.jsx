@@ -31,6 +31,14 @@ import {
   packPathRestPoints,
 } from './path/pathGrowth.js'
 import { PATH_EXTENSION_DURATION } from './path/pathExtend.js'
+import {
+  createOrganismMaterialUniforms,
+  createOrganismPhysicalMaterial,
+  ORGANISM_PHYSICAL_REVISION,
+  syncOrganismDeformUniforms,
+  syncOrganismMaterialUniforms,
+  syncOrganismPhysicalMaterial,
+} from './material/index.js'
 
 function familyMode(family) {
   if (family === 'crystal') return 1
@@ -147,6 +155,7 @@ function createBodyUniforms(surface, individuality, development, decay, material
     },
     uPathGrowthStrength: { value: 0 },
     uPathGrowthRadius: { value: 0.32 },
+    ...createOrganismMaterialUniforms(),
   }
 }
 
@@ -290,6 +299,12 @@ export default function Specimen({
   pathGrowthRadius = 0.32,
   pathGrowthDuration = PATH_GROWTH_DURATION,
   pathExtensionDuration = PATH_EXTENSION_DURATION,
+  /**
+   * Optional organism material params (see material/materialParams.js). When
+   * set, the living body keeps its lifecycle vertex deformation but renders
+   * with the organism material preview instead of the study fragment shader.
+   */
+  organismMaterial = null,
 }) {
   const bodyRef = useRef(null)
   const residueRef = useRef(null)
@@ -326,7 +341,9 @@ export default function Specimen({
   const isLayeredStudy = visualStudy === 'layered'
   const materialLifecycle = isMaterialLifecycleStudy(studyId)
   const showNoise = visualStudy !== 'surface'
-  const shaders = shadersFor(visualStudy, age)
+  const studyShaders = shadersFor(visualStudy, age)
+  const useOrganismMaterial = Boolean(organismMaterial) && visualStudy !== 'trace'
+  const shaders = studyShaders
   const showBody =
     isLifecycleStudy(studyId)
       ? !isDead && age < 0.995
@@ -337,6 +354,10 @@ export default function Specimen({
   const bodyUniforms = useMemo(
     () => createBodyUniforms(surface, individuality, development, decay, materialParams, age),
     [],
+  )
+  const physicalMaterial = useMemo(
+    () => createOrganismPhysicalMaterial(organismMaterial ?? undefined),
+    [ORGANISM_PHYSICAL_REVISION],
   )
 
   const residueUniforms = useMemo(
@@ -363,6 +384,16 @@ export default function Specimen({
   )
 
   useLayoutEffect(() => {
+    if (useOrganismMaterial) {
+      syncOrganismDeformUniforms(physicalMaterial, {
+        individuality,
+        development,
+        decay,
+        age,
+      })
+      syncOrganismPhysicalMaterial(physicalMaterial, organismMaterial)
+      return
+    }
     const material = bodyRef.current
     if (!material) return
     syncBodyUniforms(material, {
@@ -392,7 +423,15 @@ export default function Specimen({
     isMaterialStudy,
     materialLifecycle,
     isLayeredStudy,
+    useOrganismMaterial,
+    organismMaterial,
+    physicalMaterial,
   ])
+
+  useLayoutEffect(() => {
+    if (useOrganismMaterial) return
+    syncOrganismMaterialUniforms(bodyRef.current, organismMaterial)
+  }, [useOrganismMaterial, organismMaterial, showBody, visualStudy])
 
   useLayoutEffect(() => {
     const material = bodyRef.current
@@ -448,6 +487,32 @@ export default function Specimen({
   }, [showResidue, individuality, decay, trace, age, preserved])
 
   useFrame(({ clock }) => {
+    if (useOrganismMaterial) {
+      const deform = physicalMaterial.userData.deformUniforms
+      if (
+        visualStudy === 'development' ||
+        visualStudy === 'decay' ||
+        visualStudy === 'trace' ||
+        visualStudy === 'material' ||
+        visualStudy === 'layered' ||
+        isLifecycleStudy(studyId)
+      ) {
+        deform.uTime.value = clock.getElapsedTime()
+      }
+      if (deform.uPathPoints && pathStrokesRef.current?.length) {
+        syncPathGrowthUniforms(
+          { uniforms: deform },
+          {
+            strokes: pathStrokesRef.current,
+            growthStrength: pathGrowthStrengthRef.current,
+            growthRadius: pathGrowthRadiusRef.current,
+            growthDuration: pathGrowthDurationRef.current,
+            extensionDuration: pathExtensionDurationRef.current,
+          },
+        )
+      }
+      return
+    }
     const mat = bodyRef.current
     if (!mat) return
     if (
@@ -474,7 +539,13 @@ export default function Specimen({
 
   return (
     <group>
-      {showBody && (
+      {showBody && useOrganismMaterial ? (
+        <mesh renderOrder={0}>
+          <sphereGeometry args={[1, 128, 128]} />
+          <primitive object={physicalMaterial} attach="material" />
+        </mesh>
+      ) : null}
+      {showBody && !useOrganismMaterial ? (
         <mesh renderOrder={0}>
           <sphereGeometry args={[1, 128, 128]} />
           <shaderMaterial
@@ -488,7 +559,7 @@ export default function Specimen({
             toneMapped={false}
           />
         </mesh>
-      )}
+      ) : null}
 
       {showResidue && (
         <mesh scale={1.004} renderOrder={1}>

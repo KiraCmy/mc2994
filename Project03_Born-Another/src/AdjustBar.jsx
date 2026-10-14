@@ -2,9 +2,52 @@ import { useState } from 'react'
 import { MATERIAL_FAMILIES } from './surfaceParams.js'
 import { SCATTER_GROWTH_TYPES } from './scatter/scatterParams.js'
 import {
+  MATERIAL_DIAGNOSTIC_MODES,
+  MATERIAL_OPTICAL_MODES,
+  ORGANISM_MATERIAL_SLIDERS,
+} from './material/materialParams.js'
+import {
   PARTICLE_COUNT_MAX,
   PARTICLE_COUNT_MIN,
+  PARTICLE_FIELD_COMPLEXITY_MAX,
+  PARTICLE_FIELD_COMPLEXITY_MIN,
+  PARTICLE_FIELD_THICKNESS_MAX,
+  PARTICLE_FIELD_THICKNESS_MIN,
+  PARTICLE_TRAIL_LENGTH_MAX,
+  PARTICLE_TRAIL_LENGTH_MIN,
 } from './particle/particleParams.js'
+import {
+  LSYSTEM_ANGLE_MAX,
+  LSYSTEM_ANGLE_MIN,
+  LSYSTEM_BRANCH_ROTATION_MAX,
+  LSYSTEM_BRANCH_ROTATION_MIN,
+  LSYSTEM_DEPTH_MAX,
+  LSYSTEM_DEPTH_MIN,
+  LSYSTEM_LENGTH_MAX,
+  LSYSTEM_LENGTH_MIN,
+  LSYSTEM_RANDOMNESS_MAX,
+  LSYSTEM_RANDOMNESS_MIN,
+  LSYSTEM_BASE_THICKNESS_MIN,
+  LSYSTEM_BASE_THICKNESS_MAX,
+  LSYSTEM_TAPER_MIN,
+  LSYSTEM_TAPER_MAX,
+  LSYSTEM_CHILD_RATIO_MIN,
+  LSYSTEM_CHILD_RATIO_MAX,
+} from './lsystem/lsystemParams.js'
+
+const SEED_SLIDER = {
+  key: 'seed',
+  label: 'Seed',
+  min: 0,
+  max: 999999,
+  step: 1,
+  integers: true,
+}
+
+function withSeed(sliders) {
+  if (sliders.some((slider) => slider.key === 'seed')) return sliders
+  return [SEED_SLIDER, ...sliders]
+}
 
 const SURFACE_SLIDERS = [
   { key: 'fresnelPower', label: 'Fresnel', min: 1, max: 6, step: 0.05 },
@@ -107,9 +150,34 @@ const PARTICLE_SLIDERS = [
     label: 'Particle Count',
     min: PARTICLE_COUNT_MIN,
     max: PARTICLE_COUNT_MAX,
-    step: 50,
+    step: 500,
     integers: true,
   },
+  {
+    key: 'fieldThickness',
+    label: 'Field Thickness',
+    min: PARTICLE_FIELD_THICKNESS_MIN,
+    max: PARTICLE_FIELD_THICKNESS_MAX,
+    step: 0.01,
+  },
+  {
+    key: 'fieldComplexity',
+    label: 'Field Complexity',
+    min: PARTICLE_FIELD_COMPLEXITY_MIN,
+    max: PARTICLE_FIELD_COMPLEXITY_MAX,
+    step: 0.01,
+  },
+  {
+    key: 'trailLength',
+    label: 'Trail Length',
+    min: PARTICLE_TRAIL_LENGTH_MIN,
+    max: PARTICLE_TRAIL_LENGTH_MAX,
+    step: 0.01,
+  },
+  { key: 'sizeVariation', label: 'Size Variation', min: 0, max: 1, step: 0.01 },
+  { key: 'brightnessVariation', label: 'Brightness Variation', min: 0, max: 1, step: 0.01 },
+  { key: 'colorInfluence', label: 'Color Influence', min: 0, max: 1, step: 0.01 },
+  { key: 'pulseStrength', label: 'Pulse Strength', min: 0, max: 1, step: 0.01 },
 ]
 
 function formatValue(slider, value) {
@@ -122,37 +190,37 @@ function formatValue(slider, value) {
 
 function controlsForStudy(studyId) {
   if (studyId === 'individuality') {
-    return { sliders: IDENTITY_SLIDERS, colors: IDENTITY_COLORS, families: null, modes: null }
+    return { sliders: withSeed(IDENTITY_SLIDERS), colors: IDENTITY_COLORS, families: null, modes: null }
   }
   if (studyId === 'development') {
-    return { sliders: DEVELOPMENT_SLIDERS, colors: [], families: null, modes: null }
+    return { sliders: withSeed(DEVELOPMENT_SLIDERS), colors: [], families: null, modes: null }
   }
   if (studyId === 'decay') {
-    return { sliders: DECAY_SLIDERS, colors: DECAY_COLORS, families: null, modes: null }
+    return { sliders: withSeed(DECAY_SLIDERS), colors: DECAY_COLORS, families: null, modes: null }
   }
   if (studyId === 'trace') {
-    return { sliders: TRACE_SLIDERS, colors: TRACE_COLORS, families: null, modes: null }
+    return { sliders: withSeed(TRACE_SLIDERS), colors: TRACE_COLORS, families: null, modes: null }
   }
   if (studyId === 'lifecycle') {
-    return { sliders: LIFECYCLE_SLIDERS, colors: [], families: null, modes: null }
+    return { sliders: withSeed(LIFECYCLE_SLIDERS), colors: [], families: null, modes: null }
   }
   if (studyId === 'material') {
-    return { sliders: MATERIAL_SLIDERS, colors: [], families: MATERIAL_FAMILIES, modes: null }
+    return { sliders: withSeed(MATERIAL_SLIDERS), colors: [], families: MATERIAL_FAMILIES, modes: null }
   }
   if (studyId === 'behavior') {
-    return { sliders: BEHAVIOR_SLIDERS, colors: [], families: MATERIAL_FAMILIES, modes: null }
+    return { sliders: withSeed(BEHAVIOR_SLIDERS), colors: [], families: MATERIAL_FAMILIES, modes: null }
   }
   if (studyId === 'layered') {
-    return { sliders: LAYERED_SLIDERS, colors: [], families: null, modes: null }
+    return { sliders: withSeed(LAYERED_SLIDERS), colors: [], families: null, modes: null }
   }
-  return { sliders: SURFACE_SLIDERS, colors: SURFACE_COLORS, families: null, modes: null }
+  return { sliders: withSeed(SURFACE_SLIDERS), colors: SURFACE_COLORS, families: null, modes: null }
 }
 
 function controlsForMode(modeId, studyId) {
   if (modeId === 'scatter') {
     return {
       heading: 'Scatter Parameters',
-      sliders: SCATTER_SLIDERS,
+      sliders: withSeed(SCATTER_SLIDERS),
       colors: [],
       families: SCATTER_GROWTH_TYPES,
       familyKey: 'growthType',
@@ -164,7 +232,7 @@ function controlsForMode(modeId, studyId) {
   if (modeId === 'path') {
     return {
       heading: 'Path Parameters',
-      sliders: PATH_SLIDERS,
+      sliders: withSeed(PATH_SLIDERS),
       colors: [],
       families: null,
       modes: null,
@@ -177,11 +245,116 @@ function controlsForMode(modeId, studyId) {
   if (modeId === 'particle') {
     return {
       heading: 'Particle Parameters',
-      sliders: PARTICLE_SLIDERS,
+      sliders: withSeed(PARTICLE_SLIDERS),
       colors: [],
       families: null,
       modes: null,
       actions: [],
+    }
+  }
+  if (modeId === 'material') {
+    return {
+      heading: 'Material Parameters',
+      sliders: withSeed([
+        { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
+        ...ORGANISM_MATERIAL_SLIDERS,
+      ]),
+      colors: [],
+      families: null,
+      modes: MATERIAL_DIAGNOSTIC_MODES,
+      modeKey: 'diagnostic',
+      modeLabel: 'Geometry',
+      opticalModes: MATERIAL_OPTICAL_MODES,
+      actions: [
+        { key: 'mask', label: 'Mask', toggle: true, activeKey: 'showMask' },
+        { key: 'checker', label: 'Checker', toggle: true, activeKey: 'showChecker' },
+      ],
+    }
+  }
+  if (modeId === 'explore') {
+    return {
+      heading: 'Explore Parameters',
+      sliders: withSeed([{ key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 }]),
+      colors: [],
+      families: null,
+      modes: null,
+      actions: [],
+    }
+  }
+  if (modeId === 'lsystem') {
+    return {
+      heading: 'L-System Parameters',
+      sliders: withSeed([
+        { key: 'age', label: 'Age', min: 0, max: 1, step: 0.01 },
+        {
+          key: 'depth',
+          label: 'Recursion Depth',
+          min: LSYSTEM_DEPTH_MIN,
+          max: LSYSTEM_DEPTH_MAX,
+          step: 1,
+          integers: true,
+        },
+        {
+          key: 'angle',
+          label: 'Branch Angle',
+          min: LSYSTEM_ANGLE_MIN,
+          max: LSYSTEM_ANGLE_MAX,
+          step: 1,
+        },
+        {
+          key: 'length',
+          label: 'Segment Length',
+          min: LSYSTEM_LENGTH_MIN,
+          max: LSYSTEM_LENGTH_MAX,
+          step: 0.01,
+        },
+        {
+          key: 'branchRotation',
+          label: 'Branch Rotation',
+          min: LSYSTEM_BRANCH_ROTATION_MIN,
+          max: LSYSTEM_BRANCH_ROTATION_MAX,
+          step: 1,
+        },
+        {
+          key: 'randomness',
+          label: 'Randomness',
+          min: LSYSTEM_RANDOMNESS_MIN,
+          max: LSYSTEM_RANDOMNESS_MAX,
+          step: 0.01,
+        },
+        {
+          key: 'baseThickness',
+          label: 'Base Thickness',
+          min: LSYSTEM_BASE_THICKNESS_MIN,
+          max: LSYSTEM_BASE_THICKNESS_MAX,
+          step: 0.001,
+        },
+        {
+          key: 'taperStrength',
+          label: 'Taper Strength',
+          min: LSYSTEM_TAPER_MIN,
+          max: LSYSTEM_TAPER_MAX,
+          step: 0.01,
+        },
+        {
+          key: 'childThicknessRatio',
+          label: 'Child Thickness Ratio',
+          min: LSYSTEM_CHILD_RATIO_MIN,
+          max: LSYSTEM_CHILD_RATIO_MAX,
+          step: 0.01,
+        },
+      ]),
+      colors: [],
+      families: null,
+      modes: null,
+      actions: [
+        {
+          key: 'debug',
+          label: 'Debug',
+          toggle: true,
+          activeKey: 'showDebug',
+        },
+      ],
     }
   }
   const studyControls = controlsForStudy(studyId)
@@ -199,6 +372,9 @@ export default function AdjustBar({ modeId = 'shader', study, params, onChange }
   const { sliders, colors, families, modes, actions } = controls
   const familyKey = controls.familyKey ?? 'family'
   const familyLabel = controls.familyLabel ?? 'Material family'
+  const modeKey = controls.modeKey ?? 'mode'
+  const modeLabel = controls.modeLabel ?? 'Layer visibility'
+  const opticalModes = controls.opticalModes ?? null
 
   return (
     <form
@@ -210,9 +386,9 @@ export default function AdjustBar({ modeId = 'shader', study, params, onChange }
           <p className="adjust-heading">{heading}</p>
 
           {modes && (
-            <div className="adjust-families" role="tablist" aria-label="Layer visibility">
+            <div className="adjust-families" role="tablist" aria-label={modeLabel}>
               {modes.map((mode) => {
-                const active = params.mode === mode.id
+                const active = params[modeKey] === mode.id
                 return (
                   <button
                     key={mode.id}
@@ -220,7 +396,27 @@ export default function AdjustBar({ modeId = 'shader', study, params, onChange }
                     role="tab"
                     aria-selected={active}
                     className={`adjust-family${active ? ' is-active' : ''}`}
-                    onClick={() => onChange('mode', mode.id)}
+                    onClick={() => onChange(modeKey, mode.id)}
+                  >
+                    {mode.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {opticalModes && (
+            <div className="adjust-families" role="tablist" aria-label="Optical test">
+              {opticalModes.map((mode) => {
+                const active = (params.optical ?? 'reflection') === mode.id
+                return (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={`adjust-family${active ? ' is-active' : ''}`}
+                    onClick={() => onChange('optical', mode.id)}
                   >
                     {mode.label}
                   </button>
@@ -284,7 +480,19 @@ export default function AdjustBar({ modeId = 'shader', study, params, onChange }
                     ? active
                       ? 'Draw · On'
                       : 'Draw · Off'
-                    : action.label
+                    : action.toggle && action.key === 'debug'
+                      ? active
+                        ? 'Debug · On'
+                        : 'Debug · Off'
+                      : action.toggle && action.key === 'mask'
+                        ? active
+                          ? 'Mask · On'
+                          : 'Mask · Off'
+                        : action.toggle && action.key === 'checker'
+                          ? active
+                            ? 'Checker · On'
+                            : 'Checker · Off'
+                          : action.label
                 return (
                   <button
                     key={action.key}

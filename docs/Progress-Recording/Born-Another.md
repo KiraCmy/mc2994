@@ -295,3 +295,266 @@ Particle Parameters use the same floating overlay: **Age** scrubs the shared clo
 Particle in early development (age 0.19, count 16000): a dense glowing grit floats just above the irregular membrane while Age and Particle Count sit in the floating overlay.
 
 ![[born-another-particle-surface-layer.jpg]]
+
+## Step 2 — Near-surface volumetric field
+
+Step 1 was a thin coating. Step 2 keeps the same surface-aware attachment and expands it into a soft volume around the organism: each particle still rides the deformed membrane, but carries an individual offset along its local surface normal.
+
+### Height distribution
+
+Rest samples stay on the unit sphere. A deterministic per-particle height in `[0, 1]` is biased so the field stays dense at the body and thins outward—most grit remains very close, some floats at a moderate distance, and only a small fringe reaches the outer shell. Height is scaled by **Field Thickness**; a small base clearance keeps the densest layer from burying into the membrane. Outer particles fade slightly so the silhouette still reads as the irregular host rather than a round cloud.
+
+### Controls
+
+Particle Parameters add **Field Thickness** beside Age and Particle Count. Age, Animate / Space, and New Life are unchanged. Trails, AGE-driven particle behavior, Path interaction, and particle escape are not part of this step.
+
+Particle in early development (age 0.23, count 16000, Field Thickness 0.45): a soft volumetric grit stays dense at the membrane and thins outward while still following the irregular silhouette; Age, Particle Count, and Field Thickness sit in the floating overlay.
+
+![[born-another-particle-volumetric-field.jpg]]
+
+## Step 3 — Spatially varying vector field
+
+Step 2 filled a soft volume around the body. Step 3 replaces uniform or weakly differentiated motion with a **position-dependent 3D vector field** so the grit reveals invisible streams, bends, and local circulation while staying associated with the organism.
+
+### Flow structure
+
+The field is sampled in rest space (same unit-sphere frame as attachment), so nearby particles move coherently. A low-frequency noise layer sets a few broad flow regions with different directions; a curl-style component adds subtle local swirling. Motion is smooth and organic—no per-frame jitter. Flow is projected mostly onto the surface tangent so particles stream along the membrane rather than escaping; a light vortex and height breath keep the volume alive without trails or Path coupling.
+
+### Field Complexity
+
+Particle Parameters add **Field Complexity** beside Age, Particle Count, and Field Thickness. Low values keep a few wide streams; higher values tighten spatial frequency, strengthen swirl, and introduce more bends. Volumetric height distribution from Step 2 is unchanged. Trails, AGE-driven particle life, Path interaction, and full escape remain later work.
+
+Particle in early development (age 0.06, count 16000, Field Thickness 0.45, Field Complexity 1.00): the volumetric grit streams along a structured near-surface field while Age and the field sliders sit in the floating overlay.
+
+![[born-another-particle-vector-field.jpg]]
+
+## Step 4 — Living currents, trails, and a fine-grained field
+
+Step 3 gave the grit direction, but motion still read as a uniform drift with independent particles. Step 4 rebuilds particle motion as currents that run across the deformed body, then refines how the field looks so collective density, not individual dots, defines the structure. Organism geometry, AGE deformation, the body shader, and the palette are unchanged.
+
+### GPU currents on the deformed surface
+
+Each particle's rest point now lives in a GPU simulation texture (`GPUComputationRenderer`) and is advected every frame, rather than being offset by a fixed sinusoidal stream. The velocity is built from the body's own live relief (macro morphology plus micro displacement). Most of the flow comes from a **stream function**—relief, a slowly drifting regional field, and finer eddies—rotated into its tangent (n × ∇ψ). That field is divergence-free, so currents circulate, wrap bulges, and shear past each other without draining into sinks. A weak downhill term lets particles gather in dents and part over bulges, giving local convergence and divergence. Particles re-seed after a lifespan with a soft fade, and the vertex shader places every rest point on the deformed surface exactly like the body, so the field follows changing normals and curvature as AGE moves. Neighbouring particles move in nearly the same direction (mean cosine ≈ 0.83) while distant ones are uncorrelated, so the motion reads as spatially varying streams rather than rotation.
+
+### Motion trails
+
+A short history of the simulation state is recorded into a ring buffer, and each particle can draw a thin, camera-facing ribbon through its actual recent positions, placed on the current surface and fading toward the tail. **Trail Length** controls the span; it now defaults to **0** after the streaks proved too literal.
+
+### Appearance variation
+
+Stable per-particle random values drive appearance only: **Size Variation** (85% fine grains, 15% slightly larger), **Brightness Variation** (mostly faint, a few brighter), **Color Influence** (faint tints from the organism's own rim cyan, accent orange, and lower pink, white staying dominant), and **Pulse Strength** (slow breathing, each particle on its own 7–21 s period and phase). Grain size dropped to a finer base radius with reduced glow, and on-screen size is capped so particles stay pinpoint-sized when the camera approaches in Explore.
+
+### Density and count
+
+A second simulation output computes a density value per particle from the same stream function, banded into lanes and grouped by a broad patch field; each particle shows only where density exceeds its own fixed threshold, and re-seeding favours denser points. Dense lanes therefore flow with the currents while gaps stay quiet. The default count rose to 20000 and **Particle Count** now reaches **120000**, using a lighter grain mesh to keep large counts real-time.
+
+Particle in early development (age 0.05, count 116000, Field Thickness 0.23, Field Complexity 1.00, Trail Length 0.07, Size Variation 0.49, Brightness Variation 0.96, Color Influence 1.00, Pulse Strength 1.00): a dense, fine-grained field streams over the irregular membrane, with tinted grains catching the orange and cyan of the body; all particle controls sit in the floating overlay.
+
+![[born-another-particle-living-currents.jpg]]
+
+
+# BornAnother_L-system
+
+Top-level **L-System** sits beside Shader, Scatter, Path, Particle, and Explore. Unlike those modes, the first L-System passes are **independent of the organism**: no Specimen body, Scatter, Path, or Particle layers. The goal is a modular 3D branching generator that can later attach to the living surface without rewriting the core expand / turtle pipeline.
+
+## Step 1 — Standalone tab and basic branching
+
+L-System was added as a new mode with the same HUD tab pattern and floating parameter overlay. A modular package under `src/lsystem/` owns params, string expansion, turtle interpretation, and the R3F field. The first grammar pass and line rendering proved the tab shell; controls were **Recursion Depth**, **Branch Angle**, and **Segment Length**.
+
+Early frames still read mostly as a trunk with weak side twigs when tip symbols did not redraw as full child forks. That grammar issue is fixed in Step 2.
+
+L-System Step 1 (depth 2): a simple recursive fork on the pale field—standalone branching before organism integration.
+
+![[born-another-lsystem-basic.jpg]]
+
+## Step 2 — Hierarchical structure, tapered branches, framing
+
+Visualization moved from thin lines to **dark gray tapered cylinders** (thicker at the root, thinner at the tips). The production was rewritten to a standard recursive grammar with turtle push/pop:
+
+- axiom: `F`
+- rule: `F → F[+F][-F]` (later extended for 3D in Step 3)
+
+Every `F` rewrites into a segment plus child `F` tips, so depths **1–5** each add a clear hierarchy rather than decorating a single spine. The structure is auto-framed in the viewport so depth / angle / length remain readable at larger display size. Existing depth, angle, and length controls stay wired.
+
+L-System Step 2 (depth 4): a hierarchical dark tree with tapering limbs filling the frame; Recursion Depth, Branch Angle, and Segment Length drive the form.
+
+![[born-another-lsystem-hierarchy.jpg]]
+
+## Step 3 — 3D axial rotation and seeded randomness
+
+Branches no longer stay in one plane. On each `[` push, the turtle rolls around the current growth axis by **Branch Rotation** × sibling index so successive forks leave the parent plane. A **Randomness** slider jitters branch angles and segment lengths using the shared HUD **Seed** (deterministic mulberry32), so the same seed repeats and a new seed reshuffles the tree. Recursive hierarchy and the earlier controls remain; organism attachment is still later work.
+
+L-System Parameters now include Recursion Depth, Branch Angle, Segment Length, **Branch Rotation**, and **Randomness**.
+
+L-System Step 3 (depth 4, Branch Rotation 90, Randomness 0.25): a spatially distributed 3D hierarchy with tapered dark branches; axial twist and seeded jitter open the crown off-plane.
+
+![[born-another-lsystem-3d-branching.jpg]]
+
+## Step 4 — Surface-attached vascular web on the living organism
+
+The L-System leaves free space and grows **on the organism's membrane**. The shared Specimen body returns in this tab (Study 06 lifecycle visuals), and the branching becomes a fine white vascular web that radiates from a few growth hubs, forks progressively, and tapers to hairlines—closer to veins under a translucent skin than to a tree.
+
+### Growth on the surface
+
+Branches are traced on the rest-space unit sphere: each hub sends out roughly twenty radial filaments, and each filament spawns side branches that leave nearly parallel to their parent before curving away. Four hubs are spread around the body (a seeded, rotated tetrahedron) so a web is visible from any viewing angle. Topology depends only on SEED and the shape sliders, so the same seed always repeats the same network.
+
+### Attached through every deformation
+
+Earlier passes deformed branch points on the CPU and drifted off the surface while the form breathed and morphed. Veins are now deformed **on the GPU with the body's own shader code**: the same macro morphology (AGE + SEED), breathing micro-displacement (time), and late decay warp. Each vein point is also snapped to the exact triangle the body rasterizes, so it cannot sink below the visible membrane. When the organism stretches, breathes, or warps, the web moves with it frame by frame.
+
+### Hierarchy and thickness
+
+Ribbons carry per-point width: primaries are thickest at the hub, each child starts thinner than its parent at the branch point, and every branch tapers toward its tip. **Base Thickness**, **Taper Strength**, and **Child Thickness Ratio** control this, alongside the existing Recursion Depth, Branch Angle, Segment Length, Branch Rotation, and Randomness.
+
+### AGE lifecycle
+
+An **Age** slider in L-System Parameters drives the shared global AGE.
+
+- **0–0.5:** a growth front spreads outward from each hub. Primaries lead and finer levels follow.
+- **0.5–0.7:** the full network.
+- **0.7–1:** fine branches thin, retreat, and break into fragments first, leaving faint residual traces of the primaries.
+
+Scrubbing backward gives identical results.
+
+L-System Step 4, early growth (age 0.18): short primaries radiate from a hub with only a few side branches, already following the lumpy membrane.
+
+![[born-another-lsystem-surface-growth.jpg]]
+
+L-System Step 4, mature web (age 0.55): a dense radial vascular network attached to the deformed organism; the L-System Parameters overlay shows Age and the thickness controls.
+
+![[born-another-lsystem-surface-web.jpg]]
+
+L-System Step 4, bold variant (age 0.15, Recursion Depth 4, Branch Angle 40, Segment Length 1.10, Branch Rotation 55, Randomness 0.29, Base Thickness 0.03, Taper Strength 1.00, Child Thickness Ratio 0.36): pushing thickness and taper turns two of the hubs into heavy, tapering root-like webs that still wrap the lumpy membrane.
+
+![[born-another-lsystem-surface-thick.jpg]]
+
+## Step 5 — Radial vein units with contact, and a life animation
+
+The web is rebuilt as separate **radial vein units**. The earlier fan-like hubs read like sea anemones, so I first fixed the hierarchy and then grew it radially again, this time with branches that respect each other's space.
+
+### Hierarchy first
+
+Each branch is a single continuous vein. Secondaries sprout at distributed positions along a primary, never from the hub itself. They leave close to the parent's direction, then gradually curve away to their own side. Tertiaries grow the same way from secondaries. Width tapers continuously: each child starts thinner than its parent at the branch point and ends in a smooth point.
+
+### Radial units
+
+Ten hubs are spread evenly over the body (a seeded Fibonacci distribution). From each hub, five to seven primaries radiate in different directions, evenly spaced around the hub with a little seeded variation. Every primary carries its own secondaries and tertiaries.
+
+### Branches stop when they meet
+
+All branches of all units grow together in time, in small steps over the rest sphere. Finer levels start later, matching the visible growth front. Before each step, a branch checks for other branches nearby. If it would come within a small gap of one, it stops for good and its tip still tapers to a point. The only branch it ignores is the one it sprouted from. Whichever branch reaches a spot first keeps it, so:
+
+- neighbouring branches fill the space between primaries without crossing;
+- units grow until they meet the veins of the next unit, leaving the surface divided into territories.
+
+The network still follows every AGE deformation of the organism through the body's own shader code, and the same SEED always gives the same network.
+
+### Space bar: birth to death
+
+In the L-System tab, the **space bar** (or the new **Animate** button) plays the whole life. The first press starts from birth (AGE 0), and AGE then runs to death in about sixteen seconds:
+
+- hubs sprout and the radial veins grow out;
+- the units reach maturity and meet each other;
+- the veins thin and fragment as the body decays.
+
+Pressing again pauses, and the next press resumes. After death, the space bar starts a new life. Moving the Age slider takes manual control back.
+
+L-System Step 5 (age 0.50, SEED 437201, Recursion Depth 5, Branch Angle 30, Segment Length 0.82, Branch Rotation 78, Randomness 0.85, Base Thickness 0.02, Taper Strength 0.18, Child Thickness Ratio 0.85): radial units on the mature organism. Each hub sends primaries in several directions, finer branches fill the gaps between them without overlapping, and growth stops where neighbouring units meet.
+
+![[born-another-lsystem-radial-units.jpg]]
+
+
+# Born Another — Material
+
+Top-level **Material** sits after L-System. It is a dedicated material study for the living organism, separate from Shader **Study 07 — Material**: the organism geometry, AGE deformation, viewport, camera controls, Birth–Death clock, Animate / Space, and New Life are all shared with the other living tabs, and only the body's surface material changes. Other tabs keep their existing materials untouched.
+
+## Step 1 — Tab structure and basic material controls
+
+The first pass sets up the structure only; complex effects such as real transmission, refraction, or thickness are later work.
+
+### A shareable material module
+
+The material lives in its own module under `src/material/`, independent of any tab:
+
+- `materialParams.js`: default values and slider definitions;
+- `organismMaterial.js`: creates the material uniforms and syncs them from parameter values;
+- `organismMaterialShader.js`: the preview fragment shader.
+
+The shared Specimen body accepts an optional organism material. When it is set, the body keeps the vertex shader of its current life stage, so every AGE deformation is identical, and only the fragment shader is swapped for the material preview. At death the existing trace residue takes over as before. Because the module is decoupled from the Material tab, any other tab can adopt the same material later by passing the same parameters.
+
+### Preview shading
+
+The preview keeps the organism palette (body gradient from the upper to the lower color, rim color at the edge) and adds four simple, readable responses:
+
+- **Core Opacity:** how solid the body reads where it faces the camera.
+- **Shell Transmission:** how see-through the edge shell is; high values let the silhouette thin to a glassy outline.
+- **Roughness:** the softness of the highlight and the width of the rim glow; low values give a small sharp highlight, high values a broad matte sheen.
+- **IOR:** sets the Fresnel reflectance at the edge, so higher values give a stronger rim.
+
+### Controls
+
+Material Parameters use the same floating overlay as the other tabs: **Age** (shared global AGE, pauses playback when moved), **Core Opacity**, **Shell Transmission**, **Roughness**, and **IOR**.
+
+Material Step 1 (age 0.50, Core Opacity 0.72, Shell Transmission 0.55, Roughness 0.42, IOR 1.38): the mature organism rendered with the material preview. A cyan Fresnel rim and a soft highlight sit over the pale-to-pink body gradient, and the Material Parameters overlay shows the four material controls beside Age.
+
+![[born-another-material-tab-basic.jpg]]
+
+Material Step 1, matte variant (age 0.22, Core Opacity 1.00, Shell Transmission 1.00, Roughness 0.95, IOR 1.77): the organism in development with a fully solid core and a high roughness. The highlight spreads into a broad soft sheen over the cyan top, and the body reads as a dense, velvety form fading to pink below.
+
+![[born-another-material-matte-development.jpg]]
+
+## Reflective glass
+
+The same organism, AGE deformation, and seed now read as dense reflective glass. The surface mirrors a dark cyan-and-pink studio and also looks through it, so the body keeps physical mass while a few regions open into clearer glass. Those clearer pockets stay local. The rest of the form stays dark and reflective, and the whole organism does not wash out into a pale or matte surface.
+
+Reflections follow the folds as flowing bands. Each band has a wide colored shoulder and a narrower, brighter core, and that core strengthens and softens along the surface. Some stretches read as broad pink or cyan flows; others tighten into thinner streaks. The dim gaps between them stay dark, so the bright flows keep their contrast.
+
+The four material controls are unchanged. **Core Opacity** weights how much of the dense mask stays reflective. **Shell Transmission** opens the glass toward refraction. **Roughness** blurs the reflected studio. **IOR** sets the Fresnel strength at the edge. On the Material tab the camera sits farther back than on the other tabs, so the mature organism fits inside the frame and clears the navigation and the Birth–Death line. Leaving the tab restores the usual view. Shader Study 07 and the other tabs keep their own materials.
+
+Material, reflective glass (age 0.50, SEED 884731, Core Opacity 0.70, Shell Transmission 0.80, Roughness 0.18, IOR 1.50): the mature organism. Dark reflective mass carries cyan and pink flows of differing width and softness, with a few clearer openings inside the form.
+
+![[born-another-material-reflective-glass.jpg]]
+
+
+# Born Another — WORLD V2
+
+WORLD V2 reframes BORN ANOTHER as a finite procedural world that can be encountered from outside and entered. It is isolated from the earlier Shader Study architecture: the Study tabs remain intact, while WORLD V2 owns its geometry, camera transition, environment, postprocessing, and lifecycle integration.
+
+## Exterior / interior vertical slice
+
+One seeded procedural surface defines both sides of the organism. The exterior uses the outward-facing body and membrane; the interior renders the back side of that same surface, with inward-facing crystalline structures. **Enter** moves the camera smoothly through the membrane into the inner world, where dragging looks around; **Exit** returns to the exterior. The exterior organism can also be rotated by dragging and continues its slow display rotation after death.
+
+## Deterministic Life Engine
+
+The independent Life Engine advances at a fixed 30 Hz timestep through a finite 36-second life. AGE moves irreversibly from 0 to 1 while persistent growth, mineralization, decay, memory, intervention history, and spatial growth state accumulate. At AGE 1 the life is terminal: stepping and new interventions stop, breathing ends, and the final structure remains visible. A Seed plus intervention history and simulation step reproduces the same state exactly.
+
+Development controls provide **Play / Pause**, **Restart**, Seed entry, and a read-only AGE display. Restart replays the same life and history from birth; a new Seed starts a clean life.
+
+## Minimal Spatial Growth
+
+The surface is divided into a stable seeded lattice of 48 regions, each connected to its five nearest neighbours. Mineral availability accumulates locally and propagates between neighbours. Crossing a threshold creates a persistent nucleation event, with a maximum of ten active sites. Seven slots are reserved for autonomous nucleation and three remain available for intervention-driven growth, so a later touch can still affect structure.
+
+Each event contains a surface region, birth step, local normal, seeded growth direction, orientation, and scale. Exterior and interior crystals are paired from that same event and consume the same growth history. This moved WORLD V2 beyond revealing only crystals generated at birth: intervention can change which regions eventually nucleate.
+
+## Surface intervention and comparison
+
+A short click on the exterior is raycast onto the organism and mapped to the nearest growth-field region. A temporary luminous ring confirms the touch. The stimulus is recorded permanently at the current simulation step, then gradually raises mineral availability in that region and its neighbours; it never spawns a crystal immediately. Multiple clicks are recorded independently. Pointer movement is treated as rotation rather than intervention, so users can drag and click without the two actions conflicting.
+
+A development-only **Compare** view replays an untouched baseline at the same Seed and AGE. It lists baseline and stimulated region IDs and reports when future crystal locations diverge. **Reset clean trial** clears interventions while retaining the same Seed for another controlled test.
+
+## Background study
+
+The rendering can be compared against four temporary backgrounds without resetting AGE, Seed, camera, or simulation state:
+
+- **A — Light:** flat desaturated cool gray;
+- **B — Dark:** the original black background and current default;
+- **C — Atmospheric:** a quiet blue-gray gradient with no horizon;
+- **D — Shader:** the same `#C5C9D1` background color used by the Shader, Scatter, and Path tabs, with white interface text.
+
+WORLD V2 with the Atmospheric background during spatial mineral growth (Seed 7319, AGE 0.418). Existing lighting, materials, camera, postprocessing, lifecycle, and controls remain unchanged while the background is compared.
+
+![[born-another-world-v2-atmospheric.png]]
+
+## Next morphology study
+
+The current Life Engine nucleation is spatial and persistent, but each new dynamic site still uses simple faceted placeholder geometry. The next proposed step is a constrained crystallographic grammar: one dominant prism with a polygonal cross-section and tapered termination, followed by a small number of angularly constrained secondary crystals. The topology would be derived deterministically from each existing nucleation event and local mineral budget, with staged branch emergence rather than uniform whole-cluster scaling. This morphology work is proposed but not yet implemented.

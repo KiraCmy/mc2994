@@ -14,6 +14,13 @@ body {
 }
 
 .stage {
+  /* Height of the shared header band (logo + mode tabs), for pages that
+     must lay out content below it instead of over it.
+     Viewport units keep Concept / Studies / System / World identical
+     even when a page nests its own size container. */
+  --site-header-h: calc(
+    4.2vh + clamp(1.35rem, 3.6vw, 2.9rem) + clamp(0.8rem, 1.35vw, 1.15rem) * 1.9 + 2.6vh
+  );
   container-type: size;
   position: relative;
   width: 100%;
@@ -34,7 +41,7 @@ body {
   color: #fff;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: clamp(0.8rem, 1.35cqw, 1.15rem);
+  font-size: clamp(0.8rem, 1.35vw, 1.15rem);
   font-weight: 600;
   font-stretch: semi-expanded;
   line-height: 1.55;
@@ -44,12 +51,37 @@ body {
   margin: 0;
 }
 
+/*
+ * Shared site-header band (Concept, System, and pages that opt in).
+ * Slides off on scroll-down and back on scroll-up.
+ */
+.hud.site-hud {
+  --site-hud-slide: 280ms;
+  z-index: 3;
+  right: 0;
+  bottom: auto;
+  left: 0;
+  height: var(--site-header-h);
+  transition: transform var(--site-hud-slide) cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: transform;
+}
+
+.hud.site-hud.is-hidden {
+  transform: translateY(-100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud.site-hud {
+    transition: none;
+  }
+}
+
 .hud-title {
   position: absolute;
-  top: 4.2cqh;
-  left: 3.4cqw;
-  max-width: 68cqw;
-  font-size: clamp(1.05rem, 3.15cqw, 2.55rem);
+  top: 4.2vh;
+  left: 3.4vw;
+  max-width: 68vw;
+  font-size: clamp(1.05rem, 3.15vw, 2.55rem);
   font-weight: 600;
   font-stretch: extra-expanded;
   letter-spacing: 0.06em;
@@ -58,13 +90,14 @@ body {
 
 .hud-modes {
   position: absolute;
-  top: calc(4.2cqh + clamp(1.35rem, 3.6cqw, 2.9rem));
-  left: 3.4cqw;
+  top: calc(4.2vh + clamp(1.35rem, 3.6vw, 2.9rem));
+  left: 3.4vw;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 1.35em;
-  pointer-events: auto;
+  max-width: min(68vw, calc(100% - 16rem));
+  pointer-events: none;
 }
 
 .hud-mode-item {
@@ -80,6 +113,7 @@ body {
   background: transparent;
   cursor: pointer;
   opacity: 0.38;
+  pointer-events: auto;
 }
 
 .hud-mode-item.is-active {
@@ -101,10 +135,63 @@ body {
   outline-offset: 4px;
 }
 
+.hud-study-modes {
+  position: absolute;
+  top: calc(
+    4.2vh + clamp(1.35rem, 3.6vw, 2.9rem) +
+      clamp(0.8rem, 1.35vw, 1.15rem) * 2.7
+  );
+  left: 3.4vw;
+  right: 3.4vw;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.2em;
+  pointer-events: none;
+}
+
+.hud-study-mode-item {
+  position: relative;
+  margin: 0;
+  padding: 0 0 0.3em;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 0.78em;
+  font-stretch: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.32;
+  pointer-events: auto;
+}
+
+.hud-study-mode-item:hover,
+.hud-study-mode-item:focus-visible,
+.hud-study-mode-item.is-active {
+  opacity: 1;
+}
+
+.hud-study-mode-item.is-active::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.hud-study-mode-item:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 4px;
+}
+
 .hud-meta {
   position: absolute;
-  top: 4.2cqh;
-  right: 3.4cqw;
+  top: 4.2vh;
+  right: 3.4vw;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -140,6 +227,16 @@ body {
   position: absolute;
   left: 3.4cqw;
   bottom: 8.5cqh;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35em;
+}
+
+.hud-optical {
+  position: absolute;
+  left: 3.4cqw;
+  bottom: 18cqh;
   display: flex;
   flex-direction: column;
   align-items: flex-start;

@@ -1,5 +1,11 @@
+import {
+  MATERIAL_DIAGNOSTIC_MODES,
+  MATERIAL_OPTICAL_MODES,
+} from './material/materialParams.js'
 import { STUDIES, studyLabel } from './surfaceParams.js'
-import { MODES, isShaderMode } from './modes.js'
+import { isShaderMode, isStudyMode, STUDY_MODES } from './modes.js'
+import SiteHeader from './SiteHeader.jsx'
+import SiteHud from './SiteHud.jsx'
 
 export default function Hud({
   modeId,
@@ -12,6 +18,12 @@ export default function Hud({
   onSelectMode,
   onSelectStudy,
   onToggleAnimate,
+  diagnostic = 'baseline',
+  onSelectDiagnostic,
+  optical = 'claude',
+  onSelectOptical,
+  showChecker = false,
+  onToggleChecker,
 }) {
   const animateLabel = isDead ? 'New Life' : animating ? 'Pause' : 'Animate'
   const showShaderChrome = isShaderMode(modeId)
@@ -19,53 +31,62 @@ export default function Hud({
     showShaderChrome ||
     modeId === 'scatter' ||
     modeId === 'path' ||
-    modeId === 'particle'
+    modeId === 'particle' ||
+    modeId === 'explore' ||
+    modeId === 'lsystem' ||
+    modeId === 'material'
 
   return (
     <div className="hud">
-      <p className="hud-title">Born Another</p>
-
-      <div className="hud-modes" role="tablist" aria-label="Modes">
-        {MODES.map((mode) => {
-          const active = mode.id === modeId
-          return (
+      <SiteHud>
+        <SiteHeader modeId={modeId} onSelectMode={onSelectMode}>
+          <p>
+            Age {Number(age).toFixed(2)}
+            <br />
+            Seed {seed}
+            {stage ? (
+              <>
+                <br />
+                {stage}
+              </>
+            ) : null}
+          </p>
+          {showAnimate ? (
             <button
-              key={mode.id}
               type="button"
-              role="tab"
-              aria-selected={active}
-              className={`hud-mode-item${active ? ' is-active' : ''}`}
-              onClick={() => onSelectMode(mode.id)}
+              className={`hud-animate${animating ? ' is-active' : ''}`}
+              aria-pressed={animating}
+              onClick={onToggleAnimate}
             >
-              {mode.label}
+              {animateLabel}
             </button>
-          )
-        })}
-      </div>
-
-      <div className="hud-meta">
-        <p>
-          Age {Number(age).toFixed(2)}
-          <br />
-          Seed {seed}
-          {stage ? (
-            <>
-              <br />
-              {stage}
-            </>
           ) : null}
-        </p>
-        {showAnimate ? (
-          <button
-            type="button"
-            className={`hud-animate${animating ? ' is-active' : ''}`}
-            aria-pressed={animating}
-            onClick={onToggleAnimate}
-          >
-            {animateLabel}
-          </button>
-        ) : null}
-      </div>
+        </SiteHeader>
+      </SiteHud>
+
+      {isStudyMode(modeId) ? (
+        <div
+          className="hud-study-modes"
+          role="tablist"
+          aria-label="Technical studies"
+        >
+          {STUDY_MODES.map((item) => {
+            const active = item.id === modeId
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`hud-study-mode-item${active ? ' is-active' : ''}`}
+                onClick={() => onSelectMode(item.id)}
+              >
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
 
       {showShaderChrome ? (
         <div className="hud-studies" role="tablist" aria-label="Studies">
@@ -84,6 +105,54 @@ export default function Hud({
               </button>
             )
           })}
+        </div>
+      ) : null}
+
+      {modeId === 'material' ? (
+        <div className="hud-studies" role="tablist" aria-label="Rendering comparison">
+          {MATERIAL_DIAGNOSTIC_MODES.map((item) => {
+            const active = diagnostic === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`hud-study-item${active ? ' is-active' : ''}`}
+                onClick={() => onSelectDiagnostic(item.id)}
+              >
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
+      {modeId === 'material' ? (
+        <div className="hud-optical" role="tablist" aria-label="Optical test">
+          {MATERIAL_OPTICAL_MODES.map((item) => {
+            const active = optical === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`hud-study-item${active ? ' is-active' : ''}`}
+                onClick={() => onSelectOptical(item.id)}
+              >
+                {item.label}
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            className={`hud-study-item${showChecker ? ' is-active' : ''}`}
+            aria-pressed={showChecker}
+            onClick={onToggleChecker}
+          >
+            Checker
+          </button>
         </div>
       ) : null}
 

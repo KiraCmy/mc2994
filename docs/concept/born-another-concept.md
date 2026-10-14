@@ -268,6 +268,107 @@ Possible qualities include:
 The visual language should support the ambiguity between **generated
 object** and **artificial life**.
 
+## AI as an Interpreter of Initial Conditions
+
+This section explores a possible role for AI. It is not yet a finalized
+feature.
+
+The user may begin a new life by entering a short piece of text. That
+text should **not** function as a conventional text-to-3D prompt. The
+user should not be able to describe or request the final appearance of
+the organism.
+
+### Chain of influence
+
+**User Text → AI Interpretation → Latent Life Conditions → Procedural
+System → Artificial Life**
+
+AI acts as an **interpreter** between subjective human language and the
+procedural life system—not as the author or generator of the organism.
+
+### What the text does not do
+
+A line such as:
+
+> "I remember a place that no longer exists."
+
+should not directly produce a nostalgic-looking or otherwise specific
+3D form. Language does not become a blueprint for appearance.
+
+### What the text may become
+
+AI may interpret the text into abstract **life conditions**, for
+example:
+
+-   structural stability;
+-   growth tendency;
+-   symmetry bias;
+-   mutation tendency;
+-   circulation intensity;
+-   attachment / release tendency;
+-   lifespan characteristics;
+-   decay behavior.
+
+These conditions then influence the existing procedural systems without
+directly determining their outcome. Procedural uncertainty remains: the
+same text should not necessarily produce the same organism.
+
+### Who owns the form
+
+**Form = Initial Conditions × Individual Seed × Age × User Intervention**
+
+| Influence | Role |
+|-----------|------|
+| **AI interpretation** | Provides initial conditions from language |
+| **Seed** | Individuality and chance |
+| **AGE** | Autonomous development and mortality |
+| **User intervention** (e.g. Path) | Influence after birth |
+| **Procedural system** | Responsible for the actual form |
+
+This keeps the existing principle:
+
+> **The user influences the beginning, but does not fully control the
+> outcome.**
+
+And suggests a related conceptual line:
+
+> **The user gives a life its origin, but not its form.**
+
+### Why AI belongs conceptually
+
+AI allows subjective human language to become ambiguous initial
+conditions for an artificial life without giving the user direct control
+over its final form. Interpretation serves the life system; it does not
+replace procedural emergence.
+
+### Origin as history
+
+The original text may become part of the life record alongside birth,
+interventions, preserved moments, and death—rather than remaining a
+disposable generation prompt.
+
+Example:
+
+```
+LIFE #027
+
+Origin:
+"I remember a place that no longer exists."
+
+Birth
+↓
+Development
+↓
+User Interventions
+↓
+Preserved Moment
+↓
+Death
+```
+
+The text then belongs to the organism's history and possible lineage,
+not only to the moment of generation.
+
 ## What is intentionally unresolved
 
 The specific procedural rules are not defined yet.
@@ -281,7 +382,15 @@ Future exploration will determine:
 -   what information survives as a trace;
 -   what can be inherited by later generations;
 -   how much randomness, mutation, and environmental influence should
-    exist.
+    exist;
+-   whether text input becomes the primary way of defining initial
+    conditions;
+-   which procedural parameters AI is allowed to influence;
+-   how much semantic interpretation should be visible to the user;
+-   how much variation should exist between organisms generated from the
+    same text;
+-   whether the original text survives as part of the organism's trace
+    or lineage.
 
 These rules should be developed only after the conceptual relationship
 between **life, time, preservation, memory, and lineage** is maintained.

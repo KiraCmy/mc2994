@@ -154,6 +154,74 @@ When unsure whether something belongs here, ask: *Would losing this explanation 
 
 ---
 
+## Explorable Organism / World
+
+**Decision.** BORN ANOTHER evolves from a single-object simulator into an **explorable organism/world**. The organism *is* the world: one finite procedural body, experienced at multiple spatial scales—not multiple organisms, and not a conventional open world.
+
+**Why.** The concept is observation of a life, not navigation of a map. A separate designed interior or a cast of creatures would break the one-life contract. Scale change lets the same systems (form, tissue, growth, stimulus, circulation) become readable as landscape and environment without inventing a second world.
+
+**System logic**
+
+- **One coherent body.** Macro morphology must gradually leave the simple closed sphere: folds, cavities, valleys, lobes, and openings emerge through life processes (`uAge` envelopes + seed-locked structure), not decorative geometric complexity. The silhouette stays one organism.
+- **Three spatial scales** (same entity, different reading distance):
+  1. **OBSERVE** — whole organism; AGE, morphology, shader, growth, and particle field read as one life.
+  2. **SURFACE** — camera approaches until the body reads as landscape; Scatter becomes local terrain/growth, Path becomes growth channels/scars, particle flow becomes spatially readable.
+  3. **INTERNAL** — eventually enter naturally formed cavities/openings; particle circulation becomes an environment (life process), not a separate designed level.
+- **Continuous camera transition.** Prefer OBSERVE → APPROACH → SURFACE → ENTER as one scale continuum. Do not treat “enter” as a separate game mode if avoidable: the organism gradually shifts from object → body → terrain → world.
+- **Same systems, different scale.** AGE owns lifecycle and changing accessibility/morphology; SHADER is tissue/material condition; SCATTER is localized secondary growth / surface landscape; PATH is external stimulus, growth channel, scar; PARTICLE is the internal / near-surface life field and circulation; CAMERA SCALE only changes how these are experienced.
+- **Life continues while exploring.** Exploration does not pause the finite clock. The organism ages as the user moves through it.
+
+**Core principle (unchanged).** The user provides a stimulus; the organism decides how to respond. Scale exploration must not become direct world-editing.
+
+**Implication.** Future camera, cavity, and interior work extend this scale model and the existing AGE / Shader / Scatter / Path / Particle stack. Do not add parallel worlds, multi-organism scenes, or mode-gated interiors that freeze life or replace procedural openings with authored levels.
+
+### System Mind Map
+
+```mermaid
+mindmap
+  root((BORN ANOTHER))
+    Finite Life
+      AGE
+      Birth
+      Growth
+      Mature
+      Decline
+      Death
+    Procedural Organism
+      Macro Morphology
+        Lobes
+        Folds
+        Cavities
+        Openings
+      SHADER
+        Tissue
+        Material
+      SCATTER
+        Secondary Growth
+        Surface Landscape
+      PATH
+        User Stimulus
+        Growth Channel
+        Organism Propagation
+      PARTICLE
+        Life Field
+        Vector Field
+        Circulation
+        Dissipation
+    Exploration
+      Observe
+      Approach
+      Surface
+      Enter
+      Internal
+    User Relationship
+      Influence
+      Cannot Fully Control
+      Choose What Moment to Preserve
+```
+
+---
+
 ## Open / unresolved (record when decided)
 
 - What initial conditions the user may choose beyond seed / family / growth type

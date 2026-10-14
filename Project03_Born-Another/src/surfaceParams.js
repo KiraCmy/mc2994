@@ -73,7 +73,7 @@ export const INITIAL_INDIVIDUALITY = {
 }
 
 export const INITIAL_DEVELOPMENT = {
-  age: 0.5,
+  age: 0,
   speed: 0.32,
   pulseSpeed: 1.1,
   displacement: 0.22,
@@ -81,7 +81,7 @@ export const INITIAL_DEVELOPMENT = {
 }
 
 export const INITIAL_DECAY = {
-  age: 0.78,
+  age: 0,
   decayStart: 0.8,
   edgeSoftness: 0.28,
   boundaryWidth: 0.09,
@@ -92,7 +92,7 @@ export const INITIAL_DECAY = {
 }
 
 export const INITIAL_TRACE = {
-  age: 0.92,
+  age: 0,
   traceScale: 2.9,
   traceThreshold: 0.74,
   internalTrace: 0.42,

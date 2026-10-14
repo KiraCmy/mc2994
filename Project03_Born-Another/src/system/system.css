@@ -1,0 +1,331 @@
+.system-page {
+  --system-margin: 5.2cqw;
+  --system-col-num: 3rem;
+  --system-col-gap: 1.5rem;
+  container-type: size;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color: #171817;
+  background: #f0f0ee;
+}
+
+.system-page__hud {
+  z-index: 3;
+  color: #171817;
+  background: #f0f0ee;
+  border-bottom: 1px solid #c9c9c7;
+}
+
+.system-page__hud.is-scrolled {
+  background: rgb(240 240 238 / 0.96);
+}
+
+.system-page__hud .hud-mode-item.is-active::after {
+  background: rgba(23, 24, 23, 0.88);
+}
+
+.system-page__hud .hud-mode-item:focus-visible {
+  outline-color: rgba(23, 24, 23, 0.88);
+}
+
+.system-page__content {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  padding:
+    calc(var(--site-header-h) + 5.5rem)
+    var(--system-margin)
+    12cqh;
+  scrollbar-width: thin;
+}
+
+.system-page__intro {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.55fr) minmax(0, 1.85fr);
+  gap: 5cqw;
+  align-items: start;
+  padding-bottom: 9cqh;
+  border-bottom: 1px solid rgba(23, 24, 23, 0.26);
+}
+
+.system-page__intro p,
+.system-page__intro h1,
+.system-page__section h2,
+.system-page__section p {
+  margin: 0;
+}
+
+.system-page__intro > p {
+  color: #686b69;
+  font-size: clamp(0.68rem, 0.82cqw, 0.84rem);
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.system-page__intro h1 {
+  box-sizing: border-box;
+  max-width: none;
+  padding-right: clamp(1.25rem, 5cqw, 4rem);
+  font-size: clamp(56px, 5.2vw, 100px);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+  text-align: left;
+}
+
+@media (min-width: 721px) {
+  .system-page__intro h1 {
+    white-space: nowrap;
+  }
+}
+
+.system-page__sections {
+  display: grid;
+}
+
+.system-page__section {
+  display: grid;
+  grid-template-columns: var(--system-col-num) minmax(0, 1fr);
+  column-gap: var(--system-col-gap);
+  row-gap: 0;
+  align-items: baseline;
+  min-height: 28cqh;
+  padding: 6.4cqh 0 7.2cqh;
+  border-bottom: 1px solid rgba(23, 24, 23, 0.2);
+}
+
+.system-page__section > span {
+  grid-column: 1;
+  color: #777a78;
+  font-size: clamp(0.72rem, 0.9cqw, 0.92rem);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1;
+}
+
+.system-page__section > div {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.system-page__section h2 {
+  font-size: clamp(1.3rem, 2.35cqw, 2.6rem);
+  font-weight: 480;
+  letter-spacing: -0.018em;
+}
+
+.system-page__section p {
+  max-width: 44rem;
+  margin-top: 1.4rem;
+  color: #686b69;
+  font-size: clamp(0.84rem, 1.05cqw, 1.08rem);
+  line-height: 1.65;
+}
+
+.system-page__section > .system-page__diagrams {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 2.2rem;
+  margin-top: 2.2rem;
+  min-width: 0;
+}
+
+.system-page__diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* 05 — Care & consequences (proposed exploration) */
+.system-page__section--care {
+  border-bottom: 0;
+}
+
+.system-page__proposed {
+  margin: 0 0 0.85rem;
+  color: #8a8d8a;
+  font-size: clamp(0.62rem, 0.78cqw, 0.78rem);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.system-page__care {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 2.4rem;
+  margin-top: 2.6rem;
+  min-width: 0;
+}
+
+.system-page__care-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.85rem 0.4rem;
+}
+
+.system-page__care-step-wrap {
+  display: flex;
+  flex: 1 1 8.5rem;
+  align-items: stretch;
+  gap: 0.4rem;
+  min-width: min(100%, 8.5rem);
+}
+
+.system-page__care-step-wrap:first-child {
+  flex-basis: 10rem;
+}
+
+.system-page__care-step {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 1rem 0.9rem 1.05rem;
+  border: 1px solid rgba(23, 24, 23, 0.22);
+  border-left: 1px solid rgba(23, 24, 23, 0.45);
+}
+
+.system-page__care-step h3,
+.system-page__care-step p,
+.system-page__care-outcome p,
+.system-page__care-example,
+.system-page__care-questions p {
+  margin: 0;
+}
+
+.system-page__care-step h3 {
+  color: #171817;
+  font-size: clamp(0.78rem, 1cqw, 0.98rem);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.system-page__care-step p {
+  color: #686b69;
+  font-size: clamp(0.74rem, 0.92cqw, 0.92rem);
+  line-height: 1.45;
+}
+
+.system-page__care-arrow {
+  flex: 0 0 auto;
+  align-self: center;
+  color: #9a9d9a;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.system-page__care-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.system-page__care-outcome-rule {
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: rgba(23, 24, 23, 0.18);
+}
+
+.system-page__care-outcome p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.85rem;
+  color: #686b69;
+  font-size: clamp(0.78rem, 0.98cqw, 0.98rem);
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.system-page__care-outcome strong {
+  color: #171817;
+  font-weight: 600;
+}
+
+.system-page__care-example {
+  max-width: 40rem;
+  padding-left: 0.95rem;
+  border-left: 1px solid rgba(23, 24, 23, 0.28);
+  color: #686b69;
+  font-size: clamp(0.84rem, 1.02cqw, 1.02rem);
+  font-style: italic;
+  line-height: 1.6;
+}
+
+.system-page__care-questions {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid rgba(23, 24, 23, 0.18);
+}
+
+.system-page__care-questions li {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr);
+  column-gap: 1rem;
+  align-items: baseline;
+  padding: 1.15rem 0;
+  border-bottom: 1px solid rgba(23, 24, 23, 0.14);
+}
+
+.system-page__care-questions span {
+  color: #8a8d8a;
+  font-size: clamp(0.68rem, 0.82cqw, 0.82rem);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+.system-page__care-questions p {
+  max-width: 44rem;
+  color: #171817;
+  font-size: clamp(0.9rem, 1.15cqw, 1.15rem);
+  line-height: 1.55;
+}
+
+@media (max-width: 720px) {
+  .system-page__content {
+    padding-right: 1.35rem;
+    padding-left: 1.35rem;
+  }
+
+  .system-page__intro,
+  .system-page__section {
+    grid-template-columns: 1fr;
+    gap: 1.2rem;
+  }
+
+  .system-page__intro h1 {
+    padding-right: 0;
+  }
+
+  .system-page__care-step-wrap {
+    flex: 1 1 100%;
+  }
+
+  .system-page__care-arrow {
+    transform: rotate(90deg);
+  }
+
+  .system-page__care-outcome p {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

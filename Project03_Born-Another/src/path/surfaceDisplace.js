@@ -327,16 +327,45 @@ function developmentDisplaceAmount(p, uniforms) {
   return (field * 0.42 + (pulse - 0.5) * 0.1) * displacement * lifeEnvelope * noiseGain
 }
 
+/** Late-life warp — matches decay / particle attachment when age ≥ 0.8. */
+function lateWarpAmount(macroPos, uniforms) {
+  const age = uniforms.age ?? 0
+  if (age < 0.8) return 0
+  const seed = uniforms.seed ?? 1
+  const decayScale = uniforms.decayScale ?? 1.35
+  const decayDisplacement = uniforms.decayDisplacement ?? 0.055
+  const lateWarp = Math.max(uniforms.lateWarp ?? 1, 0.001)
+  const decayNoise = fbm(
+    macroPos[0] * decayScale + seed * 0.41,
+    macroPos[1] * decayScale + seed * 0.17,
+    macroPos[2] * decayScale + 2.3,
+  )
+  const brittle = fbm(
+    macroPos[0] * decayScale * 2.8 + seed * 0.11,
+    macroPos[1] * decayScale * 2.8 + 5.2,
+    macroPos[2] * decayScale * 2.8 + 1.4,
+  )
+  const warpT = Math.min(1, Math.max(0, lateWarp - 0.7))
+  const warpField =
+    decayNoise * (1 - warpT) + Math.abs(brittle - 0.5) * 2 * warpT
+  const instability = smoothstep(0.65, 1, age)
+  return (warpField * 2 - 1) * decayDisplacement * instability * lateWarp
+}
+
 /**
  * Map a rest sample on the unit sphere to the deformed body surface.
  * Returns { position, normal } in object space.
+ * Matches Specimen development / decay displace (macro + micro + late warp).
  */
 export function deformRestPoint(rest, uniforms, surfaceOffset = 0) {
-  const offset = macroMorphologyOffset(rest, uniforms.age, uniforms.seed)
+  // Keep seed as a float — GLSL uSeed is not floored.
+  const seed = Number(uniforms.seed) || 1
+  const age = Number(uniforms.age) || 0
+  const offset = macroMorphologyOffset(rest, age, seed)
   const macroPos = [rest[0] + offset[0], rest[1] + offset[1], rest[2] + offset[2]]
   const restN = normalize3(rest)
 
-  // Finite-difference macro normal (matches shader).
+  // Finite-difference macro normal (matches shader e=0.07).
   const e = 0.07
   const up = Math.abs(restN[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]
   const t = normalize3([
@@ -352,13 +381,13 @@ export function deformRestPoint(rest, uniforms, surfaceOffset = 0) {
   const c = macroPos
   const oT = macroMorphologyOffset(
     [rest[0] + t[0] * e, rest[1] + t[1] * e, rest[2] + t[2] * e],
-    uniforms.age,
-    uniforms.seed,
+    age,
+    seed,
   )
   const oB = macroMorphologyOffset(
     [rest[0] + b[0] * e, rest[1] + b[1] * e, rest[2] + b[2] * e],
-    uniforms.age,
-    uniforms.seed,
+    age,
+    seed,
   )
   const pT = [
     rest[0] + t[0] * e + oT[0],
@@ -379,7 +408,10 @@ export function deformRestPoint(rest, uniforms, surfaceOffset = 0) {
     macroN = [-macroN[0], -macroN[1], -macroN[2]]
   }
 
-  const amount = developmentDisplaceAmount(macroPos, uniforms)
+  const seededUniforms = { ...uniforms, seed, age }
+  const amount =
+    developmentDisplaceAmount(macroPos, seededUniforms) +
+    lateWarpAmount(macroPos, seededUniforms)
   let position = [
     macroPos[0] + macroN[0] * amount,
     macroPos[1] + macroN[1] * amount,
