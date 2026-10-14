@@ -4,21 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "396c7370400f3cd4",
+        "id": "b33ac00483d7b061",
         "type": "tabs",
         "children": [
           {
-            "id": "e08536b5b767d797",
+            "id": "1b573221fcc102ed",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "README.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "README"
+              "title": "New tab"
             }
           }
         ]
@@ -188,8 +184,10 @@
       "bases:Create new base": false
     }
   },
-  "active": "e08536b5b767d797",
+  "active": "1b573221fcc102ed",
   "lastOpenFiles": [
+    "docs/planning/BORN ANOTHER — Midterm Feedback Summary.md",
+    "README.md",
     "docs/assets/image/system section5.png",
     "docs/assets/image/Unconfirmed 101874.crdownload",
     "Project03_Born-Another/src/assets/cover-image.png",
@@ -201,7 +199,6 @@
     "Project03_Born-Another/src/worldv2/crystalOrientation.test.js",
     "Project03_Born-Another/src/worldv2/crystalOrientation.js",
     "Project03_Born-Another.md",
-    "README.md",
     "Project03_Born-Another/src/worldv2/primaryCrystalGeometry.test.js",
     "Project03_Born-Another/src/worldv2/primaryCrystalGeometry.js",
     "2026-09-29.md",
@@ -211,7 +208,6 @@
     "Project03_Born-Another/src/assets/crystal-growth-grammar-diagram.png",
     "docs/assets/image/crystal diagram.png",
     "docs/assets/image/crystal diagrma.png",
-    "Project03_Born-Another/src/assets/concept-lifecycle-diagram-02.png",
     "Project03_Born-Another/dist/assets/index-wW6ZNoWf.css",
     "Project03_Born-Another/dist/assets/index-DKWX7tgT.js",
     "Project03_Born-Another/src/SiteHud.jsx",
