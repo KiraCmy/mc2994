@@ -588,4 +588,100 @@ body {
   }
 }
 
+/* Phone / narrow viewport: stack site header in document flow. */
+@media (max-width: 720px) {
+  .stage {
+    --site-header-h: 6.75rem;
+    overflow-x: clip;
+  }
+
+  .hud {
+    font-size: clamp(0.68rem, 3.3vw, 0.82rem);
+  }
+
+  .hud.site-hud {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'title meta'
+      'modes modes';
+    align-content: start;
+    row-gap: 0.5rem;
+    column-gap: 0.75rem;
+    height: auto;
+    min-height: var(--site-header-h);
+    padding: 0.95rem 1.25rem 0.75rem;
+  }
+
+  .hud-title {
+    position: static;
+    grid-area: title;
+    max-width: none;
+    font-size: clamp(0.98rem, 5.4vw, 1.22rem);
+    font-stretch: semi-expanded;
+    letter-spacing: 0.05em;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  /* Long Concept tagline collides with the title on phones. */
+  .hud-meta-tagline {
+    display: none;
+  }
+
+  .hud-meta {
+    position: static;
+    grid-area: meta;
+    align-items: flex-end;
+    gap: 0.35em;
+    text-align: right;
+    font-size: 0.8em;
+    line-height: 1.3;
+  }
+
+  .hud-meta:not(:has(> :not(.hud-meta-tagline))) {
+    display: none;
+  }
+
+  .hud.site-hud:not(:has(.hud-meta > :not(.hud-meta-tagline))) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'title'
+      'modes';
+  }
+
+  .hud-modes {
+    position: static;
+    grid-area: modes;
+    max-width: none;
+    flex-wrap: wrap;
+    gap: 0.55em 1em;
+  }
+
+  .hud-study-modes {
+    top: calc(var(--site-header-h) + 0.15rem);
+    left: 1.25rem;
+    right: 1.25rem;
+    gap: 0.5em 0.9em;
+  }
+
+  .hud-seed {
+    left: 1.25rem;
+    bottom: 1.4rem;
+  }
+
+  .hud-hint {
+    left: 1.25rem;
+    right: 1.25rem;
+    bottom: 3.6rem;
+  }
+
+  .adjust {
+    right: 1.25rem;
+    bottom: 1.4rem;
+    max-width: calc(100vw - 2.5rem);
+  }
+}
+
 

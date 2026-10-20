@@ -302,18 +302,38 @@
 
 @media (max-width: 720px) {
   .system-page__content {
-    padding-right: 1.35rem;
-    padding-left: 1.35rem;
+    padding:
+      calc(var(--site-header-h) + 2.2rem)
+      1.25rem
+      4rem;
   }
 
   .system-page__intro,
   .system-page__section {
     grid-template-columns: 1fr;
-    gap: 1.2rem;
+    gap: 1rem;
+    min-height: 0;
+    padding: 2.4rem 0;
+  }
+
+  .system-page__intro {
+    padding-bottom: 2.6rem;
   }
 
   .system-page__intro h1 {
     padding-right: 0;
+    font-size: clamp(2rem, 11vw, 3.2rem);
+    white-space: normal;
+    line-height: 1.08;
+  }
+
+  .system-page__section h2 {
+    font-size: clamp(1.25rem, 6.5vw, 1.85rem);
+  }
+
+  .system-page__care {
+    margin-top: 1.6rem;
+    gap: 1.6rem;
   }
 
   .system-page__care-step-wrap {
@@ -327,5 +347,10 @@
   .system-page__care-outcome p {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .system-page__care-questions li {
+    grid-template-columns: 2rem minmax(0, 1fr);
+    column-gap: 0.75rem;
   }
 }

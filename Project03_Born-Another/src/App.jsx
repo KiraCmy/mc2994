@@ -640,7 +640,7 @@ export default function App() {
         <ConceptPage
           header={
             <SiteHeader modeId={modeId} onSelectMode={selectMode}>
-              <p>
+              <p className="hud-meta-tagline">
                 A procedural world
                 <br />
                 of finite digital life

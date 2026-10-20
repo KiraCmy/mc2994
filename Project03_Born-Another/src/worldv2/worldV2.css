@@ -411,20 +411,27 @@
 
 @media (max-width: 720px) {
   .world-v2__background-study {
+    top: calc(var(--site-header-h) + 0.6rem);
     right: 1rem;
+    left: auto;
   }
 
   .world-v2__experience {
-    bottom: 2rem;
+    left: 1rem;
+    right: 1rem;
+    bottom: 5.8rem;
+    width: auto;
   }
 
   .world-v2__life {
     left: 1rem;
-    bottom: 1.6rem;
+    right: 1rem;
+    bottom: 1.2rem;
+    width: auto;
   }
 
   .world-v2__comparison {
-    width: min(22rem, 78vw);
+    width: min(22rem, calc(100vw - 2rem));
   }
 }
 

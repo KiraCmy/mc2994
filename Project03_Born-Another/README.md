@@ -1,4 +1,4 @@
-# Born Another
+å# Born Another
 
 **MC2994 Procedural World Building — Project 03**
 Semester start through midterm (September–mid-October 2026)
@@ -240,7 +240,7 @@ Studies keep the shader specimen. World is a separate scene: one seeded body you
 - The surface is a 48-region mineral field. Crossing a threshold nucleates a persistent site (maximum ten). A click records a stimulus that raises mineral over time; it does not spawn a crystal instantly.
 - **Primary crystals** grow step-by-step from those sites: closed faceted prisms, roots under the membrane. Baked clusters remain as a visual fallback.
 
-![World V2](../docs/assets/image/born-another-world-v2-atmospheric.png)
+![World V2 — dark rim light, living specimen near death](../docs/assets/image/born-another-world-v2-dark-rim.jpg)
 
 **Files:** `src/worldv2/WorldV2.jsx`, `worldGeometry.js`, `primaryCrystalGeometry.js`, `life/lifeEngine.js`, `life/worldLifeAdapter.js`, `life/useLifeEngine.js`, `life/*.test.js`
 

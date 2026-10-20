@@ -187,7 +187,7 @@ const _dummy = new THREE.Object3D()
  * deformed surface in the vertex shader exactly like the body mesh.
  */
 export default function ParticleField({
-  count = 20000,
+  count = 75000,
   seed = 44017,
   surfaceSeed = 884731,
   noiseScale = 2.8,

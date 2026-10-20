@@ -1,7 +1,7 @@
 /** Particle mode defaults — near-surface volumetric field. */
 export const INITIAL_PARTICLE = {
   /** How many points to sample around the deformed body. */
-  count: 20000,
+  count: 75000,
   /** Deterministic sample jitter seed (independent of surface identity). */
   seed: 44017,
   /**

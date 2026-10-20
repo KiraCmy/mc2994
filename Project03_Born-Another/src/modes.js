@@ -33,7 +33,7 @@ export const DEFAULT_STUDY_MODE = 'shader'
 
 export function parseAppRoute(hash = '') {
   const raw = String(hash).replace(/^#\/?/, '').trim()
-  if (!raw) return { modeId: DEFAULT_STUDY_MODE, studyId: null }
+  if (!raw) return { modeId: 'concept', studyId: null }
 
   const [head, sub] = raw.split('/')
   const token = head.toLowerCase()
