@@ -4,6 +4,8 @@ export const MODES = [
   { id: 'studies', label: 'Studies' },
   { id: 'system', label: 'System' },
   { id: 'worldv2', label: 'World' },
+  { id: 'playground', label: 'Playground' },
+  { id: 'memory-lab', label: 'Memory Lab' },
 ]
 
 /** Technical studies share one Canvas and retain their state in App. */
@@ -43,8 +45,17 @@ export function parseAppRoute(hash = '') {
   if (token === 'studies') {
     return { modeId: DEFAULT_STUDY_MODE, studyId: null }
   }
-  if (token === 'concept' || token === 'system') {
-    return { modeId: token, studyId: null }
+  if (
+    token === 'concept' ||
+    token === 'system' ||
+    token === 'playground' ||
+    token === 'memory-lab' ||
+    token === 'memorylab'
+  ) {
+    return {
+      modeId: token === 'memorylab' ? 'memory-lab' : token,
+      studyId: null,
+    }
   }
   if (isStudyMode(token)) {
     return {
@@ -57,6 +68,7 @@ export function parseAppRoute(hash = '') {
 
 export function appRouteHash(modeId, studyId) {
   if (modeId === 'worldv2') return '#world'
+  if (modeId === 'memory-lab') return '#memory-lab'
   if (modeId === 'shader' && studyId && studyId !== 'surface') {
     return `#shader/${studyId}`
   }

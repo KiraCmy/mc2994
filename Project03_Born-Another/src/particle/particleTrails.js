@@ -14,10 +14,14 @@ const TRAIL_SLOTS = PARTICLE_TRAIL_SAMPLES - 1
  * atlas (slot k occupies columns [k * size, (k + 1) * size)). Like the
  * simulation targets, it is created and disposed by the same effect.
  */
-export function useParticleTrailHistory(gl, stateSize, rests) {
+export function useParticleTrailHistory(gl, stateSize, rests, enabled = true) {
   const ref = useRef(null)
 
   useLayoutEffect(() => {
+    if (!enabled) {
+      ref.current = null
+      return undefined
+    }
     if (!gl.extensions.has('EXT_color_buffer_float')) return undefined
     const target = new THREE.WebGLRenderTarget(stateSize * TRAIL_SLOTS, stateSize, {
       type: THREE.FloatType,
@@ -80,7 +84,7 @@ export function useParticleTrailHistory(gl, stateSize, rests) {
       quad.geometry.dispose()
       ref.current = null
     }
-  }, [gl, stateSize, rests])
+  }, [enabled, gl, stateSize, rests])
 
   return ref
 }

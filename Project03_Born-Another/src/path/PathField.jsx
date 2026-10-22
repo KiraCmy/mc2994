@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
+import { ageClock } from '../ageClock.js'
 import {
   buildSurfaceSpline,
   consolidateRestStroke,
@@ -89,7 +90,7 @@ export default function PathField({
 
   useFrame(({ clock }) => {
     uniforms.time = clock.getElapsedTime()
-    uniforms.age = age
+    uniforms.age = ageClock.current
     uniforms.seed = surfaceSeed
     uniforms.noiseScale = noiseScale
     uniforms.speed = speed

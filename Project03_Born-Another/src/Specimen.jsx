@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { ageClock } from './ageClock.js'
 import {
   DECAY_BIAS,
   edgeAlpha,
@@ -487,8 +488,10 @@ export default function Specimen({
   }, [showResidue, individuality, decay, trace, age, preserved])
 
   useFrame(({ clock }) => {
+    const liveAge = ageClock.current
     if (useOrganismMaterial) {
       const deform = physicalMaterial.userData.deformUniforms
+      if (deform?.uAge) deform.uAge.value = liveAge
       if (
         visualStudy === 'development' ||
         visualStudy === 'decay' ||
@@ -515,6 +518,7 @@ export default function Specimen({
     }
     const mat = bodyRef.current
     if (!mat) return
+    if (mat.uniforms?.uAge) mat.uniforms.uAge.value = liveAge
     if (
       visualStudy === 'development' ||
       visualStudy === 'decay' ||

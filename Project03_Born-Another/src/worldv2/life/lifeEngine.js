@@ -719,8 +719,11 @@ export function createLifeState({
   const spatial = createSpatialField(normalizedSeed)
   const normalizedHistory = normalizeHistory(history, totalSteps).map(
     (entry) => {
+      // Number.isFinite: null >= 0 is true in JS and would keep region=null.
       const region =
-        entry.region >= 0 && entry.region < spatial.regions.length
+        Number.isFinite(entry.region) &&
+        entry.region >= 0 &&
+        entry.region < spatial.regions.length
           ? entry.region
           : nearestFieldRegion(spatial, entry.direction)
       return {

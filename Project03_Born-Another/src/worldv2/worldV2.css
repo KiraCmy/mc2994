@@ -19,10 +19,11 @@
   --world-ui-line: rgba(23, 36, 44, 0.44);
 }
 
+/* D — Shader ends milky/high-key; use Light-study UI contrast for legibility. */
 .world-v2--background-shader {
-  --world-ui-color: #ffffff;
-  --world-ui-muted: rgba(255, 255, 255, 0.58);
-  --world-ui-line: rgba(255, 255, 255, 0.92);
+  --world-ui-color: #17242c;
+  --world-ui-muted: rgba(23, 36, 44, 0.6);
+  --world-ui-line: rgba(23, 36, 44, 0.44);
 }
 
 .world-v2__viewport {
@@ -49,11 +50,13 @@
   color: var(--world-ui-color);
 }
 
-.world-v2--background-light .hud-mode-item.is-active::after {
+.world-v2--background-light .hud-mode-item.is-active::after,
+.world-v2--background-shader .hud-mode-item.is-active::after {
   background: rgba(23, 36, 44, 0.9);
 }
 
-.world-v2--background-light .hud-mode-item:focus-visible {
+.world-v2--background-light .hud-mode-item:focus-visible,
+.world-v2--background-shader .hud-mode-item:focus-visible {
   outline-color: rgba(23, 36, 44, 0.9);
 }
 
@@ -182,7 +185,8 @@
   cursor: wait;
 }
 
-.world-v2--background-light .world-v2__experience button {
+.world-v2--background-light .world-v2__experience button,
+.world-v2--background-shader .world-v2__experience button {
   background: rgba(245, 248, 250, 0.4);
   box-shadow:
     0 0 2rem rgba(40, 62, 72, 0.08),
@@ -193,6 +197,12 @@
   .world-v2__experience
   button:hover:not(:disabled),
 .world-v2--background-light
+  .world-v2__experience
+  button:focus-visible,
+.world-v2--background-shader
+  .world-v2__experience
+  button:hover:not(:disabled),
+.world-v2--background-shader
   .world-v2__experience
   button:focus-visible {
   border-color: rgba(23, 36, 44, 0.82);
@@ -290,7 +300,8 @@
   outline-offset: 6px;
 }
 
-.world-v2--background-light .world-v2__timeline-range {
+.world-v2--background-light .world-v2__timeline-range,
+.world-v2--background-shader .world-v2__timeline-range {
   background: linear-gradient(
     90deg,
     rgba(23, 36, 44, 0.2) 0%,
@@ -300,7 +311,9 @@
 }
 
 .world-v2--background-light .world-v2__timeline-range::-webkit-slider-thumb,
-.world-v2--background-light .world-v2__timeline-range::-moz-range-thumb {
+.world-v2--background-light .world-v2__timeline-range::-moz-range-thumb,
+.world-v2--background-shader .world-v2__timeline-range::-webkit-slider-thumb,
+.world-v2--background-shader .world-v2__timeline-range::-moz-range-thumb {
   background: rgba(245, 248, 250, 0.95);
   border-color: rgba(23, 36, 44, 0.75);
   box-shadow: 0 0 0 3px rgba(23, 36, 44, 0.1);

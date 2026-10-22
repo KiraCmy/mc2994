@@ -1,0 +1,154 @@
+/* Playground — extends System / Studies chrome; no new design system. */
+
+.playground-page {
+  --playground-margin: 5.2cqw;
+  container-type: size;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color: #171817;
+  background: #f0f0ee;
+}
+
+.playground-page__hud {
+  z-index: 3;
+  color: #171817;
+  background: #f0f0ee;
+  border-bottom: 1px solid #c9c9c7;
+}
+
+.playground-page__hud.is-scrolled {
+  background: rgb(240 240 238 / 0.96);
+}
+
+.playground-page__hud .hud-mode-item.is-active::after,
+.playground-page__hud .hud-study-mode-item.is-active::after {
+  background: rgba(23, 24, 23, 0.88);
+}
+
+.playground-page__hud .hud-mode-item:focus-visible,
+.playground-page__hud .hud-study-mode-item:focus-visible {
+  outline-color: rgba(23, 24, 23, 0.88);
+}
+
+.playground-page__tabs {
+  color: #171817;
+}
+
+.playground-page__content {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  padding:
+    calc(var(--site-header-h) + 5.5rem)
+    var(--playground-margin)
+    8cqh;
+  scrollbar-width: thin;
+}
+
+.playground-experiment {
+  display: flex;
+  flex-direction: column;
+  gap: 3.2cqh;
+  min-height: calc(100% - 1rem);
+}
+
+.playground-experiment__intro {
+  display: grid;
+  gap: 0.65rem;
+  max-width: 42rem;
+  padding-bottom: 2.4cqh;
+  border-bottom: 1px solid rgba(23, 24, 23, 0.2);
+}
+
+.playground-experiment__eyebrow,
+.playground-experiment__title,
+.playground-experiment__desc,
+.playground-experiment__placeholder,
+.playground-experiment__controls-label {
+  margin: 0;
+}
+
+.playground-experiment__eyebrow {
+  color: #686b69;
+  font-size: clamp(0.68rem, 0.82cqw, 0.84rem);
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.playground-experiment__title {
+  font-size: clamp(1.75rem, 3.2vw, 2.75rem);
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.playground-experiment__desc {
+  max-width: 36rem;
+  color: #4a4d4b;
+  font-size: clamp(0.92rem, 1.05cqw, 1.05rem);
+  line-height: 1.55;
+}
+
+.playground-experiment__workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 16rem);
+  gap: clamp(1rem, 2.5cqw, 2rem);
+  flex: 1;
+  min-height: min(58cqh, 28rem);
+}
+
+.playground-experiment__scene,
+.playground-experiment__controls {
+  box-sizing: border-box;
+  border: 1px solid rgba(23, 24, 23, 0.2);
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.playground-experiment__scene {
+  display: grid;
+  place-items: center;
+  min-height: 18rem;
+  padding: 1.5rem;
+}
+
+.playground-experiment__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.1rem 1.15rem;
+}
+
+.playground-experiment__controls-label {
+  color: #686b69;
+  font-size: clamp(0.68rem, 0.82cqw, 0.84rem);
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.playground-experiment__placeholder {
+  color: #4a4d4b;
+  font-size: clamp(0.85rem, 0.95cqw, 0.95rem);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.playground-experiment__placeholder--muted {
+  text-align: left;
+  opacity: 0.72;
+}
+
+@media (max-width: 720px) {
+  .playground-experiment__workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .playground-experiment__scene {
+    min-height: 14rem;
+  }
+}

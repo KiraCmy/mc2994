@@ -1,5 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import AdjustBar from './AdjustBar.jsx'
 import ConceptPage from './concept/ConceptPage.jsx'
@@ -7,6 +15,14 @@ import Hud from './Hud.jsx'
 import SiteHeader from './SiteHeader.jsx'
 import Specimen from './Specimen.jsx'
 import SystemPage from './system/SystemPage.jsx'
+import WebGLCanvas from './WebGLCanvas.jsx'
+
+const PlaygroundPage = lazy(() =>
+  import('./playground/index.js').then((mod) => ({ default: mod.PlaygroundPage })),
+)
+const MemoryLabPage = lazy(() =>
+  import('./memoryLab/index.js').then((mod) => ({ default: mod.MemoryLabPage })),
+)
 import { ScatterField, INITIAL_SCATTER } from './scatter/index.js'
 import { PathField, INITIAL_PATH } from './path/index.js'
 import { ParticleField, INITIAL_PARTICLE } from './particle/index.js'
@@ -49,11 +65,57 @@ import {
   lifecycleStage,
   materialFromFamily,
 } from './surfaceParams.js'
+import { syncAgeClock } from './ageClock.js'
+import {
+  isHeavyWebGLHost,
+  isWindowsHost,
+  resolveRenderDpr,
+  STUDIES_MAX_PIXELS,
+} from './renderBudget.js'
+import {
+  BA_BUILD_ID,
+  particleDiag,
+  readBaDiagMode,
+  updateDiagBadge,
+} from './particleDiag.js'
 
 const DEFAULT_CAMERA_DISTANCE = 6.2
 // Age 0.5 morphology is several times the Study 01 sphere. 8.5 crops it into the UI.
 const MATERIAL_CAMERA_DISTANCE = 14.5
 const MATERIAL_MAX_DISTANCE = 24
+/** React HUD / slider AGE commits while Animate runs (GPU uses ageClock every frame). */
+const AGE_UI_INTERVAL_MS = 50
+
+/** Cap WebGL backbuffer megapixels so 4K windows match typical MacBook load. */
+function useStudiesDpr(maxPixels = STUDIES_MAX_PIXELS) {
+  const [dpr, setDpr] = useState(() => {
+    if (typeof window === 'undefined') return 1
+    return resolveRenderDpr(
+      window.innerWidth,
+      window.innerHeight,
+      window.devicePixelRatio,
+      maxPixels,
+    )
+  })
+
+  useEffect(() => {
+    const update = () => {
+      setDpr(
+        resolveRenderDpr(
+          window.innerWidth,
+          window.innerHeight,
+          window.devicePixelRatio,
+          maxPixels,
+        ),
+      )
+    }
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [maxPixels])
+
+  return dpr
+}
 
 /** Pull back on the Material tab so the deformed organism clears the UI. */
 function MaterialFraming({ active }) {
@@ -127,6 +189,7 @@ export default function App() {
   const [isDead, setIsDead] = useState(false)
   const controlsRef = useRef(null)
   const lsystemLifeStartedRef = useRef(false)
+  const studiesDpr = useStudiesDpr()
 
   const study = STUDIES.find((item) => item.id === studyId) ?? STUDIES[0]
   const individualityRef = useRef(individuality)
@@ -175,12 +238,14 @@ export default function App() {
         : development.age
   const ageRef = useRef(age)
   ageRef.current = age
+  syncAgeClock(age)
 
   function setSharedAge(nextAge, { force = false } = {}) {
     if (isDeadRef.current && !force && nextAge < ageRef.current) return
 
     const ageValue = Math.min(1, Math.max(0, nextAge))
     ageRef.current = ageValue
+    syncAgeClock(ageValue)
     setDevelopment((current) => ({ ...current, age: ageValue }))
     setDecay((current) => ({ ...current, age: ageValue }))
     setTrace((current) => ({ ...current, age: ageValue }))
@@ -267,6 +332,7 @@ export default function App() {
 
     let frame = 0
     let last = performance.now()
+    let lastUi = 0
     const speed = 1 / LIFE_DURATION
 
     const tick = (now) => {
@@ -277,13 +343,23 @@ export default function App() {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
       const next = Math.min(1, ageRef.current + speed * dt)
-      setSharedAge(next)
+      ageRef.current = next
+      syncAgeClock(next)
+      // GPU reads ageClock every frame; React HUD updates at a lower rate.
+      if (next >= 1 || now - lastUi >= AGE_UI_INTERVAL_MS) {
+        lastUi = now
+        setSharedAge(next)
+      }
       if (next >= 1) return
       frame = requestAnimationFrame(tick)
     }
 
     frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(frame)
+      // Keep GPU clock in sync; avoid setState in effect cleanup (Strict Mode).
+      syncAgeClock(ageRef.current)
+    }
   }, [animating, modeId])
 
   function updateParam(key, value) {
@@ -525,10 +601,12 @@ export default function App() {
     function onKeyDown(event) {
       if (event.code !== 'Space' && event.key !== ' ') return
       if (event.repeat) return
-      // Concept and System keep Space for native scrolling; World owns its own clock.
+      // Concept / System / Playground / Memory Lab keep Space for native scrolling; World owns its own clock.
       if (
         modeIdRef.current === 'concept' ||
         modeIdRef.current === 'system' ||
+        modeIdRef.current === 'playground' ||
+        modeIdRef.current === 'memory-lab' ||
         modeIdRef.current === 'worldv2'
       ) {
         return
@@ -609,13 +687,64 @@ export default function App() {
   const viewportDead = lifecycleActive ? isDead : false
 
   // Explore reuses Scatter + Particle; L-System grows on the base organism.
+  // When ?baDiag= is set, skip Scatter on Explore so Particle isolation is clean.
+  const baDiagMode = useMemo(() => readBaDiagMode(), [])
+  useEffect(() => {
+    updateDiagBadge(baDiagMode)
+  }, [baDiagMode, modeId])
+
   const showOrganism = true
   const showScatterGrowths =
-    (scatterLifecycle || exploreMode) && !isDead && development.age < 0.995
+    (scatterLifecycle || (exploreMode && !baDiagMode)) &&
+    !isDead &&
+    development.age < 0.995
   const showPathDrawing = pathLifecycle && !isDead && development.age < 0.995
   const showParticles =
     (particleLifecycle || exploreMode) && !isDead && development.age < 0.995
   const showLSystem = lsystemMode && !isDead && development.age < 0.995
+
+  // On Windows, defer mounting the particle field one tick so the tab
+  // switch paints first. Diag mount/cpu skip defer (stubs are cheap).
+  const [particlesReady, setParticlesReady] = useState(
+    () => !isHeavyWebGLHost() || !!readBaDiagMode(),
+  )
+  useEffect(() => {
+    if (!showParticles) {
+      setParticlesReady(false)
+      return undefined
+    }
+    particleDiag('App:showParticles', {
+      buildId: BA_BUILD_ID,
+      baDiag: baDiagMode || 'off',
+      isWindowsHost: isWindowsHost(),
+      isHeavyWebGLHost: isHeavyWebGLHost(),
+      particleCountProp: particle.count,
+      exploreMode,
+    })
+    if (baDiagMode === 'mount' || baDiagMode === 'cpu' || !isHeavyWebGLHost()) {
+      particleDiag('App:particlesReady:immediate')
+      setParticlesReady(true)
+      return undefined
+    }
+    setParticlesReady(false)
+    particleDiag('App:particlesReady:defer-start')
+    // Two rAFs: let the Particle tab chrome paint before allocating the field.
+    let cancelled = false
+    let inner = 0
+    const outer = window.requestAnimationFrame(() => {
+      inner = window.requestAnimationFrame(() => {
+        if (!cancelled) {
+          particleDiag('App:particlesReady:defer-done')
+          setParticlesReady(true)
+        }
+      })
+    })
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(outer)
+      window.cancelAnimationFrame(inner)
+    }
+  }, [baDiagMode, exploreMode, particle.count, showParticles])
 
   const orbitMinDistance = originalDemo
     ? 4
@@ -662,12 +791,34 @@ export default function App() {
     )
   }
 
+  if (modeId === 'playground') {
+    return (
+      <main className="stage">
+        <Suspense fallback={null}>
+          <PlaygroundPage
+            header={<SiteHeader modeId={modeId} onSelectMode={selectMode} />}
+          />
+        </Suspense>
+      </main>
+    )
+  }
+
+  if (modeId === 'memory-lab') {
+    return (
+      <main className="stage">
+        <Suspense fallback={null}>
+          <MemoryLabPage modeId={modeId} onSelectMode={selectMode} />
+        </Suspense>
+      </main>
+    )
+  }
+
   return (
     <main className="stage">
-      <Canvas
+      <WebGLCanvas
         className="viewport"
         camera={{ position: [0, 0, 6.2], fov: 30, near: 0.1, far: 2000 }}
-        dpr={[1, 2]}
+        dpr={studiesDpr}
         gl={{ antialias: true, alpha: true }}
         onCreated={({ gl }) => {
           gl.setClearColor(0x000000, 0)
@@ -750,9 +901,10 @@ export default function App() {
             controlsRef={controlsRef}
           />
         ) : null}
-        {showParticles ? (
+        {showParticles && particlesReady ? (
           <ParticleField
             count={particle.count}
+            explore={exploreMode}
             seed={particle.seed}
             fieldThickness={particle.fieldThickness}
             fieldComplexity={particle.fieldComplexity}
@@ -812,7 +964,7 @@ export default function App() {
           minPolarAngle={originalDemo ? 0 : exploreMode ? 0.15 : 0.35}
           maxPolarAngle={originalDemo ? Math.PI : exploreMode ? Math.PI - 0.15 : Math.PI - 0.35}
         />
-      </Canvas>
+      </WebGLCanvas>
       <Hud
         modeId={modeId}
         studyId={study.id}

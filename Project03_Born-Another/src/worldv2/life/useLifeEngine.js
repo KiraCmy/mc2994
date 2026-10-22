@@ -13,7 +13,9 @@ function clamp01(value) {
 
 export function useLifeEngine(initialSeed) {
   const [life, setLife] = useState(() => createLifeState({ seed: initialSeed }))
-  const [playing, setPlaying] = useState(true)
+  // Start paused so World can mount on weak / recovering GPUs without an
+  // immediate 30 Hz mesh rewrite. User presses Play to begin the life clock.
+  const [playing, setPlaying] = useState(false)
   const playingRef = useRef(playing)
   const accumulator = useRef(0)
   playingRef.current = playing
@@ -29,8 +31,10 @@ export function useLifeEngine(initialSeed) {
         accumulator.current += elapsed
         const steps = Math.floor(accumulator.current / LIFE_FIXED_TIMESTEP)
         if (steps > 0) {
-          accumulator.current -= steps * LIFE_FIXED_TIMESTEP
-          setLife((current) => runLifeSteps(current, steps))
+          // Cap catch-up so a lagged tab doesn't apply a huge CPU burst.
+          const applied = Math.min(steps, 2)
+          accumulator.current -= applied * LIFE_FIXED_TIMESTEP
+          setLife((current) => runLifeSteps(current, applied))
         }
       }
       frame = requestAnimationFrame(tick)
@@ -70,6 +74,22 @@ export function useLifeEngine(initialSeed) {
     setPlaying(true)
   }, [])
 
+  /** Start a new life with optional duration / history (MEMORY LAB). World uses changeSeed. */
+  const startLife = useCallback(
+    ({ seed, durationSeconds, history = [] } = {}) => {
+      accumulator.current = 0
+      setLife(
+        createLifeState({
+          seed,
+          durationSeconds,
+          history,
+        }),
+      )
+      setPlaying(true)
+    },
+    [],
+  )
+
   const addStimulus = useCallback((direction) => {
     setLife((current) => addLifeStimulus(current, direction))
   }, [])
@@ -96,7 +116,9 @@ export function useLifeEngine(initialSeed) {
     togglePlaying,
     restart,
     changeSeed,
+    startLife,
     addStimulus,
     seekToAge,
+    setPlaying,
   }
 }

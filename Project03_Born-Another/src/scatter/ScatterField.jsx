@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { ageClock } from '../ageClock.js'
 import {
   createGrowthClusterVariants,
   GROWTH_CLUSTER_DEFAULTS,
@@ -271,6 +272,7 @@ export default function ScatterField({
 
   useFrame(({ clock }) => {
     uniforms.uTime.value = clock.getElapsedTime()
+    uniforms.uAge.value = ageClock.current
   })
 
   useLayoutEffect(

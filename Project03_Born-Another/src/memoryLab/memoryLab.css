@@ -1,0 +1,335 @@
+/* MEMORY LAB — minimal chrome aligned with System / Playground. */
+
+.memory-lab {
+  --memory-margin: 3.4vw;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color: #171817;
+  background: #f0f0ee;
+}
+
+.memory-lab--graded {
+  color: #17242c;
+  background: #ebe8e2;
+}
+
+.memory-lab--original {
+  color: #f3fbf8;
+  background: #010405;
+}
+
+.memory-lab__hud {
+  z-index: 4;
+  border-bottom: 1px solid rgba(23, 24, 23, 0.18);
+}
+
+.memory-lab--graded .memory-lab__hud {
+  color: #17242c;
+  background: rgba(240, 240, 238, 0.96);
+}
+
+.memory-lab--original .memory-lab__hud {
+  color: #f3fbf8;
+  background: rgba(1, 4, 5, 0.92);
+  border-bottom-color: rgba(224, 255, 250, 0.2);
+}
+
+.memory-lab--graded .hud-mode-item.is-active::after {
+  background: rgba(23, 36, 44, 0.9);
+}
+
+.memory-lab--original .hud-mode-item.is-active::after {
+  background: rgba(243, 251, 248, 0.92);
+}
+
+.memory-lab__body {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  gap: 0;
+  width: 100%;
+  height: 100%;
+  padding-top: var(--site-header-h);
+}
+
+.memory-lab__panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+  padding: 1.35rem var(--memory-margin) 1.5rem;
+  border-right: 1px solid rgba(23, 24, 23, 0.16);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.memory-lab--original .memory-lab__panel {
+  border-right-color: rgba(224, 255, 250, 0.16);
+}
+
+.memory-lab__eyebrow,
+.memory-lab__title,
+.memory-lab__hint,
+.memory-lab__label {
+  margin: 0;
+}
+
+.memory-lab__eyebrow {
+  font-size: clamp(0.68rem, 0.82cqw, 0.84rem);
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.memory-lab__title {
+  font-size: clamp(1.35rem, 2.2vw, 1.85rem);
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.memory-lab__hint {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  opacity: 0.72;
+}
+
+.memory-lab__label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.memory-lab__textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 9.5rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(23, 24, 23, 0.22);
+  border-radius: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  background: rgba(255, 255, 255, 0.45);
+  resize: vertical;
+}
+
+.memory-lab--original .memory-lab__textarea {
+  border-color: rgba(224, 255, 250, 0.28);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.memory-lab__textarea:focus-visible {
+  outline: 1px solid rgba(23, 36, 44, 0.7);
+  outline-offset: 2px;
+}
+
+.memory-lab--original .memory-lab__textarea:focus-visible {
+  outline-color: rgba(232, 255, 252, 0.85);
+}
+
+.memory-lab__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.memory-lab__button {
+  margin: 0;
+  padding: 0.55rem 0.95rem;
+  border: 1px solid rgba(23, 24, 23, 0.35);
+  color: inherit;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: transparent;
+  cursor: pointer;
+}
+
+.memory-lab__button--primary {
+  background: rgba(23, 24, 23, 0.9);
+  color: #f0f0ee;
+  border-color: transparent;
+}
+
+.memory-lab--original .memory-lab__button {
+  border-color: rgba(224, 255, 250, 0.4);
+}
+
+.memory-lab--original .memory-lab__button--primary {
+  background: rgba(243, 251, 248, 0.92);
+  color: #010405;
+}
+
+.memory-lab__button:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 3px;
+}
+
+.memory-lab__debug {
+  margin-top: 0.35rem;
+  border-top: 1px solid rgba(23, 24, 23, 0.14);
+  padding-top: 0.85rem;
+}
+
+.memory-lab--original .memory-lab__debug {
+  border-top-color: rgba(224, 255, 250, 0.14);
+}
+
+.memory-lab__debug-toggle {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.memory-lab__debug-body {
+  margin-top: 0.65rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.memory-lab__debug pre {
+  margin: 0;
+  padding: 0.75rem;
+  overflow: auto;
+  border: 1px solid rgba(23, 24, 23, 0.16);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: pre-wrap;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.memory-lab--original .memory-lab__debug pre {
+  border-color: rgba(224, 255, 250, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.memory-lab__mode-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.memory-lab__mode-toggle button {
+  margin: 0;
+  padding: 0.35rem 0.55rem;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.4;
+}
+
+.memory-lab__mode-toggle button.is-active {
+  opacity: 1;
+  border-bottom-color: currentColor;
+}
+
+.memory-lab__viewer {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #010405;
+}
+
+.memory-lab__viewer .world-v2__viewport,
+.memory-lab__viewport {
+  position: absolute !important;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.memory-lab__viewer-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  text-align: center;
+  opacity: 0.55;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.memory-lab__viewer-hud {
+  position: absolute;
+  z-index: 2;
+  left: 1rem;
+  bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.memory-lab__viewer-hud > * {
+  pointer-events: auto;
+}
+
+.memory-lab__chip {
+  margin: 0;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgba(243, 251, 248, 0.35);
+  color: #f3fbf8;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  background: rgba(1, 4, 5, 0.55);
+}
+
+.memory-lab__chip button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+@media (max-width: 860px) {
+  .memory-lab__body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 42%) minmax(0, 58%);
+  }
+
+  .memory-lab__panel {
+    border-right: 0;
+    border-bottom: 1px solid rgba(23, 24, 23, 0.16);
+  }
+}

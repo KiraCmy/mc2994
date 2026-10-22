@@ -1,7 +1,12 @@
+import { PARTICLE_FULL_COUNT } from '../renderBudget.js'
+
 /** Particle mode defaults — near-surface volumetric field. */
 export const INITIAL_PARTICLE = {
-  /** How many points to sample around the deformed body. */
-  count: 75000,
+  /**
+   * Canonical density (MacBook / light hosts).
+   * Windows 4K applies a runtime soft-cap in ParticleField only.
+   */
+  count: PARTICLE_FULL_COUNT,
   /** Deterministic sample jitter seed (independent of surface identity). */
   seed: 44017,
   /**

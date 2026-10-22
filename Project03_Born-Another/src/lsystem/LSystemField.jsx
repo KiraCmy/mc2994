@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { ageClock } from '../ageClock.js'
 import {
   buildVeinDebugSamples,
   buildVeinRibbonAttributes,
@@ -205,7 +206,7 @@ export default function LSystemField({
     const time = clock.getElapsedTime()
     const u = veinMat.uniforms
     u.uTime.value = time
-    u.uAge.value = Number(p.age) || 0
+    u.uAge.value = ageClock.current
     u.uSeed.value = Number(p.seed) || 1
     u.uNoiseScale.value = p.noiseScale
     u.uSpeed.value = p.speed

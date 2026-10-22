@@ -833,11 +833,12 @@ const particleVariantGlsl = /* glsl */ `
 /**
  * Particle volumetric field — surface-aware height on the live body.
  * Study 06 birth (age ≤ 0.02) uses the individuality vertex path (unit sphere);
- * after that, match development / decay displace. Each instance reads its
+ * after that, match development / decay displace. Each point reads its
  * advected rest point from the current simulation (particleFlowSimShader) and
  * is placed on the deformed surface exactly like the body mesh, so it rides
  * the changing normals and curvature as AGE moves. `aHeight` (0–1) is biased
  * toward the membrane; `uFieldThickness` scales outer reach.
+ * Drawn as soft gl_Point sprites (same on-screen size caps as the old spheres).
  */
 export const particleSurfaceVertexShader = /* glsl */ `
   uniform float uTime;
@@ -853,6 +854,7 @@ export const particleSurfaceVertexShader = /* glsl */ `
   uniform float uLateWarp;
   uniform float uFloatOffset;
   uniform float uFieldThickness;
+  uniform float uParticleRadius;
   uniform sampler2D uParticleState;
   uniform float uViewportHeight;
   uniform float uPixelRatio;
@@ -862,7 +864,6 @@ export const particleSurfaceVertexShader = /* glsl */ `
   attribute vec2 aStateUv;
 
   varying float vAlpha;
-  varying float vGlow;
   varying float vBright;
   varying vec2 vTint;
 
@@ -871,10 +872,18 @@ export const particleSurfaceVertexShader = /* glsl */ `
   ${particleVariantGlsl}
 
   void main() {
+    // USE_PARTICLE_ATTR_REST: Windows / no-GPGPU path — rest XYZ live in
+    // the position attribute (float DataTexture sampling is unreliable on
+    // some ANGLE/NVIDIA drivers without NearestFilter, and still fragile).
+#ifdef USE_PARTICLE_ATTR_REST
+    vec3 restOrigin = normalize(position);
+    float life = 0.55;
+#else
     vec4 state = texture2D(uParticleState, aStateUv);
     vec3 restOrigin = normalize(state.xyz);
     float life = state.w;
-    float instScale = max(length(instanceMatrix[1].xyz), 1e-4);
+#endif
+    float grainRadius = max(uParticleRadius, 1e-4);
     vec3 restN = restOrigin;
     float height = clamp(aHeight, 0.0, 1.0);
 
@@ -909,8 +918,8 @@ export const particleSurfaceVertexShader = /* glsl */ `
     float viewFacing = max(dot(surfaceN, toCamera), 0.0);
     if (viewFacing < 0.02) {
       gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+      gl_PointSize = 0.0;
       vAlpha = 0.0;
-      vGlow = 0.0;
       vBright = 0.0;
       vTint = vec2(0.0);
       return;
@@ -921,7 +930,7 @@ export const particleSurfaceVertexShader = /* glsl */ `
     float lift =
       max(uFloatOffset, 0.0) +
       max(uFieldThickness, 0.0) * height +
-      instScale * max(sizeMul, 1.0);
+      grainRadius * max(sizeMul, 1.0);
     vBright = particleBrightness(aVariant, uTime);
     vTint = aVariant.zw;
 
@@ -930,22 +939,26 @@ export const particleSurfaceVertexShader = /* glsl */ `
     // they fade instead of shrinking away.
     vec4 mvCenter = modelViewMatrix * vec4(center, 1.0);
     float pixelWorld = 2.0 * max(-mvCenter.z, 1e-3) / (projectionMatrix[1][1] * max(uViewportHeight, 1.0));
-    float radius = instScale * sizeMul;
+    float radius = grainRadius * sizeMul;
     float minRadius = 0.55 * uPixelRatio * pixelWorld;
     float maxRadius = max(uMaxPixelRadius * uPixelRatio * sizeMul * pixelWorld, minRadius);
     float drawRadius = clamp(radius, minRadius, maxRadius);
     float coverage = min(1.0, (radius * radius) / (drawRadius * drawRadius));
 
-    vec4 mvPosition = modelViewMatrix * vec4(center + position * drawRadius, 1.0);
-    gl_Position = projectionMatrix * mvPosition;
+    gl_Position = projectionMatrix * mvCenter;
+    gl_PointSize = max(1.0, (drawRadius / max(pixelWorld, 1e-6)) * 2.0);
 
     // Outer fringe reads thinner so the silhouette stays body-shaped.
     float depthFade = mix(1.0, 0.28, smoothstep(0.12, 1.0, height));
     // Fade across re-seeding so particles never pop in or out.
     float lifeFade = smoothstep(0.0, 0.12, life) * (1.0 - smoothstep(0.82, 1.0, life));
     vAlpha = mix(0.5, 1.0, smoothstep(0.04, 0.5, viewFacing)) * depthFade * lifeFade;
+#ifdef USE_PARTICLE_ATTR_REST
+    // No live density atlas without GPGPU — keep full field visibility.
+    vAlpha *= coverage;
+#else
     vAlpha *= coverage * particleDensityVisibility(aStateUv, aVariant);
-    vGlow = pow(max(dot(normalize(normalMatrix * normal), vec3(0.0, 0.0, 1.0)), 0.0), 1.65);
+#endif
   }
 `
 
@@ -972,15 +985,18 @@ export const particleSurfaceFragmentShader = /* glsl */ `
   uniform float uGlowStrength;
 
   varying float vAlpha;
-  varying float vGlow;
   varying float vBright;
   varying vec2 vTint;
 
   ${particleTintGlsl}
 
   void main() {
-    float core = smoothstep(0.08, 0.95, vGlow);
-    float halo = pow(vGlow, 0.55);
+    vec2 pc = gl_PointCoord * 2.0 - 1.0;
+    float r = length(pc);
+    if (r > 1.0) discard;
+
+    float core = smoothstep(1.0, 0.12, r);
+    float halo = pow(clamp(1.0 - r, 0.0, 1.0), 0.55);
     float glow = mix(halo * 0.55, 1.0, core);
     float alpha = uOpacity * vAlpha * glow * min(vBright, 1.0);
     if (alpha < 0.012) discard;
@@ -989,6 +1005,81 @@ export const particleSurfaceFragmentShader = /* glsl */ `
     vec3 color = uColor * (0.55 + uGlowStrength * (0.7 + core * 1.35));
     color = particleTint(color, vTint) * max(vBright, 1.0);
     gl_FragColor = vec4(color, alpha);
+  }
+`
+
+/**
+ * Windows / weak-GPU particle placement — one noise sample, no macro FBM.
+ * Keeps soft grit on the living radius without the shader compile/runtime
+ * cost that freezes Chrome on integrated GPUs.
+ */
+export const particleSurfaceVertexShaderLite = /* glsl */ `
+  uniform float uTime;
+  uniform float uAge;
+  uniform float uSeed;
+  uniform float uNoiseScale;
+  uniform float uDisplacement;
+  uniform float uFloatOffset;
+  uniform float uFieldThickness;
+  uniform float uParticleRadius;
+  uniform sampler2D uParticleState;
+  uniform float uViewportHeight;
+  uniform float uPixelRatio;
+  uniform float uMaxPixelRadius;
+
+  attribute float aHeight;
+  attribute vec2 aStateUv;
+
+  varying float vAlpha;
+  varying float vBright;
+  varying vec2 vTint;
+
+  ${noiseFunctions}
+  ${particleVariantGlsl}
+
+  void main() {
+    vec4 state = texture2D(uParticleState, aStateUv);
+    vec3 restOrigin = normalize(state.xyz);
+    float life = state.w;
+    float grainRadius = max(uParticleRadius, 1e-4);
+    float height = clamp(aHeight, 0.0, 1.0);
+
+    float grow = mix(1.0, 1.55, smoothstep(0.0, 0.55, uAge));
+    float n = valueNoise(restOrigin * uNoiseScale + vec3(uSeed * 0.13));
+    float bump =
+      (n * 2.0 - 1.0) *
+      uDisplacement *
+      0.55 *
+      smoothstep(0.02, 0.45, uAge) *
+      (1.0 - smoothstep(0.9, 1.0, uAge));
+    vec3 surfacePos = restOrigin * (grow + bump);
+    vec3 surfaceN = normalize(surfacePos);
+
+    float sizeMul = particleSizeMul(aVariant);
+    float lift =
+      max(uFloatOffset, 0.0) +
+      max(uFieldThickness, 0.0) * height +
+      grainRadius * max(sizeMul, 1.0);
+    vBright = particleBrightness(aVariant, uTime);
+    vTint = aVariant.zw;
+
+    vec3 center = surfacePos + surfaceN * lift;
+    vec4 mvCenter = modelViewMatrix * vec4(center, 1.0);
+    float pixelWorld =
+      2.0 * max(-mvCenter.z, 1e-3) /
+      (projectionMatrix[1][1] * max(uViewportHeight, 1.0));
+    float radius = grainRadius * sizeMul;
+    float minRadius = 0.55 * uPixelRatio * pixelWorld;
+    float maxRadius = max(uMaxPixelRadius * uPixelRatio * sizeMul * pixelWorld, minRadius);
+    float drawRadius = clamp(radius, minRadius, maxRadius);
+    float coverage = min(1.0, (radius * radius) / (drawRadius * drawRadius));
+
+    gl_Position = projectionMatrix * mvCenter;
+    gl_PointSize = max(1.0, (drawRadius / max(pixelWorld, 1e-6)) * 2.0);
+
+    float depthFade = mix(1.0, 0.28, smoothstep(0.12, 1.0, height));
+    float lifeFade = smoothstep(0.0, 0.12, life) * (1.0 - smoothstep(0.82, 1.0, life));
+    vAlpha = 0.85 * depthFade * lifeFade * coverage;
   }
 `
 

@@ -163,7 +163,14 @@ export function primaryCrystalAnchor(
   ]
 }
 
-function applySurface(surface, restPositions, restColors, outputs, morph) {
+function applySurface(
+  surface,
+  restPositions,
+  restColors,
+  outputs,
+  morph,
+  { updateNormals = true } = {},
+) {
   const position = surface.attributes.position
   const target = position.array
   const deformations = outputs.form.localDeformations
@@ -203,7 +210,7 @@ function applySurface(surface, restPositions, restColors, outputs, morph) {
   }
   position.needsUpdate = true
   if (colorAttr) colorAttr.needsUpdate = true
-  surface.computeVertexNormals()
+  if (updateNormals) surface.computeVertexNormals()
   surface.computeBoundingSphere()
 }
 
@@ -211,7 +218,14 @@ function applySurface(surface, restPositions, restColors, outputs, morph) {
  * Grow crystals in rest space from their root origin, then translate the whole
  * crystal with the deformed origin so clusters ride the membrane rigidly.
  */
-function applyGrowthGeometry(geometry, rest, outputs, morph, life) {
+function applyGrowthGeometry(
+  geometry,
+  rest,
+  outputs,
+  morph,
+  life,
+  { updateNormals = true } = {},
+) {
   const position = geometry.attributes.position
   const target = position.array
   const sites = outputs.surface.mineralSites
@@ -261,7 +275,7 @@ function applyGrowthGeometry(geometry, rest, outputs, morph, life) {
     target[offset + 2] = deformedOrigin[2] + localZ
   }
   position.needsUpdate = true
-  geometry.computeVertexNormals()
+  if (updateNormals) geometry.computeVertexNormals()
   geometry.computeBoundingSphere()
 }
 
@@ -269,7 +283,7 @@ function applyGrowthGeometry(geometry, rest, outputs, morph, life) {
  * Rendering adapter only. The Life Engine remains unaware of Three.js geometry.
  * Exterior and interior are updated from the same lifecycle output.
  */
-export function applyLifeToWorld(world, rest, life) {
+export function applyLifeToWorld(world, rest, life, { updateNormals = true } = {}) {
   const morph = formMorphAmount(life.variables.growth)
   applySurface(
     world.surface,
@@ -277,8 +291,15 @@ export function applyLifeToWorld(world, rest, life) {
     rest.surfaceColors,
     life.outputs,
     morph,
+    { updateNormals },
   )
-  applyGrowthGeometry(world.outside, rest.outside, life.outputs, morph, life)
-  applyGrowthGeometry(world.inside, rest.inside, life.outputs, morph, life)
-  applyGrowthGeometry(world.minerals, rest.minerals, life.outputs, morph, life)
+  applyGrowthGeometry(world.outside, rest.outside, life.outputs, morph, life, {
+    updateNormals,
+  })
+  applyGrowthGeometry(world.inside, rest.inside, life.outputs, morph, life, {
+    updateNormals,
+  })
+  applyGrowthGeometry(world.minerals, rest.minerals, life.outputs, morph, life, {
+    updateNormals,
+  })
 }

@@ -544,17 +544,68 @@ A development-only **Compare** view replays an untouched baseline at the same Se
 
 ## Background study
 
-The rendering can be compared against four temporary backgrounds without resetting AGE, Seed, camera, or simulation state:
+The rendering can be compared against four background studies without resetting AGE, Seed, camera, or simulation state:
 
 - **A — Light:** flat desaturated cool gray;
-- **B — Dark:** the original black background and current default;
+- **B — Dark:** black background; default World look (materials, lights, bloom, finish pass);
 - **C — Atmospheric:** a quiet blue-gray gradient with no horizon;
-- **D — Shader:** the same `#C5C9D1` background color used by the Shader, Scatter, and Path tabs, with white interface text.
+- **D — Shader:** same underlying scene as **B — Dark**, plus a D-only screen-space grade (see below).
 
 WORLD V2 with the Atmospheric background during spatial mineral growth (Seed 7319, AGE 0.418). Existing lighting, materials, camera, postprocessing, lifecycle, and controls remain unchanged while the background is compared.
 
 ![[born-another-world-v2-atmospheric.png]]
 
+## D — Shader (B — Dark + milky grade)
+
+Earlier, D only swapped the clear/background to a light gray (`#C5C9D1`) while keeping dark materials, which did not match the Figma target. The intended pipeline is now:
+
+**B — Dark render → shared bloom / finish → D-only compositing grade → milky output**
+
+Implementation (`WorldV2.jsx`):
+
+- `createWorldBackground('shader')` uses the same black as Dark so A / B / C / D do not fork materials, lights, fog, PMREM, bloom, or the existing finish pass.
+- After `FINISH_SHADER`, a `ShaderPass` (`SHADER_STUDY_GRADE`) soft-inverts the Dark frame, lifts toward paper gray, and keeps muted pastel chroma. It is enabled only when `backgroundStudy === 'shader'`; for A / B / C the pass is disabled.
+- UI chrome for D follows the Light study (dark type) so labels stay readable on the high-key image.
+
+Switching B ↔ D changes only the final grade, not organism or Life Engine state. No second Canvas. Screen-space treatment is enough for a first match to the Figma high-key / milky reference; material shaders were left alone.
+
+WORLD V2 with **D — Shader** active (Seed 7319, AGE 0.797, interior). Same underlying Dark scene and Life Engine state; the milky high-key look comes from the D-only grade. Interface uses dark type for contrast on the pale frame.
+
+![[born-another-world-v2-shader-milky.jpg]]
+
 ## Next morphology study
 
 The current Life Engine nucleation is spatial and persistent, but each new dynamic site still uses simple faceted placeholder geometry. The next proposed step is a constrained crystallographic grammar: one dominant prism with a polygonal cross-section and tapered termination, followed by a small number of angularly constrained secondary crystals. The topology would be derived deterministically from each existing nucleation event and local mineral budget, with staged branch emergence rather than uniform whole-cluster scaling. This morphology work is proposed but not yet implemented.
+
+
+# Born Another — Windows Particle / Explore (desktop Chrome)
+
+On Windows 11 + Chrome (e.g. NVIDIA RTX 5070), **Particle** and **Explore** could freeze the whole browser while World and other Studies stayed usable. macOS and mobile kept the full field. Console `[BA-DIAG]` logs often never flushed because the tab locked first.
+
+## Causes
+
+1. **Freeze:** mounting `GPUComputationRenderer` (live particle currents) on tab switch — the Mac path. Explore shares `ParticleField` with Particle.
+2. **After a safe (GPGPU-off) path:** an 8k soft-cap made density ignore the slider; a lite vertex shader (and fragile float state textures) meant grains did not follow organism AGE deformation.
+
+Surface attachment does not need GPGPU: the vertex shader places rests with the same `macroMorphology` + `developmentDisplace` as the body each frame.
+
+## Fix (Windows only; Mac / mobile unchanged)
+
+- Keep **GPGPU off** on heavy / Windows hosts.
+- Use the **full surface vertex shader**; with GPGPU off, rest XYZ live in the geometry attribute (`USE_PARTICLE_ATTR_REST`).
+- Particle tab uses the **full count slider**; Explore soft-caps (~60k) because Scatter + particles share a frame.
+- Temporary `?baDiag=mount|cpu|geom|simple|gpu` modes and an on-screen build badge supported bisect when Console was unusable.
+
+Detail for future recurrence: [docs/planning/Born-Another-Technic-Log.md](../planning/Born-Another-Technic-Log.md).
+
+
+# Born Another — Playground
+
+A fifth top-level mode, **Playground** (`#playground`), sits beside Concept / Studies / System / World for quick final-project prototypes. It is structural / UI only: no World V2 fork, no Studies Canvas, no simulation.
+
+- Nav and hash routing via `modes.js` + `SiteHeader`.
+- Lazy-loaded `src/playground/` with an experiment registry; only the active experiment mounts.
+- **Experiment 01** is an empty workspace (title, description, scene slot, controls slot) — no R3F yet.
+- Adding Experiment 02 = new component + one registry entry; experiment state stays inside Playground, not global `App` study state.
+
+Organization plan: [docs/planning/Website-Organization.md](../planning/Website-Organization.md).
