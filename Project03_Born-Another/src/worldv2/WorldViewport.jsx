@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import WebGLCanvas from '../WebGLCanvas.jsx'
@@ -107,6 +107,8 @@ function lifeVisualState(life) {
 // Opposite side of the sphere so the key lights sit behind the body and read
 // as a bright top-right rim at the default exterior start.
 const EXTERIOR_POSITION = new THREE.Vector3(-0.24, 0.12, -13.2)
+/** Stable exterior orbit pivot — organism body rests at world origin. */
+const ORGANISM_PIVOT = new THREE.Vector3(0, 0, 0)
 /** Clear of the membrane wall, looking into the cavity. */
 const INTERIOR_POSITION = new THREE.Vector3(0, 0.04, 0.18)
 const INTERIOR_LOOK_AT = new THREE.Vector3(0.55, 0.08, -0.35)
@@ -116,13 +118,50 @@ const CAMERA_FAR = 240
 const CAMERA_WALK_SPEED = 5.4
 const CAMERA_SPRINT_SPEED = 14
 const CAMERA_LOOK_SENSITIVITY = 0.0042
+const CAMERA_ORBIT_SENSITIVITY = 0.005
 const CAMERA_PITCH_LIMIT = Math.PI * 0.46
+const CAMERA_ORBIT_PHI_MIN = 0.14
+const CAMERA_ORBIT_PHI_MAX = Math.PI - 0.14
+const CAMERA_ORBIT_RADIUS_MIN = 4.2
+const CAMERA_ORBIT_RADIUS_MAX = 36
 const CAMERA_MOVE_DAMPING = 9
 const CAMERA_LOOK_DAMPING = 16
 const CAMERA_WHEEL_DAMPING = 11
 const CAMERA_DRAG_THRESHOLD = 4
 const WORLD_UP = new THREE.Vector3(0, 1, 0)
 const ZERO = new THREE.Vector3()
+
+function sphericalFromOffset(offset, out = { theta: 0, phi: Math.PI / 2, radius: 1 }) {
+  const radius = Math.max(1e-4, offset.length())
+  out.radius = radius
+  out.theta = Math.atan2(offset.x, offset.z)
+  out.phi = Math.acos(
+    THREE.MathUtils.clamp(offset.y / radius, -1, 1),
+  )
+  return out
+}
+
+function offsetFromSpherical(theta, phi, radius, target = new THREE.Vector3()) {
+  const sinPhi = Math.sin(phi)
+  return target.set(
+    radius * sinPhi * Math.sin(theta),
+    radius * Math.cos(phi),
+    radius * sinPhi * Math.cos(theta),
+  )
+}
+
+/** Default exterior spherical pose derived from EXTERIOR_POSITION. */
+function createDefaultOrbitState() {
+  const spherical = sphericalFromOffset(
+    EXTERIOR_POSITION.clone().sub(ORGANISM_PIVOT),
+  )
+  return {
+    theta: spherical.theta,
+    phi: spherical.phi,
+    radius: spherical.radius,
+    revision: 0,
+  }
+}
 
 const FINISH_SHADER = {
   uniforms: {
@@ -517,7 +556,14 @@ function CrystalDissolveDust({ seed, age, decay, emitters }) {
   )
 }
 
-function SpatialGrowthSites({ world, sites, deformations, life, restOutside }) {
+function SpatialGrowthSites({
+  world,
+  sites,
+  deformations,
+  life,
+  restOutside,
+  extraRadialOffset = null,
+}) {
   const geometries = useMemo(() => createPrimaryCrystalGeometrySet(), [])
   const livingGlow = life ? lifeVisualState(life).vitality : 1
   const seed = life?.seed ?? 0
@@ -555,13 +601,25 @@ function SpatialGrowthSites({ world, sites, deformations, life, restOutside }) {
 
     // Follow the deformed membrane; do not laterally shove off the nucleation site.
     const morph = formMorphAmount(life?.variables?.growth ?? 1)
+    const restRadius = world.radiusAt(outwardNormal)
+    const shapedRadius = morphRestRadius(restRadius, morph)
+    const restPoint = [
+      site.direction[0] * shapedRadius,
+      site.direction[1] * shapedRadius,
+      site.direction[2] * shapedRadius,
+    ]
+    const extra =
+      typeof extraRadialOffset === 'function'
+        ? extraRadialOffset(restPoint[0], restPoint[1], restPoint[2])
+        : 0
     const surface = new THREE.Vector3().fromArray(
       primaryCrystalAnchor(
         site,
-        world.radiusAt(outwardNormal),
+        restRadius,
         deformations,
         0,
         morph,
+        extra,
       ),
     )
 
@@ -939,7 +997,26 @@ function TouchFeedback({ world, feedback, morph = 1 }) {
   )
 }
 
-function WorldOrganism({ view, life, onStimulus }) {
+function WorldOrganism({
+  view,
+  life,
+  onStimulus,
+  deformAmplitudeScale = 1,
+  deformFrequencyScale = 1,
+  sharedTimeRef = null,
+  /** Optional (life, elapsedSeconds) => life for Playground temperature compare. */
+  resolveLifeForRender = null,
+  /** Breath radial amp when using shared compare clock (World keeps 0.0035). */
+  breathAmplitude = 0.0035,
+  /** Optional (x,y,z) => radial offset — distributed temperature spatial field. */
+  extraRadialOffset = null,
+  /** Optional (x,y,z) => influence −1…1 for diagnostic vertex tint. */
+  influenceOverlay = null,
+  /** Playground diagnostic: opaque gray + wireframe; hides decorative materials. */
+  geometryDebug = false,
+  /** Optional ref: last applyLifeToWorld duration in ms (Playground perf). */
+  geometryUpdateMsRef = null,
+}) {
   const group = useRef(null)
   const skinMaterial = useRef(null)
   const shellMaterial = useRef(null)
@@ -958,6 +1035,23 @@ function WorldOrganism({ view, life, onStimulus }) {
   const [bundle, setBundle] = useState(null)
   const [touchFeedback, setTouchFeedback] = useState(null)
   const normalsTick = useRef(0)
+  const lifeRef = useRef(life)
+  const resolveRef = useRef(resolveLifeForRender)
+  const extraRadialRef = useRef(extraRadialOffset)
+  const influenceRef = useRef(influenceOverlay)
+  lifeRef.current = life
+  resolveRef.current = resolveLifeForRender
+  extraRadialRef.current = extraRadialOffset
+  influenceRef.current = influenceOverlay
+  const ampScale = Number.isFinite(deformAmplitudeScale)
+    ? deformAmplitudeScale
+    : 1
+  const freqScale = Number.isFinite(deformFrequencyScale)
+    ? Math.max(1e-3, deformFrequencyScale)
+    : 1
+  const breathAmp = Number.isFinite(breathAmplitude)
+    ? breathAmplitude
+    : 0.0035
 
   useEffect(() => {
     const next = createWorldGeometry(life.seed)
@@ -968,29 +1062,81 @@ function WorldOrganism({ view, life, onStimulus }) {
     return () => disposeWorldGeometry(next)
   }, [life.seed])
 
+  const applyDisplayLife = (elapsed, { updateNormals }) => {
+    if (!bundle) return
+    const source = lifeRef.current
+    const resolve = resolveRef.current
+    const displayLife =
+      typeof resolve === 'function' ? resolve(source, elapsed) : source
+    const timed = geometryUpdateMsRef != null
+    const t0 = timed ? performance.now() : 0
+    applyLifeToWorld(bundle.world, bundle.rest, displayLife, {
+      updateNormals,
+      extraRadialOffset: extraRadialRef.current,
+      influenceOverlay: influenceRef.current,
+    })
+    if (timed) {
+      geometryUpdateMsRef.current = performance.now() - t0
+    }
+  }
+
   useLayoutEffect(() => {
     if (!bundle) return
     // Keep membrane + baked crystal anchors on the same life sample as LE sites.
-    // Recompute normals every other life sample while playing 鈥?main-thread win.
+    // Recompute normals every other life sample while playing — main-thread win.
     normalsTick.current += 1
-    applyLifeToWorld(bundle.world, bundle.rest, life, {
+    const sharedTime = sharedTimeRef?.current
+    const elapsed = typeof sharedTime === 'number' ? sharedTime : 0
+    applyDisplayLife(elapsed, {
       updateNormals: normalsTick.current % 2 === 1,
     })
-  }, [bundle, life])
+  }, [
+    bundle,
+    life,
+    deformAmplitudeScale,
+    deformFrequencyScale,
+    extraRadialOffset,
+    influenceOverlay,
+  ])
 
   useFrame(({ clock }, delta) => {
     if (!group.current) return
     const visual = lifeVisualState(life)
+    const sharedTime = sharedTimeRef?.current
+    const elapsed =
+      typeof sharedTime === 'number' ? sharedTime : clock.elapsedTime
+    // Playground compare: refresh temporal ambient + spatial field each frame.
+    if (
+      (typeof resolveRef.current === 'function' ||
+        typeof extraRadialRef.current === 'function') &&
+      bundle
+    ) {
+      normalsTick.current += 1
+      applyDisplayLife(elapsed, {
+        updateNormals: normalsTick.current % 2 === 1,
+      })
+    }
     // Slow exterior turn while alive; death freezes the remnant in place.
+    // Shared clock → absolute yaw so dual compare viewports stay matched.
     if (view === 'exterior' && !life.dead) {
-      group.current.rotation.y += delta * 0.045
+      if (typeof sharedTime === 'number') {
+        group.current.rotation.y = elapsed * 0.045
+      } else {
+        group.current.rotation.y += delta * 0.045
+      }
     }
     const breath =
-      1 + Math.sin(clock.elapsedTime * 0.62) * 0.0035 * visual.motion
+      1 +
+      Math.sin(elapsed * 0.62 * freqScale) *
+        breathAmp *
+        ampScale *
+        visual.motion
     group.current.scale.setScalar(life.outputs.form.scale * breath)
 
     const presence = visual.membrane
     const fade = 1 - presence
+    // Geometry Debug uses static opaque materials — skip presence fades.
+    if (geometryDebug) return
     if (skinMaterial.current) {
       const material = skinMaterial.current
       material.transparent = presence < 0.98
@@ -1102,140 +1248,166 @@ function WorldOrganism({ view, life, onStimulus }) {
       onPointerUp={endExteriorInteraction}
       onPointerCancel={endExteriorInteraction}
     >
-      <mesh geometry={world.surface} renderOrder={0}>
-        <meshPhysicalMaterial
-          ref={skinMaterial}
-          color="#ffffff"
-          vertexColors
-          roughness={0.34}
-          metalness={0.08}
-          clearcoat={0.72}
-          clearcoatRoughness={0.14}
-          iridescence={0.24}
-          iridescenceIOR={1.28}
-          iridescenceThicknessRange={[120, 430]}
-          envMapIntensity={1.35}
-          side={THREE.FrontSide}
-        />
-      </mesh>
-
-      <mesh
-        geometry={world.surface}
-        scale={1.022}
-        renderOrder={2}
-      >
-        <meshPhysicalMaterial
-          ref={shellMaterial}
-          color="#9eeff1"
-          roughness={0.12}
-          metalness={0}
-          transmission={0.38}
-          thickness={0.16}
-          ior={1.36}
-          attenuationColor="#5fb9c2"
-          attenuationDistance={2.8}
-          iridescence={0.34}
-          iridescenceIOR={1.32}
-          iridescenceThicknessRange={[160, 520]}
-          clearcoat={1}
-          clearcoatRoughness={0.07}
-          envMapIntensity={1.45}
-          transparent
-          opacity={0.18}
-          depthWrite={false}
-          side={THREE.FrontSide}
-        />
-      </mesh>
-
-      <mesh geometry={world.surface} scale={0.994} renderOrder={0}>
-        <meshPhysicalMaterial
-          ref={liningMaterial}
-          color="#ffffff"
-          vertexColors
-          emissive="#061a20"
-          emissiveIntensity={0.14}
-          roughness={0.68}
-          metalness={0.03}
-          clearcoat={0.52}
-          clearcoatRoughness={0.22}
-          iridescence={0.16}
-          envMapIntensity={0.48}
-          side={THREE.BackSide}
-        />
-      </mesh>
-
-      {CRYSTAL_DEBUG ? null : (
+      {geometryDebug ? (
         <>
-          <mesh geometry={world.outside} renderOrder={3}>
-            <meshPhysicalMaterial
-              color={0xffffff}
-              transmission={0.92}
-              thickness={1.15}
-              ior={1.62}
-              dispersion={5}
-              roughness={0.06}
-              metalness={0}
-              iridescence={0.85}
-              iridescenceIOR={1.35}
-              iridescenceThicknessRange={[180, 820]}
-              attenuationColor={0xe4ecd9}
-              attenuationDistance={2.6}
-              clearcoat={1}
-              clearcoatRoughness={0.04}
-              specularIntensity={1}
-              envMapIntensity={1.25}
-              flatShading
-              side={THREE.FrontSide}
-            />
-          </mesh>
-
-          <mesh geometry={world.inside} renderOrder={3}>
-            <meshPhysicalMaterial
-              color={0xffffff}
-              transmission={0.78}
-              thickness={0.9}
-              ior={1.62}
-              dispersion={4.2}
-              roughness={0.08}
-              metalness={0}
-              iridescence={0.78}
-              iridescenceIOR={1.35}
-              iridescenceThicknessRange={[180, 820]}
-              attenuationColor={0xbfffe8}
-              attenuationDistance={2.2}
-              clearcoat={1}
-              clearcoatRoughness={0.04}
-              envMapIntensity={1.2}
-              emissive="#6fffea"
-              emissiveIntensity={0.05 * visual.vitality}
-              flatShading
-              side={THREE.FrontSide}
-            />
-          </mesh>
-
-          <mesh geometry={world.minerals} renderOrder={1}>
+          <mesh geometry={world.surface} renderOrder={0}>
             <meshStandardMaterial
-              color="#ba9d52"
-              metalness={0.92}
-              roughness={0.3}
-              flatShading
-              envMapIntensity={1.45}
+              color="#9a9a9a"
+              roughness={0.88}
+              metalness={0}
+              envMapIntensity={0}
+              side={THREE.FrontSide}
+            />
+          </mesh>
+          <mesh geometry={world.surface} renderOrder={1}>
+            <meshBasicMaterial
+              color="#1a1a1a"
+              wireframe
+              transparent
+              opacity={0.4}
+              depthWrite={false}
             />
           </mesh>
         </>
+      ) : (
+        <>
+          <mesh geometry={world.surface} renderOrder={0}>
+            <meshPhysicalMaterial
+              ref={skinMaterial}
+              color="#ffffff"
+              vertexColors
+              roughness={0.34}
+              metalness={0.08}
+              clearcoat={0.72}
+              clearcoatRoughness={0.14}
+              iridescence={0.24}
+              iridescenceIOR={1.28}
+              iridescenceThicknessRange={[120, 430]}
+              envMapIntensity={1.35}
+              side={THREE.FrontSide}
+            />
+          </mesh>
+
+          <mesh
+            geometry={world.surface}
+            scale={1.022}
+            renderOrder={2}
+          >
+            <meshPhysicalMaterial
+              ref={shellMaterial}
+              color="#9eeff1"
+              roughness={0.12}
+              metalness={0}
+              transmission={0.38}
+              thickness={0.16}
+              ior={1.36}
+              attenuationColor="#5fb9c2"
+              attenuationDistance={2.8}
+              iridescence={0.34}
+              iridescenceIOR={1.32}
+              iridescenceThicknessRange={[160, 520]}
+              clearcoat={1}
+              clearcoatRoughness={0.07}
+              envMapIntensity={1.45}
+              transparent
+              opacity={0.18}
+              depthWrite={false}
+              side={THREE.FrontSide}
+            />
+          </mesh>
+
+          <mesh geometry={world.surface} scale={0.994} renderOrder={0}>
+            <meshPhysicalMaterial
+              ref={liningMaterial}
+              color="#ffffff"
+              vertexColors
+              emissive="#061a20"
+              emissiveIntensity={0.14}
+              roughness={0.68}
+              metalness={0.03}
+              clearcoat={0.52}
+              clearcoatRoughness={0.22}
+              iridescence={0.16}
+              envMapIntensity={0.48}
+              side={THREE.BackSide}
+            />
+          </mesh>
+
+          {CRYSTAL_DEBUG ? null : (
+            <>
+              <mesh geometry={world.outside} renderOrder={3}>
+                <meshPhysicalMaterial
+                  color={0xffffff}
+                  transmission={0.92}
+                  thickness={1.15}
+                  ior={1.62}
+                  dispersion={5}
+                  roughness={0.06}
+                  metalness={0}
+                  iridescence={0.85}
+                  iridescenceIOR={1.35}
+                  iridescenceThicknessRange={[180, 820]}
+                  attenuationColor={0xe4ecd9}
+                  attenuationDistance={2.6}
+                  clearcoat={1}
+                  clearcoatRoughness={0.04}
+                  specularIntensity={1}
+                  envMapIntensity={1.25}
+                  flatShading
+                  side={THREE.FrontSide}
+                />
+              </mesh>
+
+              <mesh geometry={world.inside} renderOrder={3}>
+                <meshPhysicalMaterial
+                  color={0xffffff}
+                  transmission={0.78}
+                  thickness={0.9}
+                  ior={1.62}
+                  dispersion={4.2}
+                  roughness={0.08}
+                  metalness={0}
+                  iridescence={0.78}
+                  iridescenceIOR={1.35}
+                  iridescenceThicknessRange={[180, 820]}
+                  attenuationColor={0xbfffe8}
+                  attenuationDistance={2.2}
+                  clearcoat={1}
+                  clearcoatRoughness={0.04}
+                  envMapIntensity={1.2}
+                  emissive="#6fffea"
+                  emissiveIntensity={0.05 * visual.vitality}
+                  flatShading
+                  side={THREE.FrontSide}
+                />
+              </mesh>
+
+              <mesh geometry={world.minerals} renderOrder={1}>
+                <meshStandardMaterial
+                  color="#ba9d52"
+                  metalness={0.92}
+                  roughness={0.3}
+                  flatShading
+                  envMapIntensity={1.45}
+                />
+              </mesh>
+            </>
+          )}
+          <SpatialGrowthSites
+            world={world}
+            sites={life.outputs.surface.spatialGrowthSites}
+            deformations={life.outputs.form.localDeformations}
+            life={life}
+            restOutside={bundle.rest.outside}
+            extraRadialOffset={extraRadialOffset}
+          />
+          <TouchFeedback
+            world={world}
+            feedback={touchFeedback}
+            morph={formMorphAmount(life.variables.growth)}
+          />
+        </>
       )}
-      <SpatialGrowthSites
-        world={world}
-        sites={life.outputs.surface.spatialGrowthSites}
-        deformations={life.outputs.form.localDeformations}
-        life={life}
-        restOutside={bundle.rest.outside}
-      />
-      <TouchFeedback
-        world={world}
-        feedback={touchFeedback}
-        morph={formMorphAmount(life.variables.growth)}
-      />
     </group>
   )
 }
@@ -1255,15 +1427,18 @@ function yawPitchFromQuaternion(quaternion, euler) {
 }
 
 /**
- * Free-fly camera for WORLD V2. Replaces the old CameraRig, which locked the
- * camera to an exterior orbit pose or an interior look-around each frame.
- * Enter / Exit still lerps to the scripted poses, then fly-through resumes.
+ * World camera:
+ * - Exterior: orbit around organism pivot (no look-pan; organism stays centered).
+ * - Interior / explore: free-look + WASD (unchanged).
+ * Enter / Exit still lerps between scripted poses.
  */
-function WorldFlyCamera({ view, onReset }) {
+function WorldFlyCamera({ view, onReset, sharedOrbitRef = null }) {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
+  const viewRef = useRef(view)
+  viewRef.current = view
   const outsideQuaternion = useRef(
-    lookQuaternion(EXTERIOR_POSITION, new THREE.Vector3()),
+    lookQuaternion(EXTERIOR_POSITION, ORGANISM_PIVOT),
   )
   const insideQuaternion = useRef(
     lookQuaternion(INTERIOR_POSITION, INTERIOR_LOOK_AT),
@@ -1275,6 +1450,9 @@ function WorldFlyCamera({ view, onReset }) {
   const wish = useRef(new THREE.Vector3())
   const velocity = useRef(new THREE.Vector3())
   const wheel = useRef(new THREE.Vector3())
+  const orbitOffset = useRef(new THREE.Vector3())
+  const localOrbit = useRef(createDefaultOrbitState())
+  const appliedOrbitRevision = useRef(-1)
   const keys = useRef({
     w: false,
     a: false,
@@ -1302,14 +1480,46 @@ function WorldFlyCamera({ view, onReset }) {
     fromQuaternion: new THREE.Quaternion(),
   })
 
-  const snapToExterior = () => {
-    const pose = yawPitchFromQuaternion(outsideQuaternion.current, euler.current)
+  const readOrbitState = () => sharedOrbitRef?.current ?? localOrbit.current
+
+  const writeOrbitState = (partial) => {
+    const target = sharedOrbitRef?.current ?? localOrbit.current
+    if (partial.theta != null) target.theta = partial.theta
+    if (partial.phi != null) target.phi = partial.phi
+    if (partial.radius != null) target.radius = partial.radius
+    target.revision = (target.revision ?? 0) + 1
+    if (!sharedOrbitRef) localOrbit.current = target
+  }
+
+  const applyExteriorOrbit = () => {
+    const orbit = readOrbitState()
+    const phi = THREE.MathUtils.clamp(
+      orbit.phi,
+      CAMERA_ORBIT_PHI_MIN,
+      CAMERA_ORBIT_PHI_MAX,
+    )
+    const radius = THREE.MathUtils.clamp(
+      orbit.radius,
+      CAMERA_ORBIT_RADIUS_MIN,
+      CAMERA_ORBIT_RADIUS_MAX,
+    )
+    orbit.phi = phi
+    orbit.radius = radius
+    offsetFromSpherical(orbit.theta, phi, radius, orbitOffset.current)
+    camera.position.copy(ORGANISM_PIVOT).add(orbitOffset.current)
+    camera.lookAt(ORGANISM_PIVOT)
+    const pose = yawPitchFromQuaternion(camera.quaternion, euler.current)
     yaw.current = pose.yaw
     pitch.current = pose.pitch
+    appliedOrbitRevision.current = orbit.revision ?? 0
+  }
+
+  const snapToExterior = () => {
+    const defaults = createDefaultOrbitState()
+    writeOrbitState(defaults)
     velocity.current.set(0, 0, 0)
     wheel.current.set(0, 0, 0)
-    camera.position.copy(EXTERIOR_POSITION)
-    camera.quaternion.copy(outsideQuaternion.current)
+    applyExteriorOrbit()
   }
 
   const syncLookFromCamera = () => {
@@ -1323,12 +1533,18 @@ function WorldFlyCamera({ view, onReset }) {
     camera.near = CAMERA_NEAR
     camera.far = CAMERA_FAR
     camera.updateProjectionMatrix()
+    if (!sharedOrbitRef?.current) {
+      const defaults = createDefaultOrbitState()
+      if (sharedOrbitRef) sharedOrbitRef.current = defaults
+      else localOrbit.current = defaults
+    }
     snapToExterior()
   }, [camera])
 
   useEffect(() => {
     if (view !== 'entering' && view !== 'exiting') {
-      syncLookFromCamera()
+      if (view === 'exterior') applyExteriorOrbit()
+      else syncLookFromCamera()
       return undefined
     }
     transition.current = {
@@ -1418,6 +1634,23 @@ function WorldFlyCamera({ view, onReset }) {
         return
       }
       drag.current.looking = true
+
+      if (viewRef.current === 'exterior') {
+        // Orbit around organism center — no FPS look-pan.
+        const orbit = readOrbitState()
+        writeOrbitState({
+          theta: orbit.theta - deltaX * CAMERA_ORBIT_SENSITIVITY,
+          phi: THREE.MathUtils.clamp(
+            orbit.phi - deltaY * CAMERA_ORBIT_SENSITIVITY,
+            CAMERA_ORBIT_PHI_MIN,
+            CAMERA_ORBIT_PHI_MAX,
+          ),
+          radius: orbit.radius,
+        })
+        applyExteriorOrbit()
+        return
+      }
+
       yaw.current -= deltaX * CAMERA_LOOK_SENSITIVITY
       pitch.current = THREE.MathUtils.clamp(
         pitch.current - deltaY * CAMERA_LOOK_SENSITIVITY,
@@ -1438,6 +1671,22 @@ function WorldFlyCamera({ view, onReset }) {
           : event.deltaMode === 2
             ? event.deltaY * element.clientHeight
             : event.deltaY
+
+      if (viewRef.current === 'exterior') {
+        const orbit = readOrbitState()
+        writeOrbitState({
+          theta: orbit.theta,
+          phi: orbit.phi,
+          radius: THREE.MathUtils.clamp(
+            orbit.radius + pixels * 0.02,
+            CAMERA_ORBIT_RADIUS_MIN,
+            CAMERA_ORBIT_RADIUS_MAX,
+          ),
+        })
+        applyExteriorOrbit()
+        return
+      }
+
       camera.getWorldDirection(forward.current)
       wheel.current.addScaledVector(forward.current, -pixels * 0.018)
     }
@@ -1453,6 +1702,8 @@ function WorldFlyCamera({ view, onReset }) {
         event.code === 'ShiftLeft' ||
         event.code === 'ShiftRight'
       ) {
+        // Exterior is orbit-only; keep WASD for interior explore.
+        if (viewRef.current === 'exterior') return
         event.preventDefault()
         setKey(event.code, true)
         keys.current.shift = event.shiftKey || keys.current.shift
@@ -1492,7 +1743,7 @@ function WorldFlyCamera({ view, onReset }) {
       window.removeEventListener('keyup', onKeyUp)
       clearMotion()
     }
-  }, [camera, gl, onReset])
+  }, [camera, gl, onReset, sharedOrbitRef])
 
   useFrame((_, delta) => {
     const dt = Math.min(0.05, Math.max(0, delta))
@@ -1512,6 +1763,13 @@ function WorldFlyCamera({ view, onReset }) {
       if (progress >= 1) {
         camera.position.copy(destinationPosition)
         camera.quaternion.copy(destinationQuaternion)
+        if (!entering) {
+          const defaults = createDefaultOrbitState()
+          writeOrbitState(defaults)
+          applyExteriorOrbit()
+        } else {
+          syncLookFromCamera()
+        }
       } else {
         camera.position.lerpVectors(
           current.fromPosition,
@@ -1521,6 +1779,17 @@ function WorldFlyCamera({ view, onReset }) {
         camera.quaternion
           .copy(current.fromQuaternion)
           .slerp(destinationQuaternion, progress)
+      }
+      velocity.current.set(0, 0, 0)
+      wheel.current.set(0, 0, 0)
+      return
+    }
+
+    if (view === 'exterior') {
+      // Follow shared Playground orbit revisions written by the sibling viewport.
+      const orbit = readOrbitState()
+      if ((orbit.revision ?? 0) !== appliedOrbitRevision.current) {
+        applyExteriorOrbit()
       }
       velocity.current.set(0, 0, 0)
       wheel.current.set(0, 0, 0)
@@ -1582,11 +1851,19 @@ function WorldFlyCamera({ view, onReset }) {
   return null
 }
 
-function WorldPostprocessing({ view, backgroundStudy }) {
+function WorldPostprocessing({
+  view,
+  backgroundStudy,
+  geometryDebug = false,
+  /** Optional: receive cumulative draw stats after composer.render (Playground). */
+  glInfoRef = null,
+}) {
   const session = useRef(null)
   const get = useThree((state) => state.get)
   const size = useThree((state) => state.size)
-  const shaderStudy = backgroundStudy === 'shader'
+  const shaderStudy = backgroundStudy === 'shader' && !geometryDebug
+  const glInfoRefLocal = useRef(glInfoRef)
+  glInfoRefLocal.current = glInfoRef
 
   useLayoutEffect(() => {
     const { gl, scene, camera, size: currentSize } = get()
@@ -1644,24 +1921,128 @@ function WorldPostprocessing({ view, backgroundStudy }) {
     current.shaderGrade.uniforms.uEnabled.value = shaderStudy ? 1 : 0
   }, [shaderStudy])
 
-  useFrame(({ clock }) => {
+  useLayoutEffect(() => {
+    const current = session.current
+    if (!current) return
+    // Geometry Debug: strip bloom / finish grade so silhouette reads clearly.
+    current.bloom.enabled = !geometryDebug
+    current.finish.enabled = !geometryDebug
+  }, [geometryDebug])
+
+  useFrame(({ clock, gl }) => {
     const current = session.current
     if (!current) return
     const interior = view === 'interior' || view === 'exiting'
-    current.finish.uniforms.uTime.value = clock.elapsedTime % 100
-    current.finish.uniforms.uInterior.value = THREE.MathUtils.damp(
-      current.finish.uniforms.uInterior.value,
-      interior ? 1 : 0,
-      3,
-      1 / 60,
-    )
-    current.composer.render()
+    if (!geometryDebug) {
+      current.finish.uniforms.uTime.value = clock.elapsedTime % 100
+      current.finish.uniforms.uInterior.value = THREE.MathUtils.damp(
+        current.finish.uniforms.uInterior.value,
+        interior ? 1 : 0,
+        3,
+        1 / 60,
+      )
+    }
+    const infoTarget = glInfoRefLocal.current
+    if (infoTarget) {
+      // Cumulative pass stats: default autoReset only keeps the LAST pass
+      // (fullscreen quad → ~1–2 draws / ~0 tris), which misled the HUD.
+      const prevAuto = gl.info.autoReset
+      gl.info.autoReset = false
+      gl.info.reset()
+      current.composer.render()
+      infoTarget.current = {
+        calls: gl.info.render.calls,
+        triangles: gl.info.render.triangles,
+        lines: gl.info.render.lines,
+        points: gl.info.render.points,
+      }
+      gl.info.autoReset = prevAuto
+      gl.info.reset()
+    } else {
+      current.composer.render()
+    }
   }, 1)
 
   return null
 }
 
-function WorldScene({ view, life, onStimulus, backgroundStudy, onCameraReset }) {
+/** Ignore Clock.getDelta() spikes right after Canvas mount. */
+const PERF_WARMUP_MS = 5000
+const PERF_SAMPLE_MS = 500
+
+/**
+ * Playground perf probe — samples after postprocessing (priority 2).
+ * FPS uses wall-clock frame counts (not R3F delta sums).
+ */
+function ViewportPerfProbe({
+  slot,
+  statsRef,
+  geometryUpdateMsRef,
+  glInfoRef,
+}) {
+  const frames = useRef(0)
+  const geomSum = useRef(0)
+  const geomCount = useRef(0)
+  const mountedAt = useRef(performance.now())
+  const windowStart = useRef(performance.now())
+
+  useFrame(() => {
+    if (!statsRef) return
+    const now = performance.now()
+    frames.current += 1
+    const geomMs = geometryUpdateMsRef?.current
+    if (Number.isFinite(geomMs) && geomMs >= 0) {
+      geomSum.current += geomMs
+      geomCount.current += 1
+    }
+    const wallElapsedMs = now - windowStart.current
+    if (wallElapsedMs < PERF_SAMPLE_MS) return
+
+    const warmed = now - mountedAt.current >= PERF_WARMUP_MS
+    const fps = (frames.current * 1000) / wallElapsedMs
+    const info = glInfoRef?.current
+    statsRef.current = {
+      ...statsRef.current,
+      [slot]: {
+        fps,
+        frameMs: fps > 1e-6 ? 1000 / fps : 0,
+        calls: info?.calls ?? null,
+        triangles: info?.triangles ?? null,
+        geometryUpdateMs:
+          geomCount.current > 0 ? geomSum.current / geomCount.current : null,
+        warmed,
+        sampleMs: wallElapsedMs,
+      },
+    }
+    frames.current = 0
+    windowStart.current = now
+    geomSum.current = 0
+    geomCount.current = 0
+  }, 2)
+
+  return null
+}
+
+function WorldScene({
+  view,
+  life,
+  onStimulus,
+  backgroundStudy,
+  onCameraReset,
+  deformAmplitudeScale = 1,
+  deformFrequencyScale = 1,
+  sharedTimeRef = null,
+  sharedOrbitRef = null,
+  resolveLifeForRender = null,
+  breathAmplitude = 0.0035,
+  extraRadialOffset = null,
+  influenceOverlay = null,
+  geometryDebug = false,
+  perfSlot = null,
+  perfStatsRef = null,
+  geometryUpdateMsRef = null,
+}) {
+  const glInfoRef = useRef(null)
   return (
     <>
       <WorldEnvironment
@@ -1673,9 +2054,35 @@ function WorldScene({ view, life, onStimulus, backgroundStudy, onCameraReset }) 
         view={view}
         life={life}
         onStimulus={onStimulus}
+        deformAmplitudeScale={deformAmplitudeScale}
+        deformFrequencyScale={deformFrequencyScale}
+        sharedTimeRef={sharedTimeRef}
+        resolveLifeForRender={resolveLifeForRender}
+        breathAmplitude={breathAmplitude}
+        extraRadialOffset={extraRadialOffset}
+        influenceOverlay={geometryDebug ? null : influenceOverlay}
+        geometryDebug={geometryDebug}
+        geometryUpdateMsRef={geometryUpdateMsRef}
       />
-      <WorldFlyCamera view={view} onReset={onCameraReset} />
-      <WorldPostprocessing view={view} backgroundStudy={backgroundStudy} />
+      <WorldFlyCamera
+        view={view}
+        onReset={onCameraReset}
+        sharedOrbitRef={sharedOrbitRef}
+      />
+      <WorldPostprocessing
+        view={view}
+        backgroundStudy={backgroundStudy}
+        geometryDebug={geometryDebug}
+        glInfoRef={perfSlot && perfStatsRef ? glInfoRef : null}
+      />
+      {perfSlot && perfStatsRef ? (
+        <ViewportPerfProbe
+          slot={perfSlot}
+          statsRef={perfStatsRef}
+          geometryUpdateMsRef={geometryUpdateMsRef}
+          glInfoRef={glInfoRef}
+        />
+      ) : null}
     </>
   )
 }
@@ -1693,6 +2100,25 @@ export function WorldViewport({
   backgroundStudy = 'dark',
   onCameraReset,
   className = 'world-v2__viewport',
+  /** Optional membrane breath / bump amplitude scale (default 1 = World behavior). */
+  deformAmplitudeScale = 1,
+  /** Optional breath frequency + spatial sharpness scale (default 1). */
+  deformFrequencyScale = 1,
+  /** Shared seconds clock for dual-viewport sync (Playground compare). */
+  sharedTimeRef = null,
+  /** Shared exterior orbit { theta, phi, radius, revision } for A/B sync. */
+  sharedOrbitRef = null,
+  /** Playground: (life, elapsed) => display life with ambient / temp deform. */
+  resolveLifeForRender = null,
+  breathAmplitude = 0.0035,
+  extraRadialOffset = null,
+  influenceOverlay = null,
+  /** Playground only: opaque gray geometry diagnostic (World stays styled). */
+  geometryDebug = false,
+  /** Playground perf: slot id ('A' | 'B') into perfStatsRef. */
+  perfSlot = null,
+  perfStatsRef = null,
+  geometryUpdateMsRef = null,
 }) {
   const worldDpr = useWorldDpr()
   return (
@@ -1718,6 +2144,18 @@ export function WorldViewport({
         onStimulus={onStimulus}
         backgroundStudy={backgroundStudy}
         onCameraReset={onCameraReset}
+        deformAmplitudeScale={deformAmplitudeScale}
+        deformFrequencyScale={deformFrequencyScale}
+        sharedTimeRef={sharedTimeRef}
+        sharedOrbitRef={sharedOrbitRef}
+        resolveLifeForRender={resolveLifeForRender}
+        breathAmplitude={breathAmplitude}
+        extraRadialOffset={extraRadialOffset}
+        influenceOverlay={influenceOverlay}
+        geometryDebug={geometryDebug}
+        perfSlot={perfSlot}
+        perfStatsRef={perfStatsRef}
+        geometryUpdateMsRef={geometryUpdateMsRef}
       />
     </WebGLCanvas>
   )

@@ -95,12 +95,14 @@ export function morphRestRadius(restRadius, morph = 1) {
 /**
  * One deformation formula for membrane vertices and crystal roots:
  * push the rest-space point along its radial direction by localField(...).
+ * Optional `extraRadial` adds a distributed field (Playground temperature).
  */
-export function deformRadialPoint(x, y, z, deformations = []) {
+export function deformRadialPoint(x, y, z, deformations = [], extraRadial = 0) {
   const radius = Math.hypot(x, y, z) || 1
   const direction = [x / radius, y / radius, z / radius]
+  const extra = Number.isFinite(extraRadial) ? extraRadial : 0
   const nextRadius =
-    radius + localField(direction, deformations, 'deformation')
+    radius + localField(direction, deformations, 'deformation') + extra
   return [
     direction[0] * nextRadius,
     direction[1] * nextRadius,
@@ -146,6 +148,7 @@ export function primaryCrystalAnchor(
   deformations = [],
   lift = 0,
   morph = 1,
+  extraRadial = 0,
 ) {
   const direction = site.direction
   const radius = morphRestRadius(restRadius, morph)
@@ -154,7 +157,13 @@ export function primaryCrystalAnchor(
     direction[1] * radius,
     direction[2] * radius,
   ]
-  const deformed = deformRadialPoint(rest[0], rest[1], rest[2], deformations)
+  const deformed = deformRadialPoint(
+    rest[0],
+    rest[1],
+    rest[2],
+    deformations,
+    extraRadial,
+  )
   if (!lift) return deformed
   return [
     deformed[0] + direction[0] * lift,
@@ -169,7 +178,11 @@ function applySurface(
   restColors,
   outputs,
   morph,
-  { updateNormals = true } = {},
+  {
+    updateNormals = true,
+    extraRadialOffset = null,
+    influenceOverlay = null,
+  } = {},
 ) {
   const position = surface.attributes.position
   const target = position.array
@@ -178,6 +191,7 @@ function applySurface(
   const colorTarget = colorAttr?.array
   // Reveal mottled vertex color only as the body leaves the birth sphere.
   const colorMorph = smootherstep(0.12, 0.72, morph)
+  const useOverlay = typeof influenceOverlay === 'function'
   for (let index = 0; index < position.count; index += 1) {
     const offset = index * 3
     const shaped = morphRestPoint(
@@ -186,26 +200,47 @@ function applySurface(
       restPositions[offset + 2],
       morph,
     )
+    const extra =
+      typeof extraRadialOffset === 'function'
+        ? extraRadialOffset(shaped[0], shaped[1], shaped[2])
+        : 0
     const deformed = deformRadialPoint(
       shaped[0],
       shaped[1],
       shaped[2],
       deformations,
+      extra,
     )
     target[offset] = deformed[0]
     target[offset + 1] = deformed[1]
     target[offset + 2] = deformed[2]
 
     if (colorTarget && restColors) {
-      colorTarget[offset] =
-        BIRTH_SURFACE_COLOR[0] +
-        (restColors[offset] - BIRTH_SURFACE_COLOR[0]) * colorMorph
-      colorTarget[offset + 1] =
-        BIRTH_SURFACE_COLOR[1] +
-        (restColors[offset + 1] - BIRTH_SURFACE_COLOR[1]) * colorMorph
-      colorTarget[offset + 2] =
-        BIRTH_SURFACE_COLOR[2] +
-        (restColors[offset + 2] - BIRTH_SURFACE_COLOR[2]) * colorMorph
+      if (useOverlay) {
+        const influence = influenceOverlay(shaped[0], shaped[1], shaped[2])
+        // Diagnostic: cool (negative) → neutral → warm (positive).
+        const u = Math.min(1, Math.max(-1, Number(influence) || 0))
+        if (u >= 0) {
+          colorTarget[offset] = 0.2 + u * 0.75
+          colorTarget[offset + 1] = 0.25 + (1 - u) * 0.35
+          colorTarget[offset + 2] = 0.35 + (1 - u) * 0.45
+        } else {
+          const v = -u
+          colorTarget[offset] = 0.15 + (1 - v) * 0.25
+          colorTarget[offset + 1] = 0.35 + v * 0.45
+          colorTarget[offset + 2] = 0.55 + v * 0.4
+        }
+      } else {
+        colorTarget[offset] =
+          BIRTH_SURFACE_COLOR[0] +
+          (restColors[offset] - BIRTH_SURFACE_COLOR[0]) * colorMorph
+        colorTarget[offset + 1] =
+          BIRTH_SURFACE_COLOR[1] +
+          (restColors[offset + 1] - BIRTH_SURFACE_COLOR[1]) * colorMorph
+        colorTarget[offset + 2] =
+          BIRTH_SURFACE_COLOR[2] +
+          (restColors[offset + 2] - BIRTH_SURFACE_COLOR[2]) * colorMorph
+      }
     }
   }
   position.needsUpdate = true
@@ -224,7 +259,7 @@ function applyGrowthGeometry(
   outputs,
   morph,
   life,
-  { updateNormals = true } = {},
+  { updateNormals = true, extraRadialOffset = null } = {},
 ) {
   const position = geometry.attributes.position
   const target = position.array
@@ -264,11 +299,20 @@ function applyGrowthGeometry(
     const localY = (rest.positions[offset + 1] - originY) * display
     const localZ = (rest.positions[offset + 2] - originZ) * display
     const shapedOrigin = morphRestPoint(originX, originY, originZ, morph)
+    const extra =
+      typeof extraRadialOffset === 'function'
+        ? extraRadialOffset(
+            shapedOrigin[0],
+            shapedOrigin[1],
+            shapedOrigin[2],
+          )
+        : 0
     const deformedOrigin = deformRadialPoint(
       shapedOrigin[0],
       shapedOrigin[1],
       shapedOrigin[2],
       deformations,
+      extra,
     )
     target[offset] = deformedOrigin[0] + localX
     target[offset + 1] = deformedOrigin[1] + localY
@@ -282,24 +326,53 @@ function applyGrowthGeometry(
 /**
  * Rendering adapter only. The Life Engine remains unaware of Three.js geometry.
  * Exterior and interior are updated from the same lifecycle output.
+ *
+ * Optional Playground hooks (default null → World unchanged):
+ * - extraRadialOffset(x,y,z) → additional rest-space radial displace
+ * - influenceOverlay(x,y,z) → diagnostic vertex tint (−1…1)
  */
-export function applyLifeToWorld(world, rest, life, { updateNormals = true } = {}) {
+export function applyLifeToWorld(
+  world,
+  rest,
+  life,
+  {
+    updateNormals = true,
+    extraRadialOffset = null,
+    influenceOverlay = null,
+  } = {},
+) {
   const morph = formMorphAmount(life.variables.growth)
+  const fieldOpts = { updateNormals, extraRadialOffset, influenceOverlay }
   applySurface(
     world.surface,
     rest.surface,
     rest.surfaceColors,
     life.outputs,
     morph,
-    { updateNormals },
+    fieldOpts,
   )
-  applyGrowthGeometry(world.outside, rest.outside, life.outputs, morph, life, {
-    updateNormals,
-  })
-  applyGrowthGeometry(world.inside, rest.inside, life.outputs, morph, life, {
-    updateNormals,
-  })
-  applyGrowthGeometry(world.minerals, rest.minerals, life.outputs, morph, life, {
-    updateNormals,
-  })
+  applyGrowthGeometry(
+    world.outside,
+    rest.outside,
+    life.outputs,
+    morph,
+    life,
+    fieldOpts,
+  )
+  applyGrowthGeometry(
+    world.inside,
+    rest.inside,
+    life.outputs,
+    morph,
+    life,
+    fieldOpts,
+  )
+  applyGrowthGeometry(
+    world.minerals,
+    rest.minerals,
+    life.outputs,
+    morph,
+    life,
+    fieldOpts,
+  )
 }

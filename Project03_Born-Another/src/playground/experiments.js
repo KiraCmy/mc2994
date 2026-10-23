@@ -6,9 +6,9 @@ export const PLAYGROUND_EXPERIMENTS = [
   {
     id: '01',
     label: 'Experiment 01',
-    title: 'Experiment 01',
+    title: 'Language as Environment',
     description:
-      'Empty workspace reserved for a future Three.js / R3F prototype. No scene is mounted yet.',
+      'Can human language alter environmental conditions and indirectly shape the evolution of a procedural organism? Step 03B: Temperature deforms Branch B immediately and accumulates thermal structural memory that persists after the environment recovers.',
   },
 ]
 

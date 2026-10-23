@@ -601,11 +601,8 @@ Detail for future recurrence: [docs/planning/Born-Another-Technic-Log.md](../pla
 
 # Born Another — Playground
 
-A fifth top-level mode, **Playground** (`#playground`), sits beside Concept / Studies / System / World for quick final-project prototypes. It is structural / UI only: no World V2 fork, no Studies Canvas, no simulation.
+Playground progress (framework + **Experiment 01 — Language as Environment**, through Step 03B thermal memory + World B — Dark visual alignment) lives in a dedicated log:
 
-- Nav and hash routing via `modes.js` + `SiteHeader`.
-- Lazy-loaded `src/playground/` with an experiment registry; only the active experiment mounts.
-- **Experiment 01** is an empty workspace (title, description, scene slot, controls slot) — no R3F yet.
-- Adding Experiment 02 = new component + one registry entry; experiment state stays inside Playground, not global `App` study state.
+→ [Born-Another_Playground.md](./Born-Another_Playground.md)
 
-Organization plan: [docs/planning/Website-Organization.md](../planning/Website-Organization.md).
+Organization plan: [Website-Organization.md](../planning/Website-Organization.md).
