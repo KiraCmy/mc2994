@@ -28,11 +28,13 @@ export default function WorldV2({ modeId, onSelectMode }) {
     return replayLife({
       seed: life.seed,
       history: [],
+      environmentHistory: life.environmentHistory,
       step: life.step,
       durationSeconds: life.durationSeconds,
     })
   }, [
     life.durationSeconds,
+    life.environmentHistory,
     life.seed,
     life.step,
     showComparison,
@@ -219,7 +221,7 @@ export default function WorldV2({ modeId, onSelectMode }) {
 
       <section className="world-v2__timeline" aria-label="Life timeline">
         <div className="world-v2__timeline-labels">
-          <span>Born</span>
+          <span>Birth</span>
           <span>Death</span>
         </div>
         <input

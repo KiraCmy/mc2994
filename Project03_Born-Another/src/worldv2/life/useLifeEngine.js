@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   addLifeStimulus,
+  applyLifeMoistureFromBirth,
   createLifeState,
   LIFE_FIXED_TIMESTEP,
   replayLife,
   runLifeSteps,
+  setLifeMoisture,
+  setLifeTurbulence,
 } from './lifeEngine.js'
 
 function clamp01(value) {
@@ -55,12 +58,15 @@ export function useLifeEngine(initialSeed) {
     })
   }, [life.dead])
 
-  const restart = useCallback(() => {
+  const restart = useCallback((options = {}) => {
     accumulator.current = 0
     setLife((current) =>
       replayLife({
         seed: current.seed,
         history: current.history,
+        environmentHistory: options.clearEnvironment
+          ? []
+          : current.environmentHistory,
         durationSeconds: current.durationSeconds,
         step: 0,
       }),
@@ -76,13 +82,14 @@ export function useLifeEngine(initialSeed) {
 
   /** Start a new life with optional duration / history (MEMORY LAB). World uses changeSeed. */
   const startLife = useCallback(
-    ({ seed, durationSeconds, history = [] } = {}) => {
+    ({ seed, durationSeconds, history = [], environmentHistory = [] } = {}) => {
       accumulator.current = 0
       setLife(
         createLifeState({
           seed,
           durationSeconds,
           history,
+          environmentHistory,
         }),
       )
       setPlaying(true)
@@ -94,7 +101,29 @@ export function useLifeEngine(initialSeed) {
     setLife((current) => addLifeStimulus(current, direction))
   }, [])
 
-  /** Deterministic scrub: Seed + history + target AGE → exact state. */
+  /**
+   * Playground Crystal Moisture (manual scrub): rebuild life from birth at this
+   * Moisture up to the current AGE so 0.2 / 0.5 / 0.8 show structural differences.
+   */
+  const setMoisture = useCallback((moisture) => {
+    accumulator.current = 0
+    setLife((current) => applyLifeMoistureFromBirth(current, moisture))
+  }, [])
+
+  /**
+   * Record Moisture at the current life step (language sync / live env).
+   * Does not rebuild past crystal growth; future rates change. Idempotent.
+   */
+  const setMoistureAtStep = useCallback((moisture) => {
+    setLife((current) => setLifeMoisture(current, moisture))
+  }, [])
+
+  /** Environmental Turbulence — immediate reversible membrane field. */
+  const setTurbulence = useCallback((turbulence) => {
+    setLife((current) => setLifeTurbulence(current, turbulence))
+  }, [])
+
+  /** Deterministic scrub: Seed + histories + target AGE → exact state. */
   const seekToAge = useCallback((age, { resume = false } = {}) => {
     accumulator.current = 0
     const target = clamp01(age)
@@ -103,6 +132,7 @@ export function useLifeEngine(initialSeed) {
       return replayLife({
         seed: current.seed,
         history: current.history,
+        environmentHistory: current.environmentHistory,
         durationSeconds: current.durationSeconds,
         step,
       })
@@ -118,6 +148,9 @@ export function useLifeEngine(initialSeed) {
     changeSeed,
     startLife,
     addStimulus,
+    setMoisture,
+    setMoistureAtStep,
+    setTurbulence,
     seekToAge,
     setPlaying,
   }

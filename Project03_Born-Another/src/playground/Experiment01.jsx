@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TRANSITION_DURATION, WorldViewport } from '../worldv2/WorldViewport.jsx'
 import { useLifeEngine } from '../worldv2/life/useLifeEngine.js'
+import {
+  ENV_MOISTURE_NEUTRAL,
+  ENV_TURBULENCE_DEFAULT,
+  replayLife,
+} from '../worldv2/life/lifeEngine.js'
 import { WORLD_V2_SEED } from '../worldv2/worldGeometry.js'
 import '../worldv2/worldV2.css'
 import EnvHistoryGraph from './languageAsEnvironment/EnvHistoryGraph.jsx'
@@ -25,6 +30,10 @@ import {
   stepThermalExposure,
   thermalExposureForMagnitude,
 } from './languageAsEnvironment/thermalMemory.js'
+import {
+  disturbanceToTurbulence,
+  quantizeEnvChannel,
+} from './languageAsEnvironment/envState.js'
 import { useEnvironmentSimulation } from './languageAsEnvironment/useEnvironmentSimulation.js'
 
 const TEMP_PRESETS = [0.3, 0.5, 0.7, 0.85, 1.0]
@@ -108,6 +117,16 @@ export default function Experiment01({ title, description }) {
   const [memoryState, setMemoryState] = useState(createThermalMemoryState)
   /** null = follow language-driven env Temperature; number = debug scrub. */
   const [temperatureOverride, setTemperatureOverride] = useState(null)
+  /**
+   * null = sync language env Moisture → Life Engine;
+   * number = manual Crystal Moisture override (no language→life push).
+   */
+  const [moistureOverride, setMoistureOverride] = useState(null)
+  /**
+   * null = sync language Disturbance → Life Engine Turbulence;
+   * number = manual Membrane Turbulence override.
+   */
+  const [turbulenceOverride, setTurbulenceOverride] = useState(null)
   const [showInfluenceField, setShowInfluenceField] = useState(false)
   /**
    * Structural Memory Calibration (debug):
@@ -120,10 +139,6 @@ export default function Experiment01({ title, description }) {
   /** 'experience' = single Branch B; 'compare' = A/B side-by-side (debug). */
   const [displayMode, setDisplayMode] = useState('experience')
   const compareMode = displayMode === 'compare'
-  const perfStatsRef = useRef({})
-  const geometryMsRefA = useRef(0)
-  const geometryMsRefB = useRef(0)
-  const [perfHud, setPerfHud] = useState(null)
 
   const sharedTimeRef = useRef(0)
   /** Shared exterior orbit so A/B cameras stay matched (matches World EXTERIOR_POSITION). */
@@ -157,11 +172,17 @@ export default function Experiment01({ title, description }) {
     restart,
     seekToAge,
     addStimulus,
+    setMoisture,
+    setMoistureAtStep,
+    setTurbulence,
     setPlaying,
   } = useLifeEngine(WORLD_V2_SEED)
+  const lifeMoisture = life.environment?.moisture ?? ENV_MOISTURE_NEUTRAL
+  const lifeTurbulence = life.environment?.turbulence ?? ENV_TURBULENCE_DEFAULT
 
   const {
     environment,
+    environmentRef,
     influence,
     targets,
     trends,
@@ -174,21 +195,74 @@ export default function Experiment01({ title, description }) {
     resetEnvironment,
   } = useEnvironmentSimulation()
 
+  const syncedMoistureRef = useRef(null)
+  const syncedTurbulenceRef = useRef(null)
+  const temperatureOverrideRef = useRef(temperatureOverride)
+  const isolateStructuralMemoryRef = useRef(isolateStructuralMemory)
+  temperatureOverrideRef.current = temperatureOverride
+  isolateStructuralMemoryRef.current = isolateStructuralMemory
+
+  // Language env → Life Engine (Moisture / Disturbance→Turbulence). Skipped while
+  // a manual override is active so sliders and language do not fight.
+  useEffect(() => {
+    if (moistureOverride != null || life.dead) return
+    const next = quantizeEnvChannel(environment.moisture)
+    if (
+      syncedMoistureRef.current != null &&
+      Math.abs(syncedMoistureRef.current - next) < 0.005
+    ) {
+      return
+    }
+    syncedMoistureRef.current = next
+    setMoistureAtStep(next)
+  }, [
+    environment.moisture,
+    moistureOverride,
+    life.dead,
+    setMoistureAtStep,
+  ])
+
+  useEffect(() => {
+    if (turbulenceOverride != null || life.dead) return
+    const next = quantizeEnvChannel(
+      disturbanceToTurbulence(environment.disturbance),
+    )
+    if (
+      syncedTurbulenceRef.current != null &&
+      Math.abs(syncedTurbulenceRef.current - next) < 0.005
+    ) {
+      return
+    }
+    syncedTurbulenceRef.current = next
+    setTurbulence(next)
+  }, [
+    environment.disturbance,
+    turbulenceOverride,
+    life.dead,
+    setTurbulence,
+  ])
+
   const transitioning = view === 'entering' || view === 'exiting'
 
   const affectedTemperature =
     temperatureOverride == null
       ? environment.temperature
       : temperatureOverride
-  temperatureRef.current = affectedTemperature
 
   // Shared visual clock + thermal exposure (only while sim time advances).
+  // Temperature is read from the live env ref so soft-follow stays smooth
+  // without republishing React state every animation frame.
   useEffect(() => {
     let frame = 0
     let previous = performance.now()
     const tick = (now) => {
       const dt = Math.min(0.05, Math.max(0, (now - previous) / 1000))
       previous = now
+      const override = temperatureOverrideRef.current
+      const liveTemp =
+        environmentRef.current?.values?.temperature ?? BASELINE_TEMPERATURE
+      temperatureRef.current =
+        override == null ? liveTemp : override
       if (!freezeSimTimeRef.current) {
         sharedTimeRef.current += dt
         const next = stepThermalExposure(
@@ -208,7 +282,7 @@ export default function Experiment01({ title, description }) {
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [])
+  }, [environmentRef])
 
   useEffect(() => {
     setPlaying(true)
@@ -249,9 +323,14 @@ export default function Experiment01({ title, description }) {
     }
     setFreezeAge(false)
     setFreezeSimTime(false)
+    setMoistureOverride(null)
+    setTurbulenceOverride(null)
+    setTemperatureOverride(null)
+    syncedMoistureRef.current = null
+    syncedTurbulenceRef.current = null
     clearStructuralMemory()
     resetEnvironment()
-    restart()
+    restart({ clearEnvironment: true })
   }, [clearStructuralMemory, resetEnvironment, restart])
 
   const handleTogglePlaying = useCallback(() => {
@@ -263,10 +342,41 @@ export default function Experiment01({ title, description }) {
     togglePlaying()
   }, [freezeAge, setPlaying, togglePlaying])
 
+  const handleManualMoisture = useCallback(
+    (value) => {
+      const next = quantizeEnvChannel(value)
+      setMoistureOverride(next)
+      syncedMoistureRef.current = next
+      setMoisture(next)
+    },
+    [setMoisture],
+  )
+
+  const handleManualTurbulence = useCallback(
+    (value) => {
+      const next = quantizeEnvChannel(value)
+      setTurbulenceOverride(next)
+      syncedTurbulenceRef.current = next
+      setTurbulence(next)
+    },
+    [setTurbulence],
+  )
+
   const handleSubmit = useCallback(() => {
     const trimmed = languageText.trim()
     if (!trimmed) return
-    submitLanguage(trimmed)
+    const parsed = submitLanguage(trimmed)
+    // Language reclaims channels it actually drives; clears manual overrides.
+    if (parsed?.applied) {
+      if (parsed.impulses?.moisture) {
+        setMoistureOverride(null)
+        syncedMoistureRef.current = null
+      }
+      if (parsed.impulses?.disturbance) {
+        setTurbulenceOverride(null)
+        syncedTurbulenceRef.current = null
+      }
+    }
     setLanguageText('')
   }, [languageText, submitLanguage])
 
@@ -286,29 +396,73 @@ export default function Experiment01({ title, description }) {
     [affectedTemperature, coupling, isolateStructuralMemory],
   )
 
+  /**
+   * Compare Branch A: neutral Moisture / Turbulence / Temperature crystal+membrane
+   * state at the same AGE (stimulus history preserved).
+   */
+  const compareBaselineLife = useMemo(() => {
+    if (!compareMode || isolateStructuralMemory) return null
+    return replayLife({
+      seed: life.seed,
+      history: life.history,
+      environmentHistory: [
+        {
+          step: 0,
+          moisture: ENV_MOISTURE_NEUTRAL,
+          turbulence: ENV_TURBULENCE_DEFAULT,
+        },
+      ],
+      durationSeconds: life.durationSeconds,
+      step: life.step,
+    })
+  }, [
+    compareMode,
+    isolateStructuralMemory,
+    life.seed,
+    life.history,
+    life.durationSeconds,
+    life.step,
+  ])
+
   const resolveBaselineLife = useCallback(
-    (sourceLife, elapsed) =>
-      resolveCoupledLife(sourceLife, {
+    (sourceLife, elapsed) => {
+      const coupled = resolveCoupledLife(sourceLife, {
         temperature: BASELINE_TEMPERATURE,
         sharedElapsed: elapsed,
         coupling,
         role: 'baseline',
-      }),
+      })
+      return {
+        ...coupled,
+        environment: {
+          moisture: ENV_MOISTURE_NEUTRAL,
+          turbulence: ENV_TURBULENCE_DEFAULT,
+        },
+      }
+    },
     [coupling],
   )
 
   const resolveAffectedLife = useCallback(
-    (sourceLife, elapsed) =>
-      resolveCoupledLife(sourceLife, {
+    (sourceLife, elapsed) => {
+      const isolated = isolateStructuralMemoryRef.current
+      const override = temperatureOverrideRef.current
+      const liveTemp =
+        environmentRef.current?.values?.temperature ?? BASELINE_TEMPERATURE
+      const temperature = isolated
+        ? BASELINE_TEMPERATURE
+        : override == null
+          ? liveTemp
+          : override
+      return resolveCoupledLife(sourceLife, {
         // Isolation: match baseline temporal life so only memory offset remains.
-        temperature: isolateStructuralMemory
-          ? BASELINE_TEMPERATURE
-          : affectedTemperature,
+        temperature,
         sharedElapsed: elapsed,
         coupling,
-        role: isolateStructuralMemory ? 'baseline' : 'affected',
-      }),
-    [affectedTemperature, coupling, isolateStructuralMemory],
+        role: isolated ? 'baseline' : 'affected',
+      })
+    },
+    [coupling, environmentRef],
   )
 
   const affectedSpatial = useMemo(
@@ -387,7 +541,8 @@ export default function Experiment01({ title, description }) {
 
   /**
    * Final BufferGeometry A/B difference (same CPU path as rendered membrane).
-   * No GPU vertex-displacement shader exists in this pipeline.
+   * Must NOT depend on life.age — rebuilding 4 full meshes every life step
+   * (~30 Hz) was the sustained ~4 FPS regression.
    */
   const finalGeometryTable = useMemo(
     () =>
@@ -398,16 +553,8 @@ export default function Experiment01({ title, description }) {
         exposureBias: renderExposureBias,
         meanRestRadius,
       }),
-    // Recompute when seed/age/memory knobs change — not every breath frame.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      life.seed,
-      life.age,
-      thermalMemory,
-      renderExposureBias,
-      meanRestRadius,
-      life.outputs.form.scale,
-    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: omit life.age
+    [life.seed, thermalMemory, renderExposureBias, meanRestRadius],
   )
 
   const affectedInfluenceOverlay =
@@ -446,64 +593,6 @@ export default function Experiment01({ title, description }) {
     setThermalMemory((current) => ({ ...current, [key]: value }))
   }, [])
 
-  // Aggregate per-viewport perf probes (~2 Hz). Clears stale Branch A when unmounted.
-  useEffect(() => {
-    const tick = () => {
-      const snap = perfStatsRef.current ?? {}
-      if (!compareMode && snap.A) {
-        const next = { ...snap }
-        delete next.A
-        perfStatsRef.current = next
-      }
-      const slots = compareMode
-        ? [snap.A, snap.B].filter(Boolean)
-        : [snap.B].filter(Boolean)
-      if (!slots.length) {
-        setPerfHud({
-          mode: displayMode,
-          viewports: compareMode ? 2 : 1,
-          fps: null,
-          frameMs: null,
-          calls: null,
-          triangles: null,
-          geometryUpdateMs: null,
-        })
-        return
-      }
-      const fps =
-        slots.reduce((sum, row) => sum + (row.fps || 0), 0) / slots.length
-      const frameMs =
-        slots.reduce((sum, row) => sum + (row.frameMs || 0), 0) / slots.length
-      const calls = slots.reduce((sum, row) => sum + (row.calls || 0), 0)
-      const triangles = slots.reduce(
-        (sum, row) => sum + (row.triangles || 0),
-        0,
-      )
-      const geomRows = slots.filter((row) => row.geometryUpdateMs != null)
-      const geometryUpdateMs = geomRows.length
-        ? geomRows.reduce((sum, row) => sum + row.geometryUpdateMs, 0)
-        : null
-      const warmed = slots.every((row) => row.warmed)
-      setPerfHud({
-        mode: displayMode,
-        viewports: slots.length,
-        fps,
-        frameMs,
-        calls,
-        triangles,
-        geometryUpdateMs,
-        warmed,
-        perViewport: {
-          A: snap.A ?? null,
-          B: snap.B ?? null,
-        },
-      })
-    }
-    tick()
-    const id = window.setInterval(tick, 500)
-    return () => window.clearInterval(id)
-  }, [compareMode, displayMode])
-
   return (
     <article className="playground-experiment playground-experiment--language-env">
       <header className="playground-experiment__intro">
@@ -540,7 +629,7 @@ export default function Experiment01({ title, description }) {
                   <WorldViewport
                     className="playground-experiment__viewport"
                     view={view}
-                    life={life}
+                    life={compareBaselineLife ?? life}
                     onStimulus={addStimulus}
                     backgroundStudy={BACKGROUND_STUDY}
                     onCameraReset={resetCameraView}
@@ -551,14 +640,13 @@ export default function Experiment01({ title, description }) {
                     resolveLifeForRender={resolveBaselineLife}
                     breathAmplitude={COMPARE_BREATH_AMPLITUDE}
                     geometryDebug={geometryDebug}
-                    perfSlot="A"
-                    perfStatsRef={perfStatsRef}
-                    geometryUpdateMsRef={geometryMsRefA}
                   />
                   <p className="playground-experiment__compare-label">
                     <span>A — Baseline</span>
                     <span>
-                      Baseline Temperature: {BASELINE_TEMPERATURE.toFixed(2)}
+                      T {BASELINE_TEMPERATURE.toFixed(2)} · M{' '}
+                      {ENV_MOISTURE_NEUTRAL.toFixed(2)} · Turb{' '}
+                      {ENV_TURBULENCE_DEFAULT.toFixed(2)}
                     </span>
                   </p>
                 </div>
@@ -582,22 +670,20 @@ export default function Experiment01({ title, description }) {
                     geometryDebug ? null : affectedInfluenceOverlay
                   }
                   geometryDebug={geometryDebug}
-                  perfSlot="B"
-                  perfStatsRef={perfStatsRef}
-                  geometryUpdateMsRef={geometryMsRefB}
                 />
                 <p className="playground-experiment__compare-label">
                   <span>
                     {compareMode
                       ? isolateStructuralMemory
                         ? 'B — Memory Isolated'
-                        : 'B — Temperature Affected'
+                        : 'B — Environment Affected'
                       : isolateStructuralMemory
                         ? 'Memory Isolated'
-                        : 'Temperature Affected'}
+                        : 'Environment Affected'}
                   </span>
                   <span>
-                    Temperature: {affectedTemperature.toFixed(2)}
+                    T {affectedTemperature.toFixed(2)} · M{' '}
+                    {lifeMoisture.toFixed(2)} · Turb {lifeTurbulence.toFixed(2)}
                     {memoryMagnitudePreview != null
                       ? ` · Preview Mag ${previewMemoryMagnitude.toFixed(2)}`
                       : ''}
@@ -642,28 +728,6 @@ export default function Experiment01({ title, description }) {
                   Age {life.age.toFixed(3)} · Seed {life.seed}
                   {freezeAge ? ' · Frozen' : ''}
                 </span>
-                {perfHud ? (
-                  <span
-                    className="playground-experiment__perf-hud"
-                    title="Wall-clock FPS after Canvas mount; draws/tris are cumulative EffectComposer passes. 'cold' = first 5s warmup."
-                  >
-                    {perfHud.viewports} VP
-                    {perfHud.warmed === false ? ' · cold' : ' · warm'}
-                    {perfHud.fps != null
-                      ? ` · ${perfHud.fps.toFixed(0)} FPS`
-                      : ''}
-                    {perfHud.frameMs != null
-                      ? ` · ${perfHud.frameMs.toFixed(1)} ms`
-                      : ''}
-                    {perfHud.calls != null ? ` · ${perfHud.calls} draws` : ''}
-                    {perfHud.triangles != null
-                      ? ` · ${(perfHud.triangles / 1000).toFixed(1)}k tris`
-                      : ''}
-                    {perfHud.geometryUpdateMs != null
-                      ? ` · geom ${perfHud.geometryUpdateMs.toFixed(2)} ms`
-                      : ''}
-                  </span>
-                ) : null}
                 <button type="button" onClick={handleTogglePlaying}>
                   {life.dead
                     ? 'Ended'
@@ -704,7 +768,7 @@ export default function Experiment01({ title, description }) {
                 aria-label="Life timeline"
               >
               <div className="playground-experiment__timeline-labels">
-                <span>Born</span>
+                <span>Birth</span>
                 <span>Death</span>
               </div>
               <input
@@ -741,7 +805,7 @@ export default function Experiment01({ title, description }) {
               value={languageText}
               onChange={(event) => setLanguageText(event.target.value)}
               onKeyDown={onLanguageKeyDown}
-              rows={3}
+              rows={2}
               placeholder="Type a complete sentence about the environment…"
               spellCheck
               aria-labelledby="language-env-label"
@@ -781,10 +845,10 @@ export default function Experiment01({ title, description }) {
         >
           <p className="playground-experiment__controls-label">Controls</p>
           <p className="playground-experiment__controls-note">
-            Branch B: immediate Temperature response + persistent thermal
-            memory. Environment can recover to 0.50 while memory remains. Pause
-            Time stops exposure accumulation. Moisture / Disturbance still
-            env-only.
+            Language drives Temperature, Moisture, and Disturbance→Turbulence
+            into the Life Engine. Manual Crystal Moisture / Membrane Turbulence
+            sliders override until language reclaims that channel. Compare A
+            holds neutral T/M/Turb at the same AGE.
           </p>
           <dl className="playground-experiment__env-list">
             {ENV_ROWS.map(([key, label]) => (
@@ -817,6 +881,152 @@ export default function Experiment01({ title, description }) {
           </dl>
 
           <EnvHistoryGraph graph={graph} />
+
+          <div
+            className="playground-experiment__coupling"
+            aria-label="Crystal moisture"
+          >
+            <p className="playground-experiment__controls-label">
+              Crystal Moisture
+            </p>
+            <p className="playground-experiment__controls-note">
+              Follows language Moisture (e.g. rain) unless overridden. Manual
+              scrub rebuilds crystals from birth at this Moisture up to the
+              current AGE. Live resumes language sync.
+            </p>
+            <div className="playground-experiment__preset-row">
+              {[0.2, 0.5, 0.8].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={
+                    moistureOverride != null &&
+                    Math.abs(moistureOverride - value) < 0.005
+                      ? 'playground-experiment__preset is-active'
+                      : 'playground-experiment__preset'
+                  }
+                  disabled={life.dead}
+                  onClick={() => handleManualMoisture(value)}
+                >
+                  {value.toFixed(2)}
+                </button>
+              ))}
+              <button
+                type="button"
+                className={
+                  moistureOverride == null
+                    ? 'playground-experiment__preset is-active'
+                    : 'playground-experiment__preset'
+                }
+                disabled={life.dead}
+                onClick={() => {
+                  setMoistureOverride(null)
+                  syncedMoistureRef.current = null
+                }}
+              >
+                Live
+              </button>
+            </div>
+            <label className="playground-experiment__tuning-row">
+              <span>
+                Moisture
+                <em>
+                  {lifeMoisture.toFixed(2)}
+                  {moistureOverride == null ? ' · live' : ' · override'}
+                  <span aria-hidden="true"> · </span>
+                  Dry / Neutral / Wet
+                </em>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={lifeMoisture}
+                disabled={life.dead}
+                aria-valuemin={0}
+                aria-valuemax={1}
+                aria-valuenow={Number(lifeMoisture.toFixed(2))}
+                aria-valuetext={`Crystal moisture ${lifeMoisture.toFixed(2)}`}
+                onChange={(event) =>
+                  handleManualMoisture(Number(event.target.value))
+                }
+              />
+            </label>
+          </div>
+
+          <div
+            className="playground-experiment__coupling"
+            aria-label="Membrane turbulence"
+          >
+            <p className="playground-experiment__controls-label">
+              Membrane Turbulence
+            </p>
+            <p className="playground-experiment__controls-note">
+              Follows language Disturbance (e.g. wind) unless overridden.
+              Reversible membrane waves; Play to see travel. Live resumes
+              language sync.
+            </p>
+            <div className="playground-experiment__preset-row">
+              {[0, 0.5, 1].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={
+                    turbulenceOverride != null &&
+                    Math.abs(turbulenceOverride - value) < 0.005
+                      ? 'playground-experiment__preset is-active'
+                      : 'playground-experiment__preset'
+                  }
+                  disabled={life.dead}
+                  onClick={() => handleManualTurbulence(value)}
+                >
+                  {value.toFixed(2)}
+                </button>
+              ))}
+              <button
+                type="button"
+                className={
+                  turbulenceOverride == null
+                    ? 'playground-experiment__preset is-active'
+                    : 'playground-experiment__preset'
+                }
+                disabled={life.dead}
+                onClick={() => {
+                  setTurbulenceOverride(null)
+                  syncedTurbulenceRef.current = null
+                }}
+              >
+                Live
+              </button>
+            </div>
+            <label className="playground-experiment__tuning-row">
+              <span>
+                Turbulence
+                <em>
+                  {lifeTurbulence.toFixed(2)}
+                  {turbulenceOverride == null ? ' · live' : ' · override'}
+                  <span aria-hidden="true"> · </span>
+                  Calm / Moderate / Strong
+                </em>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={lifeTurbulence}
+                disabled={life.dead}
+                aria-valuemin={0}
+                aria-valuemax={1}
+                aria-valuenow={Number(lifeTurbulence.toFixed(2))}
+                aria-valuetext={`Turbulence ${lifeTurbulence.toFixed(2)}`}
+                onChange={(event) =>
+                  handleManualTurbulence(Number(event.target.value))
+                }
+              />
+            </label>
+          </div>
 
           <div
             className="playground-experiment__coupling"

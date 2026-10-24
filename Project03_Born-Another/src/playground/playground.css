@@ -45,13 +45,16 @@
 
 .playground-page__content {
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
   padding:
-    calc(var(--site-header-h) + 5.5rem)
+    calc(var(--site-header-h) + 4.2rem)
     var(--playground-margin)
-    8cqh;
+    1.25rem;
   scrollbar-width: thin;
   scrollbar-color: rgba(243, 251, 248, 0.28) transparent;
 }
@@ -59,15 +62,18 @@
 .playground-experiment {
   display: flex;
   flex-direction: column;
-  gap: 3.2cqh;
-  min-height: calc(100% - 1rem);
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .playground-experiment__intro {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.35rem;
   max-width: 42rem;
-  padding-bottom: 2.4cqh;
+  flex-shrink: 0;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--playground-ui-line);
 }
 
@@ -89,7 +95,7 @@
 }
 
 .playground-experiment__title {
-  font-size: clamp(1.75rem, 3.2vw, 2.75rem);
+  font-size: clamp(1.35rem, 2.4vw, 2rem);
   font-weight: 400;
   letter-spacing: -0.03em;
   line-height: 1.15;
@@ -99,24 +105,31 @@
 .playground-experiment__desc {
   max-width: 36rem;
   color: var(--playground-ui-muted);
-  font-size: clamp(0.92rem, 1.05cqw, 1.05rem);
-  line-height: 1.55;
+  font-size: clamp(0.82rem, 0.95cqw, 0.95rem);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .playground-experiment__workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem);
-  gap: clamp(1rem, 2.5cqw, 2rem);
+  gap: clamp(0.75rem, 2cqw, 1.5rem);
   flex: 1;
-  min-height: min(62cqh, 32rem);
+  min-height: 0;
+  overflow: hidden;
+  align-items: stretch;
 }
 
 .playground-experiment__stage {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 0.65rem;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .playground-experiment__scene,
@@ -129,7 +142,7 @@
 .playground-experiment__scene {
   display: grid;
   place-items: center;
-  min-height: 18rem;
+  min-height: 0;
   padding: 1.5rem;
 }
 
@@ -141,19 +154,51 @@
   --scene-chrome-height: 5.75rem;
   position: relative;
   display: block;
-  flex: 1;
-  min-height: min(56cqh, 32rem);
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 0;
   overflow: hidden;
   background: #010405;
 }
 
 .playground-experiment__scene--compare {
-  min-height: min(56cqh, 32rem);
+  min-height: 0;
 }
 
 .playground-experiment__scene--mode-experience {
-  min-height: min(62cqh, 36rem);
+  min-height: 0;
+}
+
+.playground-experiment__scene--exp02 {
+  --scene-chrome-height: 4.85rem;
+  min-height: 0;
+}
+
+.playground-experiment__scene--exp02 .playground-experiment__viewport {
+  position: absolute !important;
+  inset: 0 0 var(--scene-chrome-height);
+  width: 100% !important;
+  height: auto !important;
+}
+
+.playground-experiment__exp02-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0.75rem 0.35rem;
+  color: var(--playground-ui-muted);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.playground-experiment__organism-card {
+  display: grid;
+  gap: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--playground-ui-line);
 }
 
 .playground-experiment__compare {
@@ -380,23 +425,33 @@
 
 .playground-experiment__language {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  max-height: min(11.5rem, 28%);
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--playground-ui-line);
+  background: var(--playground-panel);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(243, 251, 248, 0.28) transparent;
 }
 
 .playground-experiment__language-input {
   box-sizing: border-box;
   width: 100%;
-  min-height: 4.5rem;
-  padding: 0.75rem 0.85rem;
+  min-height: 2.75rem;
+  max-height: 4.5rem;
+  padding: 0.55rem 0.7rem;
   border: 1px solid var(--playground-ui-line);
   color: var(--playground-ui);
   font: inherit;
-  font-size: 0.92rem;
-  line-height: 1.5;
+  font-size: 0.88rem;
+  line-height: 1.45;
   letter-spacing: 0.01em;
   text-transform: none;
   background: var(--playground-panel-soft);
-  resize: vertical;
+  resize: none;
 }
 
 .playground-experiment__language-input::placeholder {
@@ -448,7 +503,7 @@
   list-style: none;
   display: grid;
   gap: 0.35rem;
-  max-height: 6.5rem;
+  max-height: 3.4rem;
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -561,7 +616,14 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-height: 0;
+  height: 100%;
   padding: 1.1rem 1.15rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(243, 251, 248, 0.28) transparent;
 }
 
 .playground-experiment__controls-label {
@@ -830,8 +892,27 @@
 }
 
 @media (max-width: 720px) {
+  .playground-page__content {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .playground-experiment {
+    overflow: visible;
+    height: auto;
+    min-height: 0;
+    flex: none;
+  }
+
   .playground-experiment__workspace {
     grid-template-columns: 1fr;
+    overflow: visible;
+    min-height: 0;
+    flex: none;
+  }
+
+  .playground-experiment__stage {
+    overflow: visible;
   }
 
   .playground-experiment__scene,
@@ -840,12 +921,17 @@
   }
 
   .playground-experiment__scene--compare {
-    min-height: 22rem;
+    min-height: 20rem;
   }
 
   .playground-experiment__scene--live {
     --scene-chrome-height: 6.5rem;
-    min-height: 22rem;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    flex: none;
+    min-height: 18rem;
+    max-height: 42vh;
   }
 
   .playground-experiment__compare--ab {
@@ -858,7 +944,17 @@
   }
 
   .playground-experiment__scene--mode-experience {
-    min-height: 22rem;
+    min-height: 18rem;
+  }
+
+  .playground-experiment__language {
+    max-height: none;
+  }
+
+  .playground-experiment__controls {
+    height: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .playground-experiment__scene-hud {

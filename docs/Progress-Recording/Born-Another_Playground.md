@@ -39,7 +39,7 @@ Related plan: [Website-Organization.md](../planning/Website-Organization.md)
 
 **Research question:** Can human language alter environmental conditions and indirectly shape the evolution of a procedural organism?
 
-**Status:** Step 03B complete — thermal structural memory on Branch B; Playground UI/scene aligned with **World B — Dark**. Moisture / Disturbance still env-only.
+**Status:** Language → Life Engine sync complete — Temperature, Moisture, and Disturbance→Turbulence drive the organism in Playground; World UI transfer still deferred.
 
 ---
 
@@ -195,29 +195,82 @@ Remaining visual difference vs World: dual side-by-side canvases vs single fulls
 
 ---
 
+### Step 04 — Environmental system audit → Moisture & Turbulence lab
+
+Read-only World audit first (see [Prompt_Archive.md](../planning/Prompt_Archive.md); summary in [work_analysis.md](../analysis/work_analysis.md)), then lab implementations with World UI left clean for later transfer.
+
+**Moisture → crystal growth / branching (Life Engine)**
+
+- `environment.moisture` + piecewise `environmentHistory`.
+- `moistureGrowthMultiplier` — neutral at **0.50**; dry / wet scale future growth.
+- Branching gates: count delta, maturity, mineral from moisture.
+- `setLifeMoisture` — record at current step (future growth only).
+- `applyLifeMoistureFromBirth` — lab scrub rebuilds crystals from birth at constant moisture up to current AGE (0.2 / 0.5 / 0.8 comparable).
+- Playground: Crystal Moisture presets / slider (not shown in World).
+
+**Turbulence → reversible membrane field**
+
+- `turbulenceField.js` — deterministic value-noise + traveling wrap; radial offset from `life.environment.turbulence` and `life.time`.
+- `setLifeTurbulence` — immediate reversible field; history for AGE scrub.
+- Composed in `worldLifeAdapter` / crystal anchors (crystals stay attached).
+- Default calm = **0.00**. Lab-only Membrane Turbulence in Experiment 01; peak displacement raised (~0.11 → ~0.36) so mid/high values read on the form.
+
+---
+
+### Step 05 — Language environment → Life Engine sync
+
+**Problem:** “rain” / “wind” moved Playground Moisture / Disturbance, but Compare **M / Turb** stayed at Life defaults; only Temperature reached the organism.
+
+**Data flow**
+
+```
+Language → parseEnvironmentalLanguage → useEnvironmentSimulation
+  → environment.moisture / .disturbance (soft-follow)
+  → Experiment01 sync (quantized)
+      moisture → setMoistureAtStep → setLifeMoisture → environmentHistory
+      disturbance → disturbanceToTurbulence → setTurbulence → setLifeTurbulence
+  → organism (growth / membrane waves)
+```
+
+**Mapping:** Disturbance **0.50 → Turbulence 0**, **1.0 → 1.0** (`disturbanceToTurbulence`).
+
+**Manual controls:** Live sync by default; Crystal Moisture / Membrane Turbulence sliders override until language reclaims the channel or Live is pressed. Compare **M / Turb** always read `life.environment`.
+
+**Compare:** **A — Baseline** neutral T/M/Turb at same AGE; **B — Environment Affected** live Temperature + Moisture + Turbulence + thermal memory. No extra canvases.
+
+---
+
+### Step 06 — Layout lock + frame stutter fix
+
+**Layout:** Desktop Experiment One uses a locked flex split — organism viewport + language stay on screen; Controls scroll independently. Mobile: sticky scene while parameters scroll.
+
+**Stutter:** Env sim had called `setSim` every rAF, reconciling WebGL trees every frame. Now: step in a ref; React publish only when values change (~10 Hz, `startTransition`); membrane Temperature reads the live env ref in the R3F / thermal path; Playground skips redundant `useLayoutEffect` mesh apply when `useFrame` already refreshes display life.
+
+---
+
 ### Why this shape
 
 - Reuse World appearance and autonomous AGE animation instead of a placeholder sphere.
-- Keep language and environment as **explicit state** so later steps can wire `text → env → organism` without redesigning the UI.
-- Separate **description of world** from **talking to the organism**; couple Temperature first, then retain exposure history as structural memory.
+- Keep language and environment as **explicit state** so `text → env → Life Engine → organism` can be validated in Playground before World transfer.
+- Separate **description of world** from **talking to the organism**; couple Temperature first, then Moisture / Turbulence, with thermal exposure as structural memory.
 - Match World Dark so Playground reads as the same cinematic organism, not a light Studies sheet.
 
 ### Explicitly still out of scope
 
 - Speech recognition / LLM interpretation  
-- Moisture / Disturbance → geometry  
-- Crystal growth rule changes / AGE / lifespan changes  
+- World UI Moisture / Turbulence controls (lab stays in Playground until transfer)  
+- AGE / lifespan redesign  
 - Changes to World or Memory Lab default behavior  
 
 ### Key files
 
 | File | Notes |
 |------|--------|
-| `src/playground/Experiment01.jsx` | A/B UI, coupling + thermal memory, `backgroundStudy: dark` |
-| `src/playground/playground.css` | Dark theme aligned with World B |
-| `src/playground/languageAsEnvironment/envState.js` | Neutral env state factory |
+| `src/playground/Experiment01.jsx` | A/B UI, language→Life sync, coupling + thermal memory, `backgroundStudy: dark` |
+| `src/playground/playground.css` | Dark theme + locked desktop layout (scene stays visible) |
+| `src/playground/languageAsEnvironment/envState.js` | Neutral env + `disturbanceToTurbulence` / quantize helpers |
 | `src/playground/languageAsEnvironment/environmentSimulation.js` | Influence / target / recovery dynamics + tuning |
-| `src/playground/languageAsEnvironment/useEnvironmentSimulation.js` | rAF sim + submit / history / graph |
+| `src/playground/languageAsEnvironment/useEnvironmentSimulation.js` | rAF sim in ref; throttled React publish (~10 Hz) |
 | `src/playground/languageAsEnvironment/semanticConcepts.js` | Six-category lexicon |
 | `src/playground/languageAsEnvironment/classifyIntent.js` | Intent heuristics |
 | `src/playground/languageAsEnvironment/parseEnvironmentalLanguage.js` | Parse pipeline (match → intent → gated impulses) |
@@ -226,7 +279,10 @@ Remaining visual difference vs World: dual side-by-side canvases vs single fulls
 | `src/playground/languageAsEnvironment/thermalMemory.js` | Exposure accumulation + persistent memory field |
 | `src/playground/languageAsEnvironment/EnvHistoryGraph.jsx` | Env value sparkline |
 | `src/playground/experiments.js` | Title / description for Exp 01 |
-| `src/worldv2/life/worldLifeAdapter.js` | Optional `extraRadialOffset` / influence overlay |
+| `src/worldv2/life/lifeEngine.js` | Moisture / Turbulence env history + growth / branch gates |
+| `src/worldv2/life/useLifeEngine.js` | `setMoisture` / `setMoistureAtStep` / `setTurbulence` |
+| `src/worldv2/turbulenceField.js` | Reversible membrane turbulence sampler |
+| `src/worldv2/life/worldLifeAdapter.js` | Turbulence + optional `extraRadialOffset` / influence overlay |
 | `src/worldv2/WorldViewport.jsx` | Optional compare hooks (defaults preserve World) |
 
 ### Manual check
@@ -238,13 +294,15 @@ Open `#playground` → Experiment 01:
 3. Prolonged elevated T → exposure rises; after T recovers to 0.50, B still differs from A.  
 4. Clear Structural Memory → forms match again.  
 5. Pause Time while hot → exposure stops climbing.  
-6. Moisture / Disturbance can move without changing geometry.
+6. **rain** / **wind** / **hot** update Life Engine M / Turb / Temperature; Compare B labels match organism values.  
+7. Desktop: language / controls do not scroll the organism off-screen.  
+8. Animation stays smooth when env is idle or soft-following.
 
 ---
 
 ## Next (not started)
 
-- Moisture / Disturbance → geometry (later steps).  
+- Transfer validated Moisture / Turbulence method into World UI.  
 - Optional richer semantics (intensity, better negation, later model swap).  
 - Optional single-canvas / shared GPU path if dual viewports become too heavy.
 
@@ -273,3 +331,9 @@ World B — Dark visual language; Branch B shows accumulated thermal memory defo
 Full exposure (Thermal Exposure / Persistent Memory Magnitude at 1.0) under dark cinematic framing — Baseline vs Temperature Affected.
 
 ![[born-another-playground-exp01-dark-memory-02.jpg]]
+
+### Language → Life Engine (Moisture + Turbulence + Temperature)
+
+Compare after environmental language: **A — Baseline** at neutral T/M/Turb vs **B — Environment Affected** with live Temperature, Moisture, and Disturbance→Turbulence.
+
+![[born-another-playground-exp01-language-life-sync.jpg]]

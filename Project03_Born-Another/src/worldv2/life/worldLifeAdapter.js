@@ -3,6 +3,7 @@ import {
   crystalDissolveProgress,
   crystalDissolveScale,
 } from '../crystalDissolution.js'
+import { sampleTurbulenceFromLife } from '../turbulenceField.js'
 
 function smootherstep(edge0, edge1, value) {
   const t = Math.min(
@@ -342,7 +343,20 @@ export function applyLifeToWorld(
   } = {},
 ) {
   const morph = formMorphAmount(life.variables.growth)
-  const fieldOpts = { updateNormals, extraRadialOffset, influenceOverlay }
+  // Compose env Turbulence with optional Playground spatial field.
+  const composedExtra = (x, y, z) => {
+    const turb = sampleTurbulenceFromLife(x, y, z, life)
+    const extra =
+      typeof extraRadialOffset === 'function'
+        ? extraRadialOffset(x, y, z)
+        : 0
+    return turb + extra
+  }
+  const fieldOpts = {
+    updateNormals,
+    extraRadialOffset: composedExtra,
+    influenceOverlay,
+  }
   applySurface(
     world.surface,
     rest.surface,

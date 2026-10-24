@@ -11,11 +11,18 @@ import {
   CRYSTAL_MAX_BRANCH_DEPTH,
   crystalMaturity,
   createLifeState,
+  ENV_MOISTURE_NEUTRAL,
   lifeSnapshot,
+  moistureBranchCountDelta,
+  moistureBranchMaturityGate,
+  moistureBranchMineralGate,
+  moistureGrowthMultiplier,
   primaryCrystalGrowthRate,
   replayLife,
   runLifeSteps,
   secondaryBranchCount,
+  applyLifeMoistureFromBirth,
+  setLifeMoisture,
   stepLife,
 } from './lifeEngine.js'
 import {
@@ -379,4 +386,198 @@ test('death is terminal and rejects further intervention', () => {
   assert.equal(dead.dead, true)
   assert.equal(stepLife(dead), dead)
   assert.equal(addLifeStimulus(dead, [1, 0, 0]), dead)
+  assert.equal(setLifeMoisture(dead, 0.8), dead)
+})
+
+function totalCrystalLength(life) {
+  let total = 0
+  for (const site of life.spatial.sites) {
+    const crystal = site.crystal
+    if (!crystal) continue
+    total += crystal.length
+    for (const branch of crystal.branches ?? []) total += branch.length
+  }
+  return total
+}
+
+test('moisture 0.5 growth multiplier is neutral', () => {
+  assert.equal(moistureGrowthMultiplier(ENV_MOISTURE_NEUTRAL), 1)
+  assert.ok(moistureGrowthMultiplier(0.2) < 1)
+  assert.ok(moistureGrowthMultiplier(0.8) > 1)
+})
+
+test('moisture 0.5 preserves crystal growth vs legacy default', () => {
+  const seed = 7319
+  const steps = 900
+  const legacy = runLifeSteps(createLifeState({ seed }), steps)
+  const neutral = runLifeSteps(
+    setLifeMoisture(createLifeState({ seed }), 0.5),
+    steps,
+  )
+  assert.deepEqual(
+    legacy.spatial.sites.map((site) => site.crystal),
+    neutral.spatial.sites.map((site) => site.crystal),
+  )
+})
+
+test('low and high moisture produce different crystal growth rates', () => {
+  const seed = 7319
+  const steps = 900
+  const dry = runLifeSteps(
+    setLifeMoisture(createLifeState({ seed }), 0.2),
+    steps,
+  )
+  const wet = runLifeSteps(
+    setLifeMoisture(createLifeState({ seed }), 0.8),
+    steps,
+  )
+  assert.ok(dry.spatial.sites.length > 0)
+  assert.ok(wet.spatial.sites.length > 0)
+  assert.ok(totalCrystalLength(wet) > totalCrystalLength(dry))
+})
+
+test('moisture history accumulates growth then keeps length after return to neutral', () => {
+  const seed = 7319
+  const wetPhase = 600
+  const settlePhase = 300
+
+  let wetThenNeutral = setLifeMoisture(createLifeState({ seed }), 0.8)
+  wetThenNeutral = runLifeSteps(wetThenNeutral, wetPhase)
+  const lengthAfterWet = totalCrystalLength(wetThenNeutral)
+  wetThenNeutral = setLifeMoisture(wetThenNeutral, 0.5)
+  wetThenNeutral = runLifeSteps(wetThenNeutral, settlePhase)
+  assert.ok(totalCrystalLength(wetThenNeutral) >= lengthAfterWet)
+
+  const alwaysNeutral = runLifeSteps(
+    createLifeState({ seed }),
+    wetPhase + settlePhase,
+  )
+  assert.ok(
+    totalCrystalLength(wetThenNeutral) > totalCrystalLength(alwaysNeutral),
+  )
+})
+
+test('moisture environment history replays deterministically', () => {
+  let life = setLifeMoisture(createLifeState({ seed: 42 }), 0.2)
+  life = runLifeSteps(life, 400)
+  life = setLifeMoisture(life, 0.8)
+  life = runLifeSteps(life, 400)
+  life = setLifeMoisture(life, 0.5)
+  life = runLifeSteps(life, 200)
+
+  const replayed = replayLife({
+    seed: life.seed,
+    history: life.history,
+    environmentHistory: life.environmentHistory,
+    step: life.step,
+    durationSeconds: life.durationSeconds,
+  })
+
+  assert.deepEqual(lifeSnapshot(replayed), lifeSnapshot(life))
+  assert.equal(replayed.environment.moisture, 0.5)
+})
+
+function totalSecondaryBranches(life) {
+  let total = 0
+  for (const site of life.spatial.sites) {
+    total += site.crystal?.branches?.length ?? 0
+  }
+  return total
+}
+
+test('neutral moisture preserves branch count and gates', () => {
+  assert.equal(moistureBranchCountDelta(ENV_MOISTURE_NEUTRAL), 0)
+  assert.equal(moistureBranchMaturityGate(0.5), CRYSTAL_BRANCH_MATURITY)
+  assert.equal(moistureBranchMineralGate(0.5), CRYSTAL_BRANCH_MINERAL)
+  for (let region = 0; region < 48; region += 1) {
+    assert.equal(
+      secondaryBranchCount(7319, region, 0.5),
+      secondaryBranchCount(7319, region),
+    )
+  }
+
+  const baseline = runUntilBranching(createLifeState({ seed: 7319 }))
+  const neutral = runUntilBranching(
+    setLifeMoisture(createLifeState({ seed: 7319 }), 0.5),
+  )
+  assert.deepEqual(
+    baseline.spatial.sites.map((site) => site.crystal?.branches?.length ?? 0),
+    neutral.spatial.sites.map((site) => site.crystal?.branches?.length ?? 0),
+  )
+})
+
+test('high moisture increases branching vs low under identical seed and age', () => {
+  const seed = 7319
+  // Past AGE 0.4 branching window with room for wet/dry divergence.
+  const steps = 1600
+
+  const dry = runLifeSteps(setLifeMoisture(createLifeState({ seed }), 0.2), steps)
+  const wet = runLifeSteps(setLifeMoisture(createLifeState({ seed }), 0.8), steps)
+
+  assert.equal(dry.step, wet.step)
+  assert.equal(dry.age, wet.age)
+  assert.ok(totalSecondaryBranches(wet) > totalSecondaryBranches(dry))
+
+  for (const site of [...dry.spatial.sites, ...wet.spatial.sites]) {
+    const count = site.crystal?.branches?.length ?? 0
+    assert.ok(count <= CRYSTAL_BRANCH_MAX_COUNT)
+    if (count > 0) {
+      assert.ok(count >= 1)
+      assert.ok(site.crystal.branches.every((branch) => branch.depth === 1))
+    }
+  }
+})
+
+test('moisture branching differences persist through replay', () => {
+  const seed = 88
+  const steps = 1600
+  let wet = setLifeMoisture(createLifeState({ seed }), 0.8)
+  wet = runLifeSteps(wet, steps)
+
+  const replayed = replayLife({
+    seed,
+    history: wet.history,
+    environmentHistory: wet.environmentHistory,
+    step: wet.step,
+    durationSeconds: wet.durationSeconds,
+  })
+
+  assert.deepEqual(
+    replayed.spatial.sites.map((site) =>
+      (site.crystal?.branches ?? []).map((branch) => branch.id),
+    ),
+    wet.spatial.sites.map((site) =>
+      (site.crystal?.branches ?? []).map((branch) => branch.id),
+    ),
+  )
+  assert.equal(totalSecondaryBranches(replayed), totalSecondaryBranches(wet))
+})
+
+test('returning moisture to neutral does not remove existing branches', () => {
+  const seed = 7319
+  let life = setLifeMoisture(createLifeState({ seed }), 0.8)
+  life = runLifeSteps(life, 1600)
+  const branchesWhileWet = totalSecondaryBranches(life)
+  assert.ok(branchesWhileWet > 0)
+
+  life = setLifeMoisture(life, 0.5)
+  life = runLifeSteps(life, 120)
+  assert.equal(totalSecondaryBranches(life), branchesWhileWet)
+})
+
+test('apply moisture from birth rebuilds crystals at current age', () => {
+  const seed = 7319
+  let life = runLifeSteps(createLifeState({ seed }), 1350)
+  const neutralVol = totalCrystalLength(life)
+
+  const wet = applyLifeMoistureFromBirth(life, 0.8)
+  const dry = applyLifeMoistureFromBirth(life, 0.2)
+
+  assert.equal(wet.step, life.step)
+  assert.equal(dry.step, life.step)
+  assert.equal(wet.environment.moisture, 0.8)
+  assert.equal(dry.environment.moisture, 0.2)
+  assert.ok(totalCrystalLength(wet) > neutralVol)
+  assert.ok(totalCrystalLength(dry) < neutralVol)
+  assert.ok(totalSecondaryBranches(wet) >= totalSecondaryBranches(dry))
 })

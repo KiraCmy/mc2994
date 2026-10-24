@@ -3,7 +3,7 @@ import {
   secondaryFacingDirection,
 } from '../crystalOrientation.js'
 
-export const LIFE_ENGINE_VERSION = 5
+export const LIFE_ENGINE_VERSION = 6
 export const LIFE_FIXED_TIMESTEP = 1 / 30
 /** Full life in real seconds. AGE stays normalized 0→1 over this span. */
 export const LIFE_DURATION_SECONDS = 90
@@ -20,12 +20,121 @@ export const CRYSTAL_BRANCH_MINERAL = 0.42
 export const CRYSTAL_BRANCH_MIN_COUNT = 2
 export const CRYSTAL_BRANCH_MAX_COUNT = 4
 
+/** Neutral Moisture: growth-rate multiplier = 1 (legacy crystal behavior). */
+export const ENV_MOISTURE_NEUTRAL = 0.5
+/**
+ * Maps Moisture ∈ [0, 1] → crystal length/radius growth multiplier.
+ * 0.2 → 0.64, 0.5 → 1.0, 0.8 → 1.36 (bounded experimental band).
+ */
+export const ENV_MOISTURE_GROWTH_SPAN = 1.2
+/** Calm default: no environmental membrane turbulence. */
+export const ENV_TURBULENCE_DEFAULT = 0
+
 const FIELD_NEIGHBOR_COUNT = 5
 const FIELD_NUCLEATION_THRESHOLD = 0.34
 const AUTONOMOUS_SITE_LIMIT = 7
 
 function clamp01(value) {
   return Math.min(1, Math.max(0, Number(value) || 0))
+}
+
+/** Crystal growth-rate factor from Moisture. Neutral 0.5 → 1. */
+export function moistureGrowthMultiplier(moisture = ENV_MOISTURE_NEUTRAL) {
+  return 1 + (clamp01(moisture) - ENV_MOISTURE_NEUTRAL) * ENV_MOISTURE_GROWTH_SPAN
+}
+
+/**
+ * Moisture reading while parked at `step` (last entry with entry.step ≤ step).
+ * Used for UI / state.environment.
+ */
+export function moistureAtStep(environmentHistory, step) {
+  const query = Math.max(0, Math.floor(Number(step) || 0))
+  const history = Array.isArray(environmentHistory) ? environmentHistory : []
+  let moisture = ENV_MOISTURE_NEUTRAL
+  for (const entry of history) {
+    const at = Math.floor(Number(entry?.step) || 0)
+    if (at > query) break
+    if (Number.isFinite(entry?.moisture)) moisture = clamp01(entry.moisture)
+  }
+  return moisture
+}
+
+/**
+ * Moisture applied while advancing into `step` (entries with entry.step < step).
+ * Matches stimulus timing: a change recorded at step N affects step N+1 onward,
+ * so live scrubbing and replayLife stay bit-identical.
+ */
+export function moistureForGrowthStep(environmentHistory, step) {
+  const query = Math.max(0, Math.floor(Number(step) || 0))
+  const history = Array.isArray(environmentHistory) ? environmentHistory : []
+  let moisture = ENV_MOISTURE_NEUTRAL
+  for (const entry of history) {
+    const at = Math.floor(Number(entry?.step) || 0)
+    if (at >= query) break
+    if (Number.isFinite(entry?.moisture)) moisture = clamp01(entry.moisture)
+  }
+  return moisture
+}
+
+/**
+ * Turbulence intensity while parked at `step` (last entry with entry.step ≤ step).
+ * Membrane response reads the current environment value each apply.
+ */
+export function turbulenceAtStep(environmentHistory, step) {
+  const query = Math.max(0, Math.floor(Number(step) || 0))
+  const history = Array.isArray(environmentHistory) ? environmentHistory : []
+  let turbulence = ENV_TURBULENCE_DEFAULT
+  for (const entry of history) {
+    const at = Math.floor(Number(entry?.step) || 0)
+    if (at > query) break
+    if (Number.isFinite(entry?.turbulence)) turbulence = clamp01(entry.turbulence)
+  }
+  return turbulence
+}
+
+function normalizeEnvironmentHistory(history, totalSteps) {
+  const fallback = [
+    {
+      step: 0,
+      moisture: ENV_MOISTURE_NEUTRAL,
+      turbulence: ENV_TURBULENCE_DEFAULT,
+    },
+  ]
+  if (!Array.isArray(history) || history.length === 0) return fallback
+  const normalized = history
+    .map((entry) => ({
+      step: Math.min(
+        totalSteps,
+        Math.max(0, Math.floor(Number(entry?.step) || 0)),
+      ),
+      moisture: clamp01(
+        Number.isFinite(entry?.moisture)
+          ? entry.moisture
+          : ENV_MOISTURE_NEUTRAL,
+      ),
+      turbulence: clamp01(
+        Number.isFinite(entry?.turbulence)
+          ? entry.turbulence
+          : ENV_TURBULENCE_DEFAULT,
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        a.step - b.step ||
+        a.moisture - b.moisture ||
+        a.turbulence - b.turbulence,
+    )
+  if (normalized[0]?.step !== 0) {
+    return [
+      {
+        step: 0,
+        moisture: ENV_MOISTURE_NEUTRAL,
+        turbulence: ENV_TURBULENCE_DEFAULT,
+      },
+      ...normalized,
+    ]
+  }
+  return normalized
 }
 
 function smoothstep(edge0, edge1, value) {
@@ -177,7 +286,10 @@ function stepPrimaryCrystal(state, site, accumulation, step) {
     1 - crystal.length / Math.max(1e-8, crystal.maxLength)
   const maxRadius = crystalMaxRadius(state.seed, site.region)
   const remainingRadius = 1 - crystal.radius / Math.max(1e-8, maxRadius)
-  const multiplier = crystalRateMultiplier(state.seed, site.region)
+  const moisture = moistureForGrowthStep(state.environmentHistory, step)
+  const multiplier =
+    crystalRateMultiplier(state.seed, site.region) *
+    moistureGrowthMultiplier(moisture)
   const growthRate = primaryCrystalGrowthRate(
     mineral,
     suitability,
@@ -226,26 +338,65 @@ export function crystalMaturity(crystal) {
   )
 }
 
-export function secondaryBranchCount(seed, region) {
-  return (
+/**
+ * Integer branch-count shift from Moisture. Neutral 0.5 → 0 (legacy count).
+ * ~0.2 → −1, ~0.8 → +1; extremes up to ±2. Clamped later with max depth rules.
+ */
+export function moistureBranchCountDelta(moisture = ENV_MOISTURE_NEUTRAL) {
+  const m = clamp01(moisture)
+  if (Math.abs(m - ENV_MOISTURE_NEUTRAL) < 1e-12) return 0
+  return Math.round((m - ENV_MOISTURE_NEUTRAL) * (10 / 3))
+}
+
+/** Maturity gate; identical to CRYSTAL_BRANCH_MATURITY at Moisture 0.5. */
+export function moistureBranchMaturityGate(moisture = ENV_MOISTURE_NEUTRAL) {
+  const m = clamp01(moisture)
+  if (Math.abs(m - ENV_MOISTURE_NEUTRAL) < 1e-12) return CRYSTAL_BRANCH_MATURITY
+  // Dry raises the bar; wet lowers it (bounded).
+  return Math.min(
+    0.5,
+    Math.max(0.28, CRYSTAL_BRANCH_MATURITY - (m - ENV_MOISTURE_NEUTRAL) * 0.267),
+  )
+}
+
+/** Mineral gate; identical to CRYSTAL_BRANCH_MINERAL at Moisture 0.5. */
+export function moistureBranchMineralGate(moisture = ENV_MOISTURE_NEUTRAL) {
+  const m = clamp01(moisture)
+  if (Math.abs(m - ENV_MOISTURE_NEUTRAL) < 1e-12) return CRYSTAL_BRANCH_MINERAL
+  return Math.min(
+    0.55,
+    Math.max(0.3, CRYSTAL_BRANCH_MINERAL - (m - ENV_MOISTURE_NEUTRAL) * 0.2),
+  )
+}
+
+export function secondaryBranchCount(
+  seed,
+  region,
+  moisture = ENV_MOISTURE_NEUTRAL,
+) {
+  const base =
     CRYSTAL_BRANCH_MIN_COUNT +
     Math.floor(
       lifeHash(seed, region, 201) *
         (CRYSTAL_BRANCH_MAX_COUNT - CRYSTAL_BRANCH_MIN_COUNT + 1),
     )
-  )
+  const delta = moistureBranchCountDelta(moisture)
+  if (delta === 0) return base
+  return Math.max(0, Math.min(CRYSTAL_BRANCH_MAX_COUNT, base + delta))
 }
 
 /**
  * L-system production rule P1 (depth 0 only):
- *   P → P { S_i }  when maturity ≥ 0.4 and local mineral ≥ 0.46
+ *   P → P { S_i }  when maturity / mineral gates pass
  * Rewrite fires once. Secondaries never rewrite (max depth 1).
+ * Moisture only shifts gates away from neutral; AGE floor and decay stay fixed.
  */
 export function canProduceSecondaryBranches(
   crystal,
   mineral,
   decay = 0,
   age = 0,
+  moisture = ENV_MOISTURE_NEUTRAL,
 ) {
   if (!crystal) return false
   if ((crystal.depth ?? 0) >= CRYSTAL_MAX_BRANCH_DEPTH) return false
@@ -254,8 +405,8 @@ export function canProduceSecondaryBranches(
   // Prefer the branching phase, but local mineral + maturity still gate the rewrite.
   if (age > 0 && age < 0.4) return false
   return (
-    crystalMaturity(crystal) >= CRYSTAL_BRANCH_MATURITY &&
-    clamp01(mineral) >= CRYSTAL_BRANCH_MINERAL
+    crystalMaturity(crystal) >= moistureBranchMaturityGate(moisture) &&
+    clamp01(mineral) >= moistureBranchMineralGate(moisture)
   )
 }
 
@@ -328,7 +479,9 @@ function createSecondaryCrystal(state, site, primary, mineral, step, index, coun
 }
 
 export function createSecondaryCrystals(state, site, primary, mineral, step) {
-  const count = secondaryBranchCount(state.seed, site.region)
+  const moisture = moistureForGrowthStep(state.environmentHistory, step)
+  const count = secondaryBranchCount(state.seed, site.region, moisture)
+  if (count <= 0) return []
   return Array.from({ length: count }, (_, index) =>
     createSecondaryCrystal(
       state,
@@ -342,14 +495,17 @@ export function createSecondaryCrystals(state, site, primary, mineral, step) {
   )
 }
 
-function stepSecondaryCrystal(state, site, branch, accumulation) {
+function stepSecondaryCrystal(state, site, branch, accumulation, step) {
   const mineral = accumulation[site.region]
   const suitability = state.spatial.regions[site.region].suitability
   const remaining = 1 - branch.length / Math.max(1e-8, branch.maxLength)
   const maxRadius =
     branch.maxRadius ?? crystalMaxRadius(state.seed, site.region) * 0.5
   const remainingRadius = 1 - branch.radius / Math.max(1e-8, maxRadius)
-  const multiplier = crystalRateMultiplier(state.seed, site.region + 17)
+  const moisture = moistureForGrowthStep(state.environmentHistory, step)
+  const multiplier =
+    crystalRateMultiplier(state.seed, site.region + 17) *
+    moistureGrowthMultiplier(moisture)
   const growthRate = secondaryCrystalGrowthRate(
     mineral,
     suitability,
@@ -381,16 +537,18 @@ function stepSiteCrystal(state, site, accumulation, step) {
   const grown = stepPrimaryCrystal(state, site, accumulation, step)
   const mineral = accumulation[site.region]
   const existing = site.crystal?.branches ?? []
+  const moisture = moistureForGrowthStep(state.environmentHistory, step)
   const branches =
     existing.length > 0
       ? existing.map((branch) =>
-          stepSecondaryCrystal(state, site, branch, accumulation),
+          stepSecondaryCrystal(state, site, branch, accumulation, step),
         )
       : canProduceSecondaryBranches(
             grown,
             mineral,
             state.variables.decay,
             step / state.totalSteps,
+            moisture,
           )
         ? createSecondaryCrystals(state, site, grown, mineral, step)
         : []
@@ -708,6 +866,7 @@ function withDerivedState(state) {
 export function createLifeState({
   seed = 7319,
   history = [],
+  environmentHistory = [],
   durationSeconds = LIFE_DURATION_SECONDS,
 } = {}) {
   const duration = Math.max(
@@ -733,6 +892,12 @@ export function createLifeState({
       }
     },
   )
+  const envHistory = normalizeEnvironmentHistory(
+    environmentHistory,
+    totalSteps,
+  )
+  const moisture = moistureAtStep(envHistory, 0)
+  const turbulence = turbulenceAtStep(envHistory, 0)
   return withDerivedState({
     version: LIFE_ENGINE_VERSION,
     seed: normalizedSeed,
@@ -750,6 +915,8 @@ export function createLifeState({
       memory: 0,
     },
     history: normalizedHistory,
+    environment: { moisture, turbulence },
+    environmentHistory: envHistory,
     spatial,
   })
 }
@@ -788,6 +955,8 @@ export function stepLife(state) {
   const memory = Math.max(state.variables.memory, memoryTarget)
   const spatial = stepSpatialField(state, nextStep, growth)
   const dead = nextStep >= state.totalSteps
+  const moisture = moistureAtStep(state.environmentHistory, nextStep)
+  const turbulence = turbulenceAtStep(state.environmentHistory, nextStep)
 
   return withDerivedState({
     ...state,
@@ -796,6 +965,7 @@ export function stepLife(state) {
     age: dead ? 1 : age,
     dead,
     variables: { growth, mineral, decay: dead ? 1 : decay, memory },
+    environment: { moisture, turbulence },
     spatial,
   })
 }
@@ -825,14 +995,117 @@ export function addLifeStimulus(state, direction, strength = 1) {
   })
 }
 
-/** Replay is the reproducibility boundary: Seed + history + step → exact state. */
+function currentEnvEntry(state) {
+  return {
+    moisture: moistureAtStep(state.environmentHistory, state.step),
+    turbulence: turbulenceAtStep(state.environmentHistory, state.step),
+  }
+}
+
+function writeEnvHistory(state, patch) {
+  const current = currentEnvEntry(state)
+  const next = {
+    moisture: Number.isFinite(patch.moisture) ? clamp01(patch.moisture) : current.moisture,
+    turbulence: Number.isFinite(patch.turbulence)
+      ? clamp01(patch.turbulence)
+      : current.turbulence,
+  }
+  const history = [...(state.environmentHistory ?? [])]
+  const last = history[history.length - 1]
+  if (last && last.step === state.step) {
+    history[history.length - 1] = { step: state.step, ...next }
+  } else {
+    history.push({ step: state.step, ...next })
+  }
+  return {
+    environment: next,
+    environmentHistory: history,
+  }
+}
+
+/**
+ * Record Moisture at the current life step (piecewise-constant env history).
+ * Crystal length/radius already grown is kept; only future growth rates change.
+ */
+export function setLifeMoisture(state, moisture) {
+  if (!state || state.dead) return state
+  const next = clamp01(moisture)
+  const current = moistureAtStep(state.environmentHistory, state.step)
+  if (Math.abs(current - next) < 1e-9) {
+    return withDerivedState({
+      ...state,
+      environment: {
+        moisture: next,
+        turbulence: state.environment?.turbulence ?? ENV_TURBULENCE_DEFAULT,
+      },
+    })
+  }
+  return withDerivedState({
+    ...state,
+    ...writeEnvHistory(state, { moisture: next }),
+  })
+}
+
+/**
+ * Environmental Turbulence (membrane field). Updates immediately for reversible
+ * response and records history for AGE scrub / replay. Does not alter crystals.
+ */
+export function setLifeTurbulence(state, turbulence) {
+  if (!state || state.dead) return state
+  const next = clamp01(turbulence)
+  const current = turbulenceAtStep(state.environmentHistory, state.step)
+  if (Math.abs(current - next) < 1e-9) {
+    return withDerivedState({
+      ...state,
+      environment: {
+        moisture: state.environment?.moisture ?? ENV_MOISTURE_NEUTRAL,
+        turbulence: next,
+      },
+    })
+  }
+  return withDerivedState({
+    ...state,
+    ...writeEnvHistory(state, { turbulence: next }),
+  })
+}
+
+/**
+ * Lab compare helper: treat Moisture as constant from birth and rebuild the
+ * organism at the current AGE (same seed + stimulus history).
+ * Used by Playground Crystal Moisture scrub so 0.2 / 0.5 / 0.8 are visible
+ * without requiring a manual Restart.
+ */
+export function applyLifeMoistureFromBirth(state, moisture) {
+  if (!state || state.dead) return state
+  const next = clamp01(moisture)
+  const turbulence =
+    state.environment?.turbulence ?? ENV_TURBULENCE_DEFAULT
+  return replayLife({
+    seed: state.seed,
+    history: state.history,
+    environmentHistory: [{ step: 0, moisture: next, turbulence }],
+    durationSeconds: state.durationSeconds,
+    step: state.step,
+  })
+}
+
+/**
+ * Replay boundary: Seed + stimulus history + environment history + step
+ * → exact state (including accumulated crystal geometry).
+ */
 export function replayLife({
   seed,
   history = [],
+  environmentHistory = [],
   step = 0,
   durationSeconds = LIFE_DURATION_SECONDS,
 } = {}) {
-  const initial = createLifeState({ seed, history, durationSeconds })
+  const initial = createLifeState({
+    seed,
+    history,
+    environmentHistory,
+    durationSeconds,
+  })
   return runLifeSteps(initial, Math.min(initial.totalSteps, Math.max(0, step)))
 }
 
@@ -844,6 +1117,15 @@ export function lifeSnapshot(state) {
     age: state.age,
     dead: state.dead,
     variables: { ...state.variables },
+    environment: {
+      moisture: state.environment?.moisture ?? ENV_MOISTURE_NEUTRAL,
+      turbulence: state.environment?.turbulence ?? ENV_TURBULENCE_DEFAULT,
+    },
+    environmentHistory: (state.environmentHistory ?? []).map((entry) => ({
+      step: entry.step,
+      moisture: entry.moisture,
+      turbulence: entry.turbulence ?? ENV_TURBULENCE_DEFAULT,
+    })),
     history: state.history.map((entry) => ({
       ...entry,
       direction: [...entry.direction],

@@ -1,6 +1,7 @@
 .world-v2 {
   --site-header-h: calc(
-    4.2vh + clamp(1.35rem, 3.6vw, 2.9rem) + clamp(0.8rem, 1.35vw, 1.15rem) * 1.9 + 2.6vh
+    4vh + clamp(1.85rem, 3.35vw, 2.4rem) + 0.55rem +
+      clamp(0.625rem, 0.85vw, 0.75rem) * 1.4 + 2.4vh
   );
   --world-ui-color: #f3fbf8;
   --world-ui-muted: rgba(243, 251, 248, 0.58);
@@ -46,7 +47,7 @@
 }
 
 .world-v2__hud {
-  z-index: 2;
+  z-index: 5;
   color: var(--world-ui-color);
 }
 
@@ -60,10 +61,14 @@
   outline-color: rgba(23, 36, 44, 0.9);
 }
 
+/*
+ * World display controls sit in their own band below the global Header.
+ * Do not share the Header’s top-right slot — that caused nav/control overlap.
+ */
 .world-v2__background-study {
   position: absolute;
   z-index: 3;
-  top: 4.2vh;
+  top: calc(var(--site-header-h) + 0.55rem);
   right: 3.4vw;
   display: grid;
   justify-items: end;
@@ -73,6 +78,7 @@
   font-weight: 600;
   letter-spacing: 0.11em;
   text-transform: uppercase;
+  pointer-events: auto;
 }
 
 .world-v2__background-study > span {
@@ -325,7 +331,7 @@
 }
 
 .world-v2__life button,
-.world-v2__life input {
+.world-v2__life input:not([type='range']) {
   border: 0;
   color: inherit;
   font: inherit;
@@ -357,7 +363,7 @@
   opacity: 0.68;
 }
 
-.world-v2__life input {
+.world-v2__life input:not([type='range']) {
   width: 5.2rem;
   padding: 0 0 0.15rem;
   border-bottom: 1px solid var(--world-ui-line);
@@ -366,8 +372,8 @@
   appearance: textfield;
 }
 
-.world-v2__life input::-webkit-inner-spin-button,
-.world-v2__life input::-webkit-outer-spin-button {
+.world-v2__life input:not([type='range'])::-webkit-inner-spin-button,
+.world-v2__life input:not([type='range'])::-webkit-outer-spin-button {
   margin: 0;
   appearance: none;
 }
@@ -424,7 +430,7 @@
 
 @media (max-width: 720px) {
   .world-v2__background-study {
-    top: calc(var(--site-header-h) + 0.6rem);
+    top: calc(var(--site-header-h) + 0.45rem);
     right: 1rem;
     left: auto;
   }

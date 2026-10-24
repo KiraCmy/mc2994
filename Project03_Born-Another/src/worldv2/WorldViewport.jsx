@@ -22,6 +22,7 @@ import {
   primaryCrystalAnchor,
   secondaryCrystalAttachPoint,
 } from './life/worldLifeAdapter.js'
+import { sampleTurbulenceFromLife } from './turbulenceField.js'
 import {
   createPrimaryCrystalGeometrySet,
   crystalProfileForSite,
@@ -446,6 +447,7 @@ function collectBakedDissolveEmitters(
   decay,
   growth,
   deformations,
+  life = null,
 ) {
   if (!restOutside?.origins || !restOutside?.directions) return []
   const morph = formMorphAmount(growth)
@@ -489,11 +491,18 @@ function collectBakedDissolveEmitters(
     const progress = crystalDissolveProgress(seed, cluster.id, age, decay)
     if (progress <= 0.001) continue
     const shaped = morphRestPoint(cluster.ox, cluster.oy, cluster.oz, morph)
+    const turb = sampleTurbulenceFromLife(
+      shaped[0],
+      shaped[1],
+      shaped[2],
+      life,
+    )
     const root = deformRadialPoint(
       shaped[0],
       shaped[1],
       shaped[2],
       deformations,
+      turb,
     )
     emitters.push({
       id: cluster.id,
@@ -608,10 +617,18 @@ function SpatialGrowthSites({
       site.direction[1] * shapedRadius,
       site.direction[2] * shapedRadius,
     ]
-    const extra =
+    const playgroundExtra =
       typeof extraRadialOffset === 'function'
         ? extraRadialOffset(restPoint[0], restPoint[1], restPoint[2])
         : 0
+    const extra =
+      playgroundExtra +
+      sampleTurbulenceFromLife(
+        restPoint[0],
+        restPoint[1],
+        restPoint[2],
+        life,
+      )
     const surface = new THREE.Vector3().fromArray(
       primaryCrystalAnchor(
         site,
@@ -788,9 +805,10 @@ function SpatialGrowthSites({
       decay,
       growth,
       deformations,
+      life,
     )
     return [...fromLife, ...fromBaked]
-  }, [transforms, restOutside, seed, age, decay, growth, deformations])
+  }, [transforms, restOutside, seed, age, decay, growth, deformations, life])
 
   const hierarchyLinks = CRYSTAL_DEBUG
     ? transforms.filter(
@@ -1014,8 +1032,8 @@ function WorldOrganism({
   influenceOverlay = null,
   /** Playground diagnostic: opaque gray + wireframe; hides decorative materials. */
   geometryDebug = false,
-  /** Optional ref: last applyLifeToWorld duration in ms (Playground perf). */
-  geometryUpdateMsRef = null,
+  /** World-space translation; local membrane / stimulus space stays organism-local. */
+  position = null,
 }) {
   const group = useRef(null)
   const skinMaterial = useRef(null)
@@ -1068,21 +1086,24 @@ function WorldOrganism({
     const resolve = resolveRef.current
     const displayLife =
       typeof resolve === 'function' ? resolve(source, elapsed) : source
-    const timed = geometryUpdateMsRef != null
-    const t0 = timed ? performance.now() : 0
     applyLifeToWorld(bundle.world, bundle.rest, displayLife, {
       updateNormals,
       extraRadialOffset: extraRadialRef.current,
       influenceOverlay: influenceRef.current,
     })
-    if (timed) {
-      geometryUpdateMsRef.current = performance.now() - t0
-    }
   }
 
   useLayoutEffect(() => {
     if (!bundle) return
-    // Keep membrane + baked crystal anchors on the same life sample as LE sites.
+    // Playground passes resolveLifeForRender / extraRadialOffset and refreshes
+    // in useFrame — skip here so life-step React updates do not hitch the frame.
+    if (
+      typeof resolveRef.current === 'function' ||
+      typeof extraRadialRef.current === 'function'
+    ) {
+      return
+    }
+    // World: keep membrane + baked crystal anchors on the same life sample.
     // Recompute normals every other life sample while playing — main-thread win.
     normalsTick.current += 1
     const sharedTime = sharedTimeRef?.current
@@ -1105,7 +1126,7 @@ function WorldOrganism({
     const sharedTime = sharedTimeRef?.current
     const elapsed =
       typeof sharedTime === 'number' ? sharedTime : clock.elapsedTime
-    // Playground compare: refresh temporal ambient + spatial field each frame.
+    // Playground: refresh temporal ambient + spatial / turbulence each frame.
     if (
       (typeof resolveRef.current === 'function' ||
         typeof extraRadialRef.current === 'function') &&
@@ -1239,7 +1260,14 @@ function WorldOrganism({
     }
   }
 
+  const worldPosition = Array.isArray(position)
+    ? position
+    : position && Number.isFinite(position.x)
+      ? [position.x, position.y, position.z]
+      : [0, 0, 0]
+
   return (
+    <group position={worldPosition}>
     <group
       ref={group}
       rotation={[0.04, 0.22, -0.08]}
@@ -1409,6 +1437,7 @@ function WorldOrganism({
         </>
       )}
     </group>
+    </group>
   )
 }
 
@@ -1432,11 +1461,27 @@ function yawPitchFromQuaternion(quaternion, euler) {
  * - Interior / explore: free-look + WASD (unchanged).
  * Enter / Exit still lerps between scripted poses.
  */
-function WorldFlyCamera({ view, onReset, sharedOrbitRef = null }) {
+function WorldFlyCamera({
+  view,
+  onReset,
+  sharedOrbitRef = null,
+  /** Optional [x,y,z] exterior orbit look-at (default world origin). */
+  orbitPivot = null,
+}) {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
   const viewRef = useRef(view)
   viewRef.current = view
+  const pivotRef = useRef(ORGANISM_PIVOT.clone())
+  if (Array.isArray(orbitPivot) && orbitPivot.length >= 3) {
+    pivotRef.current.set(
+      Number(orbitPivot[0]) || 0,
+      Number(orbitPivot[1]) || 0,
+      Number(orbitPivot[2]) || 0,
+    )
+  } else {
+    pivotRef.current.copy(ORGANISM_PIVOT)
+  }
   const outsideQuaternion = useRef(
     lookQuaternion(EXTERIOR_POSITION, ORGANISM_PIVOT),
   )
@@ -1506,8 +1551,9 @@ function WorldFlyCamera({ view, onReset, sharedOrbitRef = null }) {
     orbit.phi = phi
     orbit.radius = radius
     offsetFromSpherical(orbit.theta, phi, radius, orbitOffset.current)
-    camera.position.copy(ORGANISM_PIVOT).add(orbitOffset.current)
-    camera.lookAt(ORGANISM_PIVOT)
+    const pivot = pivotRef.current
+    camera.position.copy(pivot).add(orbitOffset.current)
+    camera.lookAt(pivot)
     const pose = yawPitchFromQuaternion(camera.quaternion, euler.current)
     yaw.current = pose.yaw
     pitch.current = pose.pitch
@@ -1851,19 +1897,11 @@ function WorldFlyCamera({ view, onReset, sharedOrbitRef = null }) {
   return null
 }
 
-function WorldPostprocessing({
-  view,
-  backgroundStudy,
-  geometryDebug = false,
-  /** Optional: receive cumulative draw stats after composer.render (Playground). */
-  glInfoRef = null,
-}) {
+function WorldPostprocessing({ view, backgroundStudy, geometryDebug = false }) {
   const session = useRef(null)
   const get = useThree((state) => state.get)
   const size = useThree((state) => state.size)
   const shaderStudy = backgroundStudy === 'shader' && !geometryDebug
-  const glInfoRefLocal = useRef(glInfoRef)
-  glInfoRefLocal.current = glInfoRef
 
   useLayoutEffect(() => {
     const { gl, scene, camera, size: currentSize } = get()
@@ -1929,7 +1967,7 @@ function WorldPostprocessing({
     current.finish.enabled = !geometryDebug
   }, [geometryDebug])
 
-  useFrame(({ clock, gl }) => {
+  useFrame(({ clock }) => {
     const current = session.current
     if (!current) return
     const interior = view === 'interior' || view === 'exiting'
@@ -1942,83 +1980,8 @@ function WorldPostprocessing({
         1 / 60,
       )
     }
-    const infoTarget = glInfoRefLocal.current
-    if (infoTarget) {
-      // Cumulative pass stats: default autoReset only keeps the LAST pass
-      // (fullscreen quad → ~1–2 draws / ~0 tris), which misled the HUD.
-      const prevAuto = gl.info.autoReset
-      gl.info.autoReset = false
-      gl.info.reset()
-      current.composer.render()
-      infoTarget.current = {
-        calls: gl.info.render.calls,
-        triangles: gl.info.render.triangles,
-        lines: gl.info.render.lines,
-        points: gl.info.render.points,
-      }
-      gl.info.autoReset = prevAuto
-      gl.info.reset()
-    } else {
-      current.composer.render()
-    }
+    current.composer.render()
   }, 1)
-
-  return null
-}
-
-/** Ignore Clock.getDelta() spikes right after Canvas mount. */
-const PERF_WARMUP_MS = 5000
-const PERF_SAMPLE_MS = 500
-
-/**
- * Playground perf probe — samples after postprocessing (priority 2).
- * FPS uses wall-clock frame counts (not R3F delta sums).
- */
-function ViewportPerfProbe({
-  slot,
-  statsRef,
-  geometryUpdateMsRef,
-  glInfoRef,
-}) {
-  const frames = useRef(0)
-  const geomSum = useRef(0)
-  const geomCount = useRef(0)
-  const mountedAt = useRef(performance.now())
-  const windowStart = useRef(performance.now())
-
-  useFrame(() => {
-    if (!statsRef) return
-    const now = performance.now()
-    frames.current += 1
-    const geomMs = geometryUpdateMsRef?.current
-    if (Number.isFinite(geomMs) && geomMs >= 0) {
-      geomSum.current += geomMs
-      geomCount.current += 1
-    }
-    const wallElapsedMs = now - windowStart.current
-    if (wallElapsedMs < PERF_SAMPLE_MS) return
-
-    const warmed = now - mountedAt.current >= PERF_WARMUP_MS
-    const fps = (frames.current * 1000) / wallElapsedMs
-    const info = glInfoRef?.current
-    statsRef.current = {
-      ...statsRef.current,
-      [slot]: {
-        fps,
-        frameMs: fps > 1e-6 ? 1000 / fps : 0,
-        calls: info?.calls ?? null,
-        triangles: info?.triangles ?? null,
-        geometryUpdateMs:
-          geomCount.current > 0 ? geomSum.current / geomCount.current : null,
-        warmed,
-        sampleMs: wallElapsedMs,
-      },
-    }
-    frames.current = 0
-    windowStart.current = now
-    geomSum.current = 0
-    geomCount.current = 0
-  }, 2)
 
   return null
 }
@@ -2038,51 +2001,84 @@ function WorldScene({
   extraRadialOffset = null,
   influenceOverlay = null,
   geometryDebug = false,
-  perfSlot = null,
-  perfStatsRef = null,
-  geometryUpdateMsRef = null,
+  /**
+   * Optional multi-organism list for a shared Canvas (Experiment 02).
+   * When null/empty, behaves as World / Exp01 single-organism scene.
+   * Each entry: { id, life, onStimulus, position?, resolveLifeForRender?, ... }
+   */
+  organisms = null,
+  orbitPivot = null,
 }) {
-  const glInfoRef = useRef(null)
+  const multi =
+    Array.isArray(organisms) && organisms.length > 0 ? organisms : null
+  const organismList = multi
+    ? multi
+    : life
+      ? [
+          {
+            id: `life-${life.seed}`,
+            life,
+            onStimulus,
+            deformAmplitudeScale,
+            deformFrequencyScale,
+            resolveLifeForRender,
+            breathAmplitude,
+            extraRadialOffset,
+            influenceOverlay,
+            geometryDebug,
+            position: [0, 0, 0],
+          },
+        ]
+      : []
+
   return (
     <>
       <WorldEnvironment
         view={view}
         backgroundStudy={backgroundStudy}
       />
-      <WorldOrganism
-        key={life.seed}
-        view={view}
-        life={life}
-        onStimulus={onStimulus}
-        deformAmplitudeScale={deformAmplitudeScale}
-        deformFrequencyScale={deformFrequencyScale}
-        sharedTimeRef={sharedTimeRef}
-        resolveLifeForRender={resolveLifeForRender}
-        breathAmplitude={breathAmplitude}
-        extraRadialOffset={extraRadialOffset}
-        influenceOverlay={geometryDebug ? null : influenceOverlay}
-        geometryDebug={geometryDebug}
-        geometryUpdateMsRef={geometryUpdateMsRef}
-      />
+      {organismList.map((org) => {
+        if (!org?.life) return null
+        const orgDebug = org.geometryDebug ?? geometryDebug
+        return (
+          <WorldOrganism
+            key={org.id ?? `life-${org.life.seed}`}
+            view={view}
+            life={org.life}
+            onStimulus={org.onStimulus}
+            deformAmplitudeScale={
+              org.deformAmplitudeScale ?? deformAmplitudeScale
+            }
+            deformFrequencyScale={
+              org.deformFrequencyScale ?? deformFrequencyScale
+            }
+            sharedTimeRef={sharedTimeRef}
+            resolveLifeForRender={
+              org.resolveLifeForRender ?? resolveLifeForRender
+            }
+            breathAmplitude={org.breathAmplitude ?? breathAmplitude}
+            extraRadialOffset={org.extraRadialOffset ?? extraRadialOffset}
+            influenceOverlay={
+              orgDebug
+                ? null
+                : (org.influenceOverlay ?? influenceOverlay)
+            }
+            geometryDebug={orgDebug}
+            position={org.position}
+          />
+        )
+      })}
       <WorldFlyCamera
         view={view}
         onReset={onCameraReset}
         sharedOrbitRef={sharedOrbitRef}
+        orbitPivot={orbitPivot}
       />
       <WorldPostprocessing
         view={view}
         backgroundStudy={backgroundStudy}
         geometryDebug={geometryDebug}
-        glInfoRef={perfSlot && perfStatsRef ? glInfoRef : null}
       />
-      {perfSlot && perfStatsRef ? (
-        <ViewportPerfProbe
-          slot={perfSlot}
-          statsRef={perfStatsRef}
-          geometryUpdateMsRef={geometryUpdateMsRef}
-          glInfoRef={glInfoRef}
-        />
-      ) : null}
     </>
   )
 }
@@ -2115,17 +2111,25 @@ export function WorldViewport({
   influenceOverlay = null,
   /** Playground only: opaque gray geometry diagnostic (World stays styled). */
   geometryDebug = false,
-  /** Playground perf: slot id ('A' | 'B') into perfStatsRef. */
-  perfSlot = null,
-  perfStatsRef = null,
-  geometryUpdateMsRef = null,
+  /**
+   * Multi-organism shared scene (Experiment 02). When provided, `life` /
+   * `onStimulus` single-organism props are ignored. One Canvas + one composer.
+   */
+  organisms = null,
+  /** Exterior orbit look-at; default [0,0,0]. */
+  orbitPivot = null,
+  /** Optional camera start position override (array). */
+  cameraPosition = null,
 }) {
   const worldDpr = useWorldDpr()
+  const startCamera = Array.isArray(cameraPosition)
+    ? cameraPosition
+    : EXTERIOR_POSITION.toArray()
   return (
     <WebGLCanvas
       className={className}
       camera={{
-        position: EXTERIOR_POSITION.toArray(),
+        position: startCamera,
         fov: 34,
         near: CAMERA_NEAR,
         far: CAMERA_FAR,
@@ -2153,9 +2157,8 @@ export function WorldViewport({
         extraRadialOffset={extraRadialOffset}
         influenceOverlay={influenceOverlay}
         geometryDebug={geometryDebug}
-        perfSlot={perfSlot}
-        perfStatsRef={perfStatsRef}
-        geometryUpdateMsRef={geometryUpdateMsRef}
+        organisms={organisms}
+        orbitPivot={orbitPivot}
       />
     </WebGLCanvas>
   )

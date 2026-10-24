@@ -767,15 +767,7 @@ export default function App() {
     return (
       <main className="stage">
         <ConceptPage
-          header={
-            <SiteHeader modeId={modeId} onSelectMode={selectMode}>
-              <p className="hud-meta-tagline">
-                A procedural world
-                <br />
-                of finite digital life
-              </p>
-            </SiteHeader>
-          }
+          header={<SiteHeader modeId={modeId} onSelectMode={selectMode} />}
         />
       </main>
     )

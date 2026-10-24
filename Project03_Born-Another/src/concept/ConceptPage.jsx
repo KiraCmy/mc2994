@@ -1,515 +1,392 @@
-import { Fragment } from 'react'
-import bladeRunnerStill from '../assets/blade-runner-roy-batty.jpg'
-import coverImage from '../assets/cover-image.png'
+import { useEffect, useState } from 'react'
+import heroShot from '../assets/hero-shot.png'
+import concept02Fossil from '../assets/concept-02-fossil.jpg'
+import concept02Fossil2 from '../assets/concept-02-fossil2.jpg'
+import concept02Fossil3 from '../assets/concept-02-fossil3.jpg'
+import concept03Encounter from '../assets/concept-03-encounter.jpg'
+import concept041 from '../assets/concept-04-1.jpg'
+import concept042 from '../assets/concept-04-2.jpg'
+import concept043 from '../assets/concept-04-3.jpg'
+import concept044 from '../assets/concept-04-4.jpg'
+import concept051 from '../assets/concept-05-1.jpg'
+import concept06 from '../assets/concept-06.jpg'
 import SiteHud from '../SiteHud.jsx'
 import { useAutoHideHeader } from '../useAutoHideHeader.js'
 import './concept.css'
 
-/** Soft frosted stand-in for imagery that will be produced later. */
-function Placeholder({ label, shape = 'rect', className = '', style, children }) {
+const SECTIONS = [
+  { id: '01', label: 'Origin' },
+  { id: '02', label: 'The Proposition' },
+  { id: '03', label: 'The Encounter' },
+  { id: '04', label: 'Coexistence' },
+  { id: '05', label: 'Impermanence' },
+  { id: '06', label: 'Revelation' },
+]
+
+function HeadingLines({ as: Tag = 'h2', id, lines, className = '' }) {
   return (
-    <div
-      className={`concept-ph concept-ph--${shape} ${className}`}
-      style={style}
-      role="img"
-      aria-label={label}
+    <Tag
+      id={id}
+      className={`concept-heading${className ? ` ${className}` : ''}`}
     >
-      {children}
-      <span className="concept-ph-label">{label}</span>
-    </div>
+      {lines.map((line) => (
+        <span key={line} className="concept-heading-line">
+          {line}
+        </span>
+      ))}
+    </Tag>
   )
 }
 
-function SectionHead({ number, label, title, children }) {
+function SectionLabel({ number, name }) {
   return (
-    <>
-      <p className="concept-num">{number}</p>
-      <div className="concept-text">
-        <p className="concept-label">{label}</p>
-        <h2 className="concept-heading">{title}</h2>
-        {children}
-      </div>
-    </>
+    <p className="concept-label">
+      <span className="concept-label-index">{number}</span>
+      <span className="concept-label-sep" aria-hidden="true">
+        {' — '}
+      </span>
+      <span className="concept-label-name">{name}</span>
+    </p>
   )
 }
 
-function Arrow() {
+/** Editorial media frame — use `src` when photography is available. */
+function MediaSlot({ label, src, className = '' }) {
   return (
-    <span className="concept-arrow" aria-hidden="true">
-      →
-    </span>
+    <figure className={`concept-media ${className}`}>
+      {src ? (
+        <img src={src} alt={label} loading="lazy" decoding="async" />
+      ) : (
+        <span className="concept-media-label" role="img" aria-label={label}>
+          {label}
+        </span>
+      )}
+    </figure>
   )
 }
 
-const PREMISE_TERMS = ['Form', 'Growth', 'Behavior', 'Time', 'Memory', 'Lineage']
-
-const TRANSLATION = [
-  {
-    title: 'Cinematic Inspiration',
-    lines: ['Artificial life · Mortality', 'Memory · Identity'],
-    image: 'Film still — city at night',
-    shape: 'rect',
-  },
-  {
-    title: 'Conceptual Translation',
-    lines: ['Finite lifespan · Autonomous evolution', 'Preservation · Lineage'],
-    image: 'Abstract translucent form',
-    shape: 'organism',
-  },
-  {
-    title: 'Procedural Implementation',
-    lines: ['Seed · AGE · Deformation', 'Growth · Trace · Lineage'],
-    image: 'Procedural organism',
-    shape: 'organism',
-  },
-]
-
-const LIFE_STAGES = [
-  { title: 'Birth', note: 'A potential emerges', scale: 0.42 },
-  { title: 'Development', note: 'Rapid growth and change', scale: 0.82 },
-  { title: 'Maturity', note: 'Complex structure', scale: 1 },
-  { title: 'Instability', note: 'Becoming fragile', scale: 1 },
-  { title: 'Decay', note: 'Dissolving form', scale: 0.86 },
-  { title: 'Death', note: 'Disappearance', scale: 0.86 },
-  { title: 'Trace', note: 'Residual memory', scale: 0.86 },
-]
-
-const EXPERIENCE_STEPS = [
-  { title: '1. Set Conditions', note: 'Seed, parameters, environment' },
-  { title: '2. A Life Emerges', note: 'Procedural rules generate an entity' },
-  { title: '3. Observe & Intervene', note: 'Influence growth and behavior' },
-  { title: '4. Preserve This Moment', note: 'Choose what to remember', highlight: true },
-  { title: '5. Death → Trace', note: 'The life ends, its history may remain' },
-]
-
-/** Lineage graph nodes, positioned in % of the graph area. */
-const LINEAGE_NODES = [
-  { id: '001', note: 'Origin', x: 52, y: 14 },
-  { id: '002', note: 'Variation', x: 33, y: 44 },
-  { id: '003', note: 'Variation', x: 72, y: 46 },
-  { id: '004', note: 'Inheritance', x: 10, y: 80 },
-  { id: '005', note: 'Mutation', x: 43, y: 80 },
-  { id: '006', note: 'New Branch', x: 84, y: 76 },
-]
-const LINEAGE_EDGES = [
-  ['001', '002'],
-  ['001', '003'],
-  ['002', '004'],
-  ['002', '005'],
-  ['003', '005'],
-  ['003', '006'],
-]
-
-const FUTURE_TOPICS = [
-  'AI as an interpreter',
-  'More complex lifecycle rules',
-  'Persistent memory system',
-  'Environmental interactions',
-  'A growing world of interconnected lives',
-]
-
-function lineagePath(a, b) {
-  const midY = (a.y + b.y) / 2
-  return `M ${a.x} ${a.y} C ${a.x} ${midY}, ${b.x} ${midY}, ${b.x} ${b.y}`
+function PanelCaption({ children }) {
+  return <p className="concept-caption">{children}</p>
 }
 
 /**
- * CONCEPT — editorial overview of Born Another. Layout, typography, copy and
- * image placeholders only; imagery and motion come later.
+ * CONCEPT — cinematic Origin hero + editorial story spreads (02|03, 04, 05|06).
+ * Shared SiteHeader overlays the hero via `.is-cinematic`; structure unchanged.
  */
 export default function ConceptPage({ header }) {
-  const nodeById = Object.fromEntries(LINEAGE_NODES.map((node) => [node.id, node]))
   const { hidden, scrolled, scrollerRef } = useAutoHideHeader()
+  const [cinematic, setCinematic] = useState(true)
+  const [activeId, setActiveId] = useState('01')
+  const [scroller, setScroller] = useState(null)
+
+  const bindScroller = (node) => {
+    setScroller(node)
+    scrollerRef(node)
+  }
+
+  useEffect(() => {
+    if (!scroller) return undefined
+
+    const hero = scroller.querySelector('#concept-01')
+    if (!hero) return undefined
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        setCinematic(entry.isIntersecting && entry.intersectionRatio > 0.35)
+      },
+      { root: scroller, threshold: [0.2, 0.35, 0.5] },
+    )
+    io.observe(hero)
+    return () => io.disconnect()
+  }, [scroller])
+
+  useEffect(() => {
+    if (!scroller) return undefined
+
+    const nodes = SECTIONS.map((s) =>
+      scroller.querySelector(`#concept-${s.id}`),
+    ).filter(Boolean)
+    if (!nodes.length) return undefined
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
+        const top = visible[0]
+        if (top?.target?.id) {
+          setActiveId(top.target.id.replace('concept-', ''))
+        }
+      },
+      {
+        root: scroller,
+        threshold: [0.25, 0.45, 0.6],
+        rootMargin: '-12% 0px -40% 0px',
+      },
+    )
+    nodes.forEach((n) => io.observe(n))
+    return () => io.disconnect()
+  }, [scroller])
+
+  const jumpTo = (id) => {
+    const el = scroller?.querySelector(`#concept-${id}`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const hudClass = ['concept-hud', cinematic ? 'is-cinematic' : '']
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <div className="concept-root">
-    <SiteHud className="concept-hud" hidden={hidden} scrolled={scrolled}>
-      {header}
-    </SiteHud>
-    <div className="concept" ref={scrollerRef}>
+      <SiteHud className={hudClass} hidden={hidden} scrolled={scrolled}>
+        {header}
+      </SiteHud>
 
-      {/* 01 — The Premise */}
-      <section className="concept-section concept-premise">
-        <p className="concept-num">01</p>
-        <div className="concept-text concept-premise-text">
-          <p className="concept-label">The Premise</p>
-          <h1 className="concept-heading concept-heading--hero">
-            A life
-            <br />
-            that was never
-            <br />
-            meant to last.
-          </h1>
-          <p className="concept-body concept-body--lead">
-            BORN ANOTHER is a procedural living world with a finite lifespan.
-          </p>
-          <p className="concept-body">
-            Each life emerges from inherited conditions and develops through its own internal
-            rules. Visitors may enter, explore, and influence its evolution, but they cannot fully
-            control what it becomes or prevent its eventual disappearance.
-          </p>
-          <p className="concept-body">
-            As the world changes, visitors choose which moments are worth preserving. What remains
-            may become a memory, a trace, or the beginning of another life.
-          </p>
-          <p className="concept-scroll">Scroll to explore</p>
-        </div>
-        <div className="concept-premise-visual">
-          <img
-            className="concept-premise-image"
-            src={coverImage}
-            alt="Iridescent translucent sphere with crystalline shards emerging from its surface"
-            decoding="async"
-          />
-          <ul className="concept-terms">
-            {PREMISE_TERMS.map((term) => (
-              <li key={term}>{term}</li>
-            ))}
-          </ul>
-          <p className="concept-premise-coda">
-            A temporary existence.
-            <br />
-            A lasting trace.
-          </p>
-        </div>
-      </section>
+      <nav className="concept-side-nav" aria-label="Concept sections">
+        {SECTIONS.map((section) => (
+          <button
+            key={section.id}
+            type="button"
+            className={activeId === section.id ? 'is-active' : ''}
+            aria-current={activeId === section.id ? 'true' : undefined}
+            aria-label={`${section.id} ${section.label}`}
+            onClick={() => jumpTo(section.id)}
+          >
+            {section.id}
+          </button>
+        ))}
+      </nav>
 
-      {/* 02 — Conceptual Origin */}
-      <section className="concept-section concept-origin">
-        <p className="concept-num">02</p>
-        <div className="concept-text">
-          <p className="concept-label">Conceptual Origin</p>
-          <h2 className="concept-heading concept-heading--caps">
-            Blade Runner
-            <br />
-            (1982)
-          </h2>
-          <span className="concept-rule" />
-          <p className="concept-body">
-            Born Another is inspired by the replicants in Blade Runner (1982). The reference is to
-            their condition as artificial lives, not to the film&apos;s visual aesthetic.
-          </p>
-        </div>
-        <img
-          className="concept-origin-still"
-          src={bladeRunnerStill}
-          alt="Roy Batty holding a white dove — Blade Runner (1982)"
-          loading="lazy"
-          decoding="async"
-        />
-        <div className="concept-origin-quote">
-          <blockquote>
-            “All those moments will be lost in time, like tears in rain.”
-          </blockquote>
-          <p className="concept-cite">— Roy Batty, Blade Runner (1982)</p>
-          <p className="concept-body">
-            If an artificial life is designed to disappear, what makes its existence meaningful?
-          </p>
-          <p className="concept-body">
-            If its memories disappear with it, what is worth preserving?
-          </p>
-        </div>
-      </section>
-
-      {/* 03 — The Translation */}
-      <section className="concept-section">
-        <SectionHead
-          number="03"
-          label="The Translation"
-          title={
-            <>
-              From Artificial Life
-              <br />
-              to Procedural Life
-            </>
-          }
+      <div className="concept" ref={bindScroller}>
+        {/* 01 — Origin (unchanged cinematic hero) */}
+        <section
+          id="concept-01"
+          className="concept-hero"
+          aria-labelledby="concept-01-heading"
         >
-          <p className="concept-body">
-            The questions raised by Blade Runner are translated into a computational system, where
-            abstract, non-human entities explore similar themes of mortality, identity and memory.
-          </p>
-        </SectionHead>
-        <div className="concept-flow concept-flow--3">
-          {TRANSLATION.map((card, i) => (
-            <Fragment key={card.title}>
-              {i > 0 ? <Arrow /> : null}
-              <article className="concept-card">
-                <p className="concept-label concept-label--center">{card.title}</p>
-                <p className="concept-note">
-                  {card.lines.map((line) => (
-                    <span key={line}>{line}</span>
-                  ))}
+          <div className="concept-hero-bg" aria-hidden="true">
+            <img src={heroShot} alt="" decoding="async" />
+            <div className="concept-hero-veil" />
+          </div>
+
+          <div className="concept-hero-inner">
+            <div className="concept-hero-copy">
+              <SectionLabel number="01" name="Origin" />
+              <HeadingLines
+                as="h1"
+                id="concept-01-heading"
+                className="concept-heading--hero"
+                lines={['What makes', 'a life real?']}
+              />
+              <p className="concept-body concept-body--hero">
+                Born Another is inspired by the replicants in Blade Runner (1982) — artificial
+                lives with finite time, fragile memory, and the need to mean something before they
+                disappear.
+              </p>
+              <ul className="concept-keywords">
+                <li>Memory</li>
+                <li>Mortality</li>
+                <li>Existence</li>
+              </ul>
+            </div>
+
+            <aside className="concept-hero-quote">
+              <blockquote>
+                “All those moments will be lost in time, like tears in rain.”
+              </blockquote>
+              <p className="concept-cite">Roy Batty / Blade Runner (1982)</p>
+            </aside>
+          </div>
+        </section>
+
+        <div className="concept-story">
+          {/* 02 | 03 — paired editorial spread */}
+          <div className="concept-spread concept-spread--pair">
+            <section
+              id="concept-02"
+              className="concept-panel"
+              aria-labelledby="concept-02-title"
+            >
+              <div className="concept-panel-text">
+                <SectionLabel number="02" name="The Proposition" />
+                <HeadingLines id="concept-02-title" lines={['A life of', 'its own.']} />
+                <p className="concept-body">
+                  Speculative digital organisms emerge from inherited conditions and grow through
+                  their own internal rules.
                 </p>
-                <Placeholder label={card.image} shape={card.shape} className="concept-card-ph" />
-              </article>
-            </Fragment>
-          ))}
-        </div>
-      </section>
-
-      {/* 04 — The Life Cycle */}
-      <section className="concept-section">
-        <SectionHead
-          number="04"
-          label="The Life Cycle"
-          title={
-            <>
-              Anatomy
-              <br />
-              of a Finite Life
-            </>
-          }
-        >
-          <p className="concept-body">
-            Each entity has a limited lifespan. Its form changes through time rather than appearing
-            immediately as a finished object.
-          </p>
-        </SectionHead>
-        <div className="concept-lifecycle">
-          <div className="concept-stages">
-            {LIFE_STAGES.map((stage) => (
-              <div key={stage.title} className="concept-stage">
-                <p className="concept-label concept-label--center">{stage.title}</p>
-                <p className="concept-note">{stage.note}</p>
-                <div className="concept-stage-slot">
-                  <Placeholder
-                    label={stage.title}
-                    shape="organism"
-                    className="concept-stage-ph"
-                    style={{ '--stage-scale': stage.scale }}
+                <p className="concept-body">
+                  Visitors may enter and influence them, but cannot fully author what they become —
+                  or keep them from ending.
+                </p>
+              </div>
+              <div className="concept-panel-visual">
+                <div className="concept-collage concept-collage--02">
+                  <MediaSlot
+                    label="Ammonite / fossil form"
+                    src={concept02Fossil}
+                    className="concept-collage__a concept-media--fossil"
+                  />
+                  <MediaSlot
+                    label="Mineral texture"
+                    src={concept02Fossil2}
+                    className="concept-collage__b concept-media--fossil2"
+                  />
+                  <MediaSlot
+                    label="Cellular texture"
+                    src={concept02Fossil3}
+                    className="concept-collage__c concept-media--fossil3"
                   />
                 </div>
+                <PanelCaption>Traces of former lives</PanelCaption>
               </div>
-            ))}
-          </div>
-          <div className="concept-axis" aria-hidden="true">
-            <span>Age 0</span>
-            <span className="concept-axis-line">
-              {LIFE_STAGES.map((stage, i) => (
-                <i
-                  key={stage.title}
-                  className={i === 2 ? 'is-active' : ''}
-                  style={{ left: `${(i / (LIFE_STAGES.length - 1)) * 100}%` }}
-                />
-              ))}
-            </span>
-            <span>Age 100</span>
-          </div>
-        </div>
-      </section>
+            </section>
 
-      {/* 05 — The User Experience */}
-      <section className="concept-section">
-        <SectionHead
-          number="05"
-          label="The User Experience"
-          title={
-            <>
-              Influence,
-              <br />
-              Observe,
-              <br />
-              Preserve
-            </>
-          }
-        >
-          <p className="concept-body">
-            The user does not directly design the object, but chooses initial conditions and
-            interacts with it during its lifetime.
-          </p>
-        </SectionHead>
-        <div className="concept-flow concept-flow--5">
-          {EXPERIENCE_STEPS.map((step, i) => (
-            <Fragment key={step.title}>
-              {i > 0 ? <Arrow /> : null}
-              <article className={`concept-step${step.highlight ? ' is-highlight' : ''}`}>
-                <Placeholder label={`Still — ${step.title.replace(/^\d\.\s*/, '')}`} className="concept-step-ph">
-                  {step.highlight ? <span className="concept-step-frame" /> : null}
-                </Placeholder>
-                <div className="concept-step-copy">
-                  <p className="concept-label">{step.title}</p>
-                  <p className="concept-note">{step.note}</p>
-                </div>
-              </article>
-            </Fragment>
-          ))}
-        </div>
-      </section>
-
-      {/* 06 — Memory & Lineage */}
-      <section className="concept-section concept-lineage">
-        <SectionHead
-          number="06"
-          label="Memory & Lineage"
-          title={
-            <>
-              The World
-              <br />
-              Remembers
-            </>
-          }
-        >
-          <p className="concept-body">
-            After an entity disappears, it can leave behind a trace or memory within the system.
-            New entities may inherit partial information from what came before.
-          </p>
-        </SectionHead>
-        <div className="concept-graph">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            {LINEAGE_EDGES.map(([a, b]) => (
-              <path key={`${a}-${b}`} d={lineagePath(nodeById[a], nodeById[b])} />
-            ))}
-          </svg>
-          {LINEAGE_NODES.map((node) => (
-            <div
-              key={node.id}
-              className="concept-node"
-              style={{ left: `${node.x}%`, top: `${node.y}%` }}
+            <section
+              id="concept-03"
+              className="concept-panel"
+              aria-labelledby="concept-03-title"
             >
-              <Placeholder label={`Entity ${node.id}`} shape="organism" className="concept-node-ph" />
-              <p className="concept-node-copy">
-                <span>{node.id}</span>
-                {node.note}
+              <div className="concept-panel-text">
+                <SectionLabel number="03" name="The Encounter" />
+                <HeadingLines
+                  id="concept-03-title"
+                  lines={['Your words become', 'part of its world.']}
+                />
+                <p className="concept-body">
+                  Language is not decoration here — it softens into climate, pressure, and memory
+                  inside the living system.
+                </p>
+                <p className="concept-body">
+                  What you say leaves a mark the organism must live with.
+                </p>
+              </div>
+              <div className="concept-panel-visual">
+                <div className="concept-frame concept-frame--tall">
+                  <MediaSlot
+                    label="Hand at rain-streaked window"
+                    src={concept03Encounter}
+                    className="concept-media--encounter"
+                  />
+                </div>
+                <PanelCaption>Words, environment, influence</PanelCaption>
+              </div>
+            </section>
+          </div>
+
+          {/* 04 — full-width coexistence */}
+          <section
+            id="concept-04"
+            className="concept-panel concept-panel--wide"
+            aria-labelledby="concept-04-title"
+          >
+            <div className="concept-panel-text">
+              <SectionLabel number="04" name="Coexistence" />
+              <HeadingLines
+                id="concept-04-title"
+                lines={['A life beyond', 'our relationship.']}
+              />
+              <p className="concept-body">
+                The organism continues whether or not anyone is watching. Growth, drift, and decay
+                follow its own time — a life that exceeds the moments of human attention.
               </p>
             </div>
-          ))}
-        </div>
-        <div className="concept-aside">
-          <p className="concept-body">
-            Each life may inherit traces of what existed before, yet develop into something
-            individual.
-          </p>
-          <p className="concept-body">
-            The collection becomes a record of relationships, rather than a gallery of independent
-            objects.
-          </p>
-        </div>
-      </section>
+            <div className="concept-panel-visual">
+              <div className="concept-collage concept-collage--04">
+                <MediaSlot
+                  label="Murmuration / particle swarm"
+                  src={concept041}
+                  className="concept-collage__a concept-media--04-1"
+                />
+                <MediaSlot
+                  label="Wispy particle field"
+                  src={concept042}
+                  className="concept-collage__b concept-media--04-2"
+                />
+                <MediaSlot
+                  label="Tangled luminous lines"
+                  src={concept043}
+                  className="concept-collage__c concept-media--04-3"
+                />
+                <MediaSlot
+                  label="Flowing field texture"
+                  src={concept044}
+                  className="concept-collage__d concept-media--04-4"
+                />
+              </div>
+              <PanelCaption>Interaction, influence, unseen relationships</PanelCaption>
+            </div>
+          </section>
 
-      {/* 07 — Future Vision */}
-      <section className="concept-section concept-future">
-        <SectionHead
-          number="07"
-          label="Future Vision"
-          title={
-            <>
-              A World
-              <br />
-              That Remembers
-            </>
-          }
-        >
-          <p className="concept-body">
-            In the future, natural language may be used as input for initial conditions. An AI
-            interprets personal memories or emotions, and translates them into abstract parameters
-            for new lives.
-          </p>
-        </SectionHead>
-        <div className="concept-flow concept-flow--future">
-          <article className="concept-future-step">
-            <blockquote className="concept-future-quote">
-              “I remember a place
-              <br />
-              that no longer exists.”
-            </blockquote>
-            <p className="concept-label concept-label--center">User Input</p>
-            <p className="concept-note">Text, memory, emotion</p>
-          </article>
-          <Arrow />
-          <article className="concept-future-step">
-            <Placeholder label="AI interpretation — signal" className="concept-future-ph" />
-            <p className="concept-label concept-label--center">AI Interpretation</p>
-            <p className="concept-note">Translate to conditions</p>
-          </article>
-          <Arrow />
-          <article className="concept-future-step">
-            <Placeholder label="New life" className="concept-future-ph" />
-            <p className="concept-label concept-label--center">Procedural System</p>
-            <p className="concept-note">Generate a new life</p>
-          </article>
-        </div>
-        <div className="concept-aside concept-aside--ruled">
-          <p className="concept-label">Future Exploration</p>
-          <ul className="concept-list">
-            {FUTURE_TOPICS.map((topic) => (
-              <li key={topic}>{topic}</li>
-            ))}
-          </ul>
-        </div>
-      </section>
+          {/* 05 | 06 — paired editorial spread */}
+          <div className="concept-spread concept-spread--pair">
+            <section
+              id="concept-05"
+              className="concept-panel"
+              aria-labelledby="concept-05-title"
+            >
+              <div className="concept-panel-text">
+                <SectionLabel number="05" name="Impermanence" />
+                <HeadingLines
+                  id="concept-05-title"
+                  lines={['Nothing remains', 'unchanged.']}
+                />
+                <p className="concept-body">
+                  Form softens, structure fails, and presence thins. Decay is not a failure state —
+                  it is how the system tells the truth about time.
+                </p>
+              </div>
+              <div className="concept-panel-visual">
+                <div className="concept-frame concept-frame--tall">
+                  <MediaSlot
+                    label="Dried plants / skeletal form"
+                    src={concept051}
+                    className="concept-media--05-1"
+                  />
+                </div>
+                <PanelCaption>Growth, decay, disappearance</PanelCaption>
+              </div>
+            </section>
 
-      {/* 08 — An Open Question / Next Exploration */}
-      <section className="concept-section concept-care">
-        <SectionHead
-          number="08"
-          label="An Open Question / Next Exploration"
-          title={
-            <>
-              Can We Care for
-              <br />
-              a Life We Cannot Keep?
-            </>
-          }
-        >
-          <p className="concept-label">Proposed / Not Yet Implemented</p>
-          <p className="concept-body">
-            The current prototype allows visitors to observe and influence a finite digital
-            organism. But what would make these interactions feel like caring for a living system,
-            rather than manipulating procedural geometry?
-          </p>
-          <p className="concept-body">
-            I am exploring a care-based interaction model in which users could nurture the
-            organism, respond to its changing needs, and potentially delay its decay. Every
-            intervention might bring both benefits and consequences, while death remains
-            inevitable.
-          </p>
-        </SectionHead>
-        <div className="concept-care-visual">
-          <figure className="concept-care-diagram" aria-label="Relationship between care, control, and loss around a finite life">
-            <svg viewBox="0 0 240 210" role="presentation">
-              <defs>
-                <radialGradient id="concept-care-glow-care" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#a8e4ef" stopOpacity="0.34" />
-                  <stop offset="100%" stopColor="#a8e4ef" stopOpacity="0" />
-                </radialGradient>
-                <radialGradient id="concept-care-glow-control" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#c9b8ff" stopOpacity="0.28" />
-                  <stop offset="100%" stopColor="#c9b8ff" stopOpacity="0" />
-                </radialGradient>
-                <radialGradient id="concept-care-glow-loss" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#f0b0c4" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="#f0b0c4" stopOpacity="0" />
-                </radialGradient>
-              </defs>
-              <circle cx="120" cy="48" r="28" fill="url(#concept-care-glow-care)" />
-              <circle cx="52" cy="168" r="28" fill="url(#concept-care-glow-control)" />
-              <circle cx="188" cy="168" r="28" fill="url(#concept-care-glow-loss)" />
-              <path
-                className="concept-care-diagram-edge"
-                d="M120 48 L52 168 L188 168 Z"
-                fill="none"
-              />
-              <text className="concept-care-diagram-center" x="120" y="118" textAnchor="middle">
-                Finite Life
-              </text>
-              <text className="concept-care-diagram-node" x="120" y="52" textAnchor="middle">
-                Care
-              </text>
-              <text className="concept-care-diagram-node" x="52" y="172" textAnchor="middle">
-                Control
-              </text>
-              <text className="concept-care-diagram-node" x="188" y="172" textAnchor="middle">
-                Loss
-              </text>
-            </svg>
-          </figure>
-          <p className="concept-body concept-body--lead concept-care-question">
-            Can care create attachment without turning the organism into something fully
-            controllable?
-          </p>
+            <section
+              id="concept-06"
+              className="concept-panel"
+              aria-labelledby="concept-06-title"
+            >
+              <div className="concept-panel-text">
+                <SectionLabel number="06" name="Revelation" />
+                <HeadingLines
+                  id="concept-06-title"
+                  lines={['Only in its absence', 'do we discover its past.']}
+                />
+                <p className="concept-body">
+                  After disappearance, traces may remain — residues that later lives can inherit.
+                  Memory becomes structure: a record of relationships rather than a gallery of
+                  finished objects.
+                </p>
+              </div>
+              <div className="concept-panel-visual">
+                <div className="concept-frame concept-frame--tall">
+                  <MediaSlot
+                    label="Archive drawer / specimens"
+                    src={concept06}
+                    className="concept-media--06"
+                  />
+                </div>
+                <PanelCaption>Archive, extinction, a longer history</PanelCaption>
+              </div>
+            </section>
+          </div>
+
+          <footer className="concept-coda">
+            <p className="concept-coda-question">
+              Can we form a meaningful relationship with a life we cannot fully understand or
+              control?
+            </p>
+            <span className="concept-coda-rule" aria-hidden="true" />
+          </footer>
         </div>
-      </section>
-    </div>
+      </div>
     </div>
   )
 }

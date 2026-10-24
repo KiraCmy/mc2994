@@ -2,6 +2,7 @@ import { useState } from 'react'
 import SiteHud from '../SiteHud.jsx'
 import { useAutoHideHeader } from '../useAutoHideHeader.js'
 import Experiment01 from './Experiment01.jsx'
+import Experiment02 from './Experiment02.jsx'
 import {
   DEFAULT_PLAYGROUND_EXPERIMENT_ID,
   getPlaygroundExperiment,
@@ -11,6 +12,7 @@ import './playground.css'
 
 const EXPERIMENT_VIEWS = {
   '01': Experiment01,
+  '02': Experiment02,
 }
 
 export default function PlaygroundPage({ header }) {

@@ -10,6 +10,13 @@ export const PLAYGROUND_EXPERIMENTS = [
     description:
       'Can human language alter environmental conditions and indirectly shape the evolution of a procedural organism? Step 03B: Temperature deforms Branch B immediately and accumulates thermal structural memory that persists after the environment recovers.',
   },
+  {
+    id: '02',
+    label: 'Experiment 02',
+    title: 'Independent Life B',
+    description:
+      'Two autonomous procedural organisms share one 3D scene and camera while keeping independent Life Engines, AGE, seeds, crystals, and local stimuli. Environmental coupling between A and B is not introduced yet.',
+  },
 ]
 
 export const DEFAULT_PLAYGROUND_EXPERIMENT_ID = PLAYGROUND_EXPERIMENTS[0].id

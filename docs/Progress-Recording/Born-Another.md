@@ -601,7 +601,7 @@ Detail for future recurrence: [docs/planning/Born-Another-Technic-Log.md](../pla
 
 # Born Another — Playground
 
-Playground progress (framework + **Experiment 01 — Language as Environment**, through Step 03B thermal memory + World B — Dark visual alignment) lives in a dedicated log:
+Playground progress (framework + **Experiment 01 — Language as Environment**, through language→Life Engine Moisture / Turbulence sync) lives in a dedicated log:
 
 → [Born-Another_Playground.md](./Born-Another_Playground.md)
 
