@@ -60,6 +60,8 @@ function LifeExploreLab({ title, description, visualMode, onVisualMode }) {
     seekToAge,
     setPlaying,
     changeSeed,
+    setMoisture,
+    setTurbulence,
   } = useLifeEngine(EXP05_LIFE_SEED)
   const [lab, setLab] = useState(() => normalizeExp05LabParams(EXP05_LAB_DEFAULTS))
   const [labOpen, setLabOpen] = useState(true)
@@ -126,8 +128,8 @@ function LifeExploreLab({ title, description, visualMode, onVisualMode }) {
         <ModeSwitcher visualMode={visualMode} onChange={onVisualMode} />
         <p className="exp05-panel__note">
           Body, petals, and particles share the World surface evaluator (Explore
-          framing). Scrub AGE for morph + growth-site petals; lab knobs tune
-          density and morph strength.
+          framing). Scrub AGE for morph + growth-site petals; Moisture / Turbulence
+          drive the Life Engine environment (same mechanisms as World).
         </p>
 
         <label className="exp05-age">
@@ -156,6 +158,9 @@ function LifeExploreLab({ title, description, visualMode, onVisualMode }) {
           onChange={handleLabChange}
           open={labOpen}
           onToggle={() => setLabOpen((current) => !current)}
+          life={life}
+          onMoistureChange={setMoisture}
+          onTurbulenceChange={setTurbulence}
         />
 
         <dl className="exp05-panel__readout">
@@ -166,6 +171,18 @@ function LifeExploreLab({ title, description, visualMode, onVisualMode }) {
           <div>
             <dt>AGE</dt>
             <dd>{life.age.toFixed(3)}</dd>
+          </div>
+          <div>
+            <dt>Temperature</dt>
+            <dd>{(lab.temperature ?? 0.5).toFixed(2)}</dd>
+          </div>
+          <div>
+            <dt>Moisture</dt>
+            <dd>{(life.environment?.moisture ?? 0.5).toFixed(2)}</dd>
+          </div>
+          <div>
+            <dt>Turbulence</dt>
+            <dd>{(life.environment?.turbulence ?? 0).toFixed(2)}</dd>
           </div>
           <div>
             <dt>Growth sites</dt>

@@ -8,6 +8,15 @@ import {
 } from '../../particle/particleParams.js'
 import { PARTICLE_FULL_COUNT } from '../../renderBudget.js'
 import { INITIAL_SCATTER } from '../../scatter/scatterParams.js'
+import {
+  EXP05_DEFAULT_MORPHOLOGY_TYPE,
+  normalizeExp05MorphologyType,
+} from './exp05MorphologyTypes.js'
+import {
+  EXP05_ENV_TEMPERATURE_NEUTRAL,
+  normalizeExp05Temperature,
+} from './exp05EnvironmentCoupling.js'
+import { normalizeExp05SculpturalStrength } from './exp05SculpturalDeformation.js'
 
 function clamp01(value) {
   return Math.min(1, Math.max(0, Number(value) || 0))
@@ -28,6 +37,47 @@ export const EXP05_COMPOSITION_MODE_OPTIONS = [
   { id: EXP05_COMPOSITION_MODES.FULL, label: 'Full Composition' },
 ]
 
+/**
+ * Morphology diagnostic appearance — same geometry + Life state, different look.
+ * Switching modes must not reset AGE / Seed / morph / playback.
+ */
+export const EXP05_DIAGNOSTIC_MODES = {
+  GEOMETRY: 'geometry',
+  SURFACE_LIGHTING: 'surface-lighting',
+  FULL: 'full',
+}
+
+export const EXP05_DIAGNOSTIC_MODE_OPTIONS = [
+  { id: EXP05_DIAGNOSTIC_MODES.GEOMETRY, label: 'Geometry Only' },
+  {
+    id: EXP05_DIAGNOSTIC_MODES.SURFACE_LIGHTING,
+    label: 'Surface + Lighting',
+  },
+  { id: EXP05_DIAGNOSTIC_MODES.FULL, label: 'Full Appearance' },
+]
+
+/**
+ * Body material study — same geometry / Life; Explore default unchanged.
+ * Pearlescent is Exp05-scoped custom shader (not World MeshPhysical).
+ */
+export const EXP05_MATERIAL_MODES = {
+  EXPLORE: 'explore',
+  PEARLESCENT: 'pearlescent',
+  PEARLESCENT_V2: 'pearlescent-v2',
+}
+
+export const EXP05_MATERIAL_MODE_OPTIONS = [
+  { id: EXP05_MATERIAL_MODES.EXPLORE, label: 'Original Explore' },
+  {
+    id: EXP05_MATERIAL_MODES.PEARLESCENT,
+    label: 'Pearlescent Membrane',
+  },
+  {
+    id: EXP05_MATERIAL_MODES.PEARLESCENT_V2,
+    label: 'Pearlescent V2',
+  },
+]
+
 export const EXP05_LAB_DEFAULTS = {
   petalDensity: INITIAL_SCATTER.density,
   petalScale: INITIAL_SCATTER.size,
@@ -42,11 +92,30 @@ export const EXP05_LAB_DEFAULTS = {
   macroDeformationStrength: 1,
   /**
    * Amplifies Explore-framed radiusAt deviation from the field mean
-   * (0 → sphere, 1 → native World rest, >1 → stronger lobes).
+   * (0 → sphere, 1 → native rest field, >1 → stronger lobes).
    */
   morphologyComplexity: 1,
+  /**
+   * Radial rest silhouette: world | segmented | spiral.
+   * Independent of Low/Med/High amplitude and macro deformation.
+   */
+  morphologyType: EXP05_DEFAULT_MORPHOLOGY_TYPE,
   /** Temporary layer isolation for white-out debugging. */
   compositionMode: EXP05_COMPOSITION_MODES.FULL,
+  /** Morphology diagnostic look (geometry / lit / full Explore). */
+  diagnosticMode: EXP05_DIAGNOSTIC_MODES.FULL,
+  /** Body material: Pearlescent Membrane (default) | Original Explore. */
+  materialMode: EXP05_MATERIAL_MODES.PEARLESCENT,
+  /**
+   * Playground Temperature coupling (membrane expand/contract).
+   * Not Life Engine state — immediate visual; neutral 0.5 = recovered.
+   */
+  temperature: EXP05_ENV_TEMPERATURE_NEUTRAL,
+  /**
+   * Optional Exp05 sculptural tangential deformation (post-radial).
+   * 0 = identity — current radial morphology unchanged.
+   */
+  sculpturalStrength: 0,
 }
 
 export const EXP05_LAB_META = {
@@ -98,6 +167,14 @@ export const EXP05_LAB_META = {
     available: true,
     binding: 'radiusAt lobe amplitude vs field mean',
   },
+  sculpturalStrength: {
+    label: 'Sculptural Deformation',
+    min: 0,
+    max: 2,
+    step: 0.01,
+    available: true,
+    binding: 'tangential seed-driven silhouette offset (post-radial)',
+  },
 }
 
 export function particleCountFromLabDensity(density) {
@@ -110,6 +187,16 @@ export function particleCountFromLabDensity(density) {
 function normalizeCompositionMode(value) {
   const allowed = new Set(Object.values(EXP05_COMPOSITION_MODES))
   return allowed.has(value) ? value : EXP05_COMPOSITION_MODES.FULL
+}
+
+export function normalizeExp05DiagnosticMode(value) {
+  const allowed = new Set(Object.values(EXP05_DIAGNOSTIC_MODES))
+  return allowed.has(value) ? value : EXP05_DIAGNOSTIC_MODES.FULL
+}
+
+export function normalizeExp05MaterialMode(value) {
+  const allowed = new Set(Object.values(EXP05_MATERIAL_MODES))
+  return allowed.has(value) ? value : EXP05_MATERIAL_MODES.PEARLESCENT
 }
 
 export function normalizeExp05LabParams(partial = {}) {
@@ -135,6 +222,13 @@ export function normalizeExp05LabParams(partial = {}) {
       Number(next.morphologyComplexity) || 1,
     ),
   )
+  next.sculpturalStrength = normalizeExp05SculpturalStrength(
+    next.sculpturalStrength,
+  )
+  next.morphologyType = normalizeExp05MorphologyType(next.morphologyType)
   next.compositionMode = normalizeCompositionMode(next.compositionMode)
+  next.diagnosticMode = normalizeExp05DiagnosticMode(next.diagnosticMode)
+  next.materialMode = normalizeExp05MaterialMode(next.materialMode)
+  next.temperature = normalizeExp05Temperature(next.temperature)
   return next
 }

@@ -1,6 +1,14 @@
 import { useLayoutEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { createExp05SurfaceEvaluator } from './exp05SurfaceEvaluator.js'
+import {
+  EXP05_DEFAULT_MORPHOLOGY_TYPE,
+  normalizeExp05MorphologyType,
+} from './exp05MorphologyTypes.js'
+import {
+  EXP05_ENV_TEMPERATURE_NEUTRAL,
+  normalizeExp05Temperature,
+} from './exp05EnvironmentCoupling.js'
 
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -13,13 +21,24 @@ export default function GrowthSiteDebug({
   morphStrength = 1,
   deformationStrength = 1,
   lobeAmplitude = 1,
+  morphologyType = EXP05_DEFAULT_MORPHOLOGY_TYPE,
+  temperature = EXP05_ENV_TEMPERATURE_NEUTRAL,
+  sculpturalStrength = 0,
   enabled = false,
 }) {
   const seed = life?.seed
+  const morphType = normalizeExp05MorphologyType(morphologyType)
+  const tempValue = normalizeExp05Temperature(temperature)
 
   const evaluator = useMemo(
-    () => createExp05SurfaceEvaluator({ seed }),
-    [seed],
+    () =>
+      createExp05SurfaceEvaluator({
+        seed,
+        morphologyType: morphType,
+        temperature: tempValue,
+        sculpturalStrength,
+      }),
+    [seed, morphType, tempValue, sculpturalStrength],
   )
 
   useLayoutEffect(
@@ -37,6 +56,7 @@ export default function GrowthSiteDebug({
       morphStrength,
       deformationStrength,
       lobeAmplitude,
+      sculpturalStrength,
     }
     const normal = new THREE.Vector3()
     const quat = new THREE.Quaternion()
@@ -60,7 +80,15 @@ export default function GrowthSiteDebug({
         }
       })
       .filter(Boolean)
-  }, [enabled, life, evaluator, morphStrength, deformationStrength, lobeAmplitude])
+  }, [
+    enabled,
+    life,
+    evaluator,
+    morphStrength,
+    deformationStrength,
+    lobeAmplitude,
+    sculpturalStrength,
+  ])
 
   if (!enabled || markers.length === 0) return null
 

@@ -8,6 +8,14 @@ import {
 } from '../../scatter/GrowthClusterAsset.js'
 import { scatterAttachmentFragmentShader } from '../../surfaceShader.js'
 import { createExp05SurfaceEvaluator } from './exp05SurfaceEvaluator.js'
+import {
+  EXP05_DEFAULT_MORPHOLOGY_TYPE,
+  normalizeExp05MorphologyType,
+} from './exp05MorphologyTypes.js'
+import {
+  EXP05_ENV_TEMPERATURE_NEUTRAL,
+  normalizeExp05Temperature,
+} from './exp05EnvironmentCoupling.js'
 
 const UP = new THREE.Vector3(0, 1, 0)
 const VARIANT_COUNT = GROWTH_CLUSTER_DEFAULTS.variantCount
@@ -84,6 +92,9 @@ export default function ExploreLifeScatter({
   morphStrength = 1,
   deformationStrength = 1,
   lobeAmplitude = 1,
+  morphologyType = EXP05_DEFAULT_MORPHOLOGY_TYPE,
+  temperature = EXP05_ENV_TEMPERATURE_NEUTRAL,
+  sculpturalStrength = 0,
   surfaceSeed = 884731,
   noiseScale = 2.8,
   age = 0.5,
@@ -102,20 +113,33 @@ export default function ExploreLifeScatter({
   const morphRef = useRef(morphStrength)
   const deformRef = useRef(deformationStrength)
   const lobeRef = useRef(lobeAmplitude)
+  const sculptRef = useRef(sculpturalStrength)
   const evaluatorRef = useRef(null)
   const seatedAgeRef = useRef(null)
   lifeRef.current = life
   morphRef.current = morphStrength
   deformRef.current = deformationStrength
   lobeRef.current = lobeAmplitude
+  sculptRef.current = sculpturalStrength
 
   const instances = petalPlan?.instances ?? []
   const planSeed = petalPlan?.seed ?? surfaceSeed
+  const morphType = normalizeExp05MorphologyType(morphologyType)
+  const tempValue = normalizeExp05Temperature(temperature)
 
-  /* One evaluator for component lifetime; recreate only on seed change. */
+  /* One evaluator for component lifetime; update seed / morphology type in place. */
   if (!evaluatorRef.current || evaluatorRef.current.seed !== planSeed) {
     evaluatorRef.current?.dispose?.()
-    evaluatorRef.current = createExp05SurfaceEvaluator({ seed: planSeed })
+    evaluatorRef.current = createExp05SurfaceEvaluator({
+      seed: planSeed,
+      morphologyType: morphType,
+      temperature: tempValue,
+      sculpturalStrength,
+    })
+  } else {
+    evaluatorRef.current.setMorphologyType(morphType)
+    evaluatorRef.current.setTemperature(tempValue)
+    evaluatorRef.current.setSculpturalStrength(sculpturalStrength)
   }
 
   useEffect(
@@ -209,6 +233,7 @@ export default function ExploreLifeScatter({
       morphStrength: morphRef.current,
       deformationStrength: deformRef.current,
       lobeAmplitude: lobeRef.current,
+      sculpturalStrength: sculptRef.current,
     }
     const { dummy, normal, axis, twistQ, pitchQ, baseQ } = scratch
 
@@ -274,7 +299,17 @@ export default function ExploreLifeScatter({
 
   useLayoutEffect(() => {
     seatRef.current()
-  }, [life, buckets, morphStrength, deformationStrength, lobeAmplitude, planSeed])
+  }, [
+    life,
+    buckets,
+    morphStrength,
+    deformationStrength,
+    lobeAmplitude,
+    sculpturalStrength,
+    morphType,
+    tempValue,
+    planSeed,
+  ])
 
   useLayoutEffect(() => {
     uniforms.uAge.value = age

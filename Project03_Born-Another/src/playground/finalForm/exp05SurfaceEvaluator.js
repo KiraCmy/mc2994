@@ -6,10 +6,7 @@
  * ORGANISM_BIRTH_RADIUS (birth sphere ≈ unit sphere — not an arbitrary fit scale).
  */
 import * as THREE from 'three'
-import {
-  createWorldGeometry,
-  disposeWorldGeometry,
-} from '../../worldv2/worldGeometry.js'
+import { createWorldGeometry } from '../../worldv2/worldGeometry.js'
 import {
   deformRadialPoint,
   formMorphAmount,
@@ -23,6 +20,21 @@ import {
   clampMorphAmplitude,
   estimateRadiusAtMean,
 } from './exp05MorphologyCalibration.js'
+import {
+  createExp05MorphologyRadiusAt,
+  EXP05_DEFAULT_MORPHOLOGY_TYPE,
+  normalizeExp05MorphologyType,
+} from './exp05MorphologyTypes.js'
+import {
+  EXP05_ENV_TEMPERATURE_NEUTRAL,
+  normalizeExp05Temperature,
+  prepareExp05TemperatureSurface,
+} from './exp05EnvironmentCoupling.js'
+import {
+  applyExp05SculpturalOffset,
+  createExp05SculpturalSampler,
+  normalizeExp05SculpturalStrength,
+} from './exp05SculpturalDeformation.js'
 
 const _dir = new THREE.Vector3()
 const _scratchA = new THREE.Vector3()
@@ -77,36 +89,29 @@ function orthonormalTangentBitangent(nx, ny, nz) {
   }
 }
 
-function wrapRadiusAt(rawRadiusAt) {
-  return (direction) => {
-    const raw = rawRadiusAt(direction)
-    if (!Number.isFinite(raw)) return raw
-    return raw / EXP05_SURFACE_UNIT
-  }
+/**
+ * Explore-framed radiusAt (birth ≈ 1).
+ * morphologyType: world | segmented | spiral (Exp05-only).
+ */
+export function createExp05RadiusAt(
+  seed = EXP05_LIFE_SEED,
+  morphologyType = EXP05_DEFAULT_MORPHOLOGY_TYPE,
+) {
+  return createExp05MorphologyRadiusAt(seed, morphologyType)
 }
 
 /**
- * Explore-framed World radiusAt (birth ≈ 1).
+ * Mesh whose rest field is already in Explore framing units.
+ * Rest silhouette follows morphologyType; Life morph/deform stay radial on top.
  */
-export function createExp05RadiusAt(seed = EXP05_LIFE_SEED) {
+export function createExp05WorldGeometry(
+  seed = EXP05_LIFE_SEED,
+  morphologyType = EXP05_DEFAULT_MORPHOLOGY_TYPE,
+) {
   const normalized = normalizeSeed(seed)
-  const world = createWorldGeometry(normalized)
-  const radiusAt = wrapRadiusAt(world.radiusAt)
-  disposeWorldGeometry(world)
-  return radiusAt
-}
-
-/**
- * World mesh whose rest field is already in Explore framing units.
- */
-export function createExp05WorldGeometry(seed = EXP05_LIFE_SEED) {
-  const normalized = normalizeSeed(seed)
-  const probe = createWorldGeometry(normalized)
-  const rawRadiusAt = probe.radiusAt
-  disposeWorldGeometry(probe)
-  return createWorldGeometry(normalized, {
-    radiusAt: wrapRadiusAt(rawRadiusAt),
-  })
+  const type = normalizeExp05MorphologyType(morphologyType)
+  const radiusAt = createExp05MorphologyRadiusAt(normalized, type)
+  return createWorldGeometry(normalized, { radiusAt })
 }
 
 function scaleDeformations(deformations, scale) {
@@ -127,6 +132,11 @@ function scaleDeformations(deformations, scale) {
  *   deformationStrength?: number,
  *   lobeAmplitude?: number,
  *   restMean?: number,
+ *   temperature?: number,
+ *   sampleTemperatureOffset?: (x:number,y:number,z:number) => number,
+ *   deformLife?: object,
+ *   sculpturalStrength?: number,
+ *   sculpturalSampler?: { sampleOffset: Function },
  * }} [options]
  */
 export function evaluateExp05SurfacePoint(
@@ -153,6 +163,24 @@ export function evaluateExp05SurfacePoint(
     options.lobeAmplitude,
     1,
   )
+  const temperature = normalizeExp05Temperature(
+    options.temperature ?? EXP05_ENV_TEMPERATURE_NEUTRAL,
+  )
+  const sculpturalStrength = normalizeExp05SculpturalStrength(
+    options.sculpturalStrength,
+  )
+
+  let deformLife = options.deformLife
+  let sampleTemperatureOffset = options.sampleTemperatureOffset
+  if (!deformLife || typeof sampleTemperatureOffset !== 'function') {
+    const prepared = prepareExp05TemperatureSurface(life, {
+      temperature,
+      seed: life.seed,
+    })
+    deformLife = prepared.life
+    sampleTemperatureOffset = prepared.sampleTemperatureOffset
+  }
+
   const morph =
     formMorphAmount(life.variables?.growth ?? 0) * morphStrength
   const nativeRestRadius = radiusAt(dir)
@@ -174,23 +202,45 @@ export function evaluateExp05SurfacePoint(
     dir.y * shapedRadius,
     dir.z * shapedRadius,
   ]
-  const extra = sampleTurbulenceFromLife(
+  const turbulence = sampleTurbulenceFromLife(
     shapedPoint[0],
     shapedPoint[1],
     shapedPoint[2],
     life,
   )
+  const temperatureOffset = sampleTemperatureOffset(
+    shapedPoint[0],
+    shapedPoint[1],
+    shapedPoint[2],
+  )
+  const extra = turbulence + (Number(temperatureOffset) || 0)
   const deformations = scaleDeformations(
-    life.outputs?.form?.localDeformations,
+    deformLife.outputs?.form?.localDeformations,
     deformationStrength,
   )
-  const position = deformRadialPoint(
+  let position = deformRadialPoint(
     shapedPoint[0],
     shapedPoint[1],
     shapedPoint[2],
     deformations,
     extra,
   )
+
+  /* Optional Exp05 sculptural layer — tangential, after radial pipeline. */
+  const sculpturalSampler =
+    sculpturalStrength > 1e-6
+      ? (options.sculpturalSampler ??
+        createExp05SculpturalSampler(life.seed))
+      : options.sculpturalSampler ?? null
+  if (sculpturalSampler && sculpturalStrength > 1e-6) {
+    position = applyExp05SculpturalOffset(
+      position[0],
+      position[1],
+      position[2],
+      sculpturalSampler,
+      sculpturalStrength,
+    )
+  }
 
   const plen = Math.hypot(position[0], position[1], position[2]) || 1
   let normal = [position[0] / plen, position[1] / plen, position[2] / plen]
@@ -215,6 +265,11 @@ export function evaluateExp05SurfacePoint(
       deformationStrength,
       lobeAmplitude,
       restMean,
+      temperature,
+      deformLife,
+      sampleTemperatureOffset,
+      sculpturalStrength,
+      sculpturalSampler,
     }
     const pT = evaluateExp05SurfacePoint(dirT, life, radiusAt, childOpts)
     const pB = evaluateExp05SurfacePoint(dirB, life, radiusAt, childOpts)
@@ -246,22 +301,49 @@ export function evaluateExp05SurfacePoint(
     nativeRestRadius,
     morph,
     lobeAmplitude,
+    temperature,
+    sculpturalStrength,
   }
 }
 
 /**
- * Stateful evaluator bound to one morphology seed (Exp05 Life seed).
+ * Stateful evaluator bound to one morphology seed + type (Exp05 Life seed).
  */
 export function createExp05SurfaceEvaluator({
   seed = EXP05_LIFE_SEED,
+  morphologyType = EXP05_DEFAULT_MORPHOLOGY_TYPE,
+  temperature = EXP05_ENV_TEMPERATURE_NEUTRAL,
+  sculpturalStrength = 0,
 } = {}) {
   let currentSeed = normalizeSeed(seed)
-  let radiusAt = createExp05RadiusAt(currentSeed)
+  let currentType = normalizeExp05MorphologyType(morphologyType)
+  let currentTemperature = normalizeExp05Temperature(temperature)
+  let currentSculptural = normalizeExp05SculpturalStrength(sculpturalStrength)
+  let radiusAt = createExp05RadiusAt(currentSeed, currentType)
   let restMean = estimateRadiusAtMean(radiusAt)
+  let sculpturalSampler = createExp05SculpturalSampler(currentSeed)
+
+  function rebuildField() {
+    radiusAt = createExp05RadiusAt(currentSeed, currentType)
+    restMean = estimateRadiusAtMean(radiusAt)
+    sculpturalSampler = createExp05SculpturalSampler(currentSeed)
+  }
 
   return {
     get seed() {
       return currentSeed
+    },
+
+    get morphologyType() {
+      return currentType
+    },
+
+    get temperature() {
+      return currentTemperature
+    },
+
+    get sculpturalStrength() {
+      return currentSculptural
     },
 
     get radiusAt() {
@@ -276,21 +358,67 @@ export function createExp05SurfaceEvaluator({
       const normalized = normalizeSeed(nextSeed)
       if (normalized === currentSeed) return currentSeed
       currentSeed = normalized
-      radiusAt = createExp05RadiusAt(currentSeed)
-      restMean = estimateRadiusAtMean(radiusAt)
+      rebuildField()
       return currentSeed
     },
 
+    setMorphologyType(nextType) {
+      const normalized = normalizeExp05MorphologyType(nextType)
+      if (normalized === currentType) return currentType
+      currentType = normalized
+      rebuildField()
+      return currentType
+    },
+
+    setTemperature(nextTemperature) {
+      currentTemperature = normalizeExp05Temperature(nextTemperature)
+      return currentTemperature
+    },
+
+    setSculpturalStrength(nextStrength) {
+      currentSculptural = normalizeExp05SculpturalStrength(nextStrength)
+      return currentSculptural
+    },
+
     evaluate(direction, life, options = {}) {
+      const temperature = normalizeExp05Temperature(
+        options.temperature ?? currentTemperature,
+      )
+      const prepared = prepareExp05TemperatureSurface(life, {
+        temperature,
+        seed: currentSeed,
+      })
       return evaluateExp05SurfacePoint(direction, life, radiusAt, {
-        restMean,
         ...options,
+        restMean: options.restMean ?? restMean,
+        temperature,
+        deformLife: prepared.life,
+        sampleTemperatureOffset: prepared.sampleTemperatureOffset,
+        sculpturalStrength:
+          options.sculpturalStrength ?? currentSculptural,
+        sculpturalSampler,
       })
     },
 
     evaluateMany(directions, life, options = {}) {
       if (!Array.isArray(directions)) return []
-      const merged = { restMean, ...options }
+      const temperature = normalizeExp05Temperature(
+        options.temperature ?? currentTemperature,
+      )
+      const prepared = prepareExp05TemperatureSurface(life, {
+        temperature,
+        seed: currentSeed,
+      })
+      const merged = {
+        ...options,
+        restMean: options.restMean ?? restMean,
+        temperature,
+        deformLife: prepared.life,
+        sampleTemperatureOffset: prepared.sampleTemperatureOffset,
+        sculpturalStrength:
+          options.sculpturalStrength ?? currentSculptural,
+        sculpturalSampler,
+      }
       return directions.map((direction) =>
         evaluateExp05SurfacePoint(direction, life, radiusAt, merged),
       )
@@ -299,6 +427,7 @@ export function createExp05SurfaceEvaluator({
     dispose() {
       radiusAt = () => NaN
       restMean = NaN
+      sculpturalSampler = null
     },
   }
 }

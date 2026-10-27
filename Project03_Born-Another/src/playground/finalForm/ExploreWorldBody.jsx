@@ -21,6 +21,34 @@ import {
   clampMorphAmplitude,
   estimateRestPositionsMean,
 } from './exp05MorphologyCalibration.js'
+import {
+  EXP05_DEFAULT_MORPHOLOGY_TYPE,
+  normalizeExp05MorphologyType,
+} from './exp05MorphologyTypes.js'
+import {
+  EXP05_DIAGNOSTIC_MODES,
+  EXP05_MATERIAL_MODES,
+  normalizeExp05DiagnosticMode,
+  normalizeExp05MaterialMode,
+} from './exp05LabParams.js'
+import {
+  EXP05_ENV_TEMPERATURE_NEUTRAL,
+  normalizeExp05Temperature,
+  prepareExp05TemperatureSurface,
+} from './exp05EnvironmentCoupling.js'
+import {
+  applyExp05SculpturalOffset,
+  createExp05SculpturalSampler,
+  normalizeExp05SculpturalStrength,
+} from './exp05SculpturalDeformation.js'
+import {
+  createPearlescentMembraneMaterial,
+  createPearlescentMembraneUniforms,
+} from './exp05PearlescentMembrane.js'
+import {
+  createPearlescentMembraneV2Material,
+  createPearlescentMembraneV2Uniforms,
+} from './exp05PearlescentMembraneV2.js'
 
 /**
  * Pass-through vertex — World CPU morph owns silhouette.
@@ -62,6 +90,9 @@ function applyExp05BodySurface(
     deformationStrength = 1,
     lobeAmplitude = 1,
     restMean = null,
+    temperature = EXP05_ENV_TEMPERATURE_NEUTRAL,
+    sculpturalStrength = 0,
+    sculpturalSampler = null,
   } = {},
 ) {
   const morphRaw = Number(morphStrength)
@@ -71,8 +102,14 @@ function applyExp05BodySurface(
   )
   const deformScale = clampMorphAmplitude(deformationStrength, 1)
   const lobeScale = clampMorphAmplitude(lobeAmplitude, 1)
+  const sculptScale = normalizeExp05SculpturalStrength(sculpturalStrength)
+  const prepared = prepareExp05TemperatureSurface(life, {
+    temperature,
+    seed: life?.seed,
+  })
+  const deformLife = prepared.life
   const morph = formMorphAmount(life.variables?.growth ?? 0) * morphScale
-  const baseDeformations = life.outputs?.form?.localDeformations ?? []
+  const baseDeformations = deformLife.outputs?.form?.localDeformations ?? []
   const deformations =
     deformScale === 1
       ? baseDeformations
@@ -80,6 +117,10 @@ function applyExp05BodySurface(
           ...entry,
           deformation: (Number(entry.deformation) || 0) * deformScale,
         }))
+  const sampler =
+    sculptScale > 1e-6
+      ? (sculpturalSampler ?? createExp05SculpturalSampler(life?.seed))
+      : null
 
   const surface = world.surface
   const position = surface.attributes.position
@@ -103,22 +144,36 @@ function applyExp05BodySurface(
     )
     const scale = calibratedRadial / nativeRadial
     const shaped = morphRestPoint(rx * scale, ry * scale, rz * scale, morph)
-    const extra = sampleTurbulenceFromLife(
+    const turbulence = sampleTurbulenceFromLife(
       shaped[0],
       shaped[1],
       shaped[2],
       life,
+    )
+    const temperatureOffset = prepared.sampleTemperatureOffset(
+      shaped[0],
+      shaped[1],
+      shaped[2],
     )
     const deformed = deformRadialPoint(
       shaped[0],
       shaped[1],
       shaped[2],
       deformations,
-      extra,
+      turbulence + (Number(temperatureOffset) || 0),
     )
-    target[offset] = deformed[0]
-    target[offset + 1] = deformed[1]
-    target[offset + 2] = deformed[2]
+    const sculpted = sampler
+      ? applyExp05SculpturalOffset(
+          deformed[0],
+          deformed[1],
+          deformed[2],
+          sampler,
+          sculptScale,
+        )
+      : deformed
+    target[offset] = sculpted[0]
+    target[offset + 1] = sculpted[1]
+    target[offset + 2] = sculpted[2]
   }
   position.needsUpdate = true
   surface.computeVertexNormals()
@@ -138,6 +193,15 @@ export default function ExploreWorldBody({
   morphStrength = 1,
   deformationStrength = 1,
   lobeAmplitude = 1,
+  morphologyType = EXP05_DEFAULT_MORPHOLOGY_TYPE,
+  /** Exp05 morphology diagnostic look — does not rebuild geometry. */
+  diagnosticMode = EXP05_DIAGNOSTIC_MODES.FULL,
+  /** Body material study — Explore (default) | Pearlescent. */
+  materialMode = EXP05_MATERIAL_MODES.EXPLORE,
+  /** Playground Temperature coupling (not Life Engine). */
+  temperature = EXP05_ENV_TEMPERATURE_NEUTRAL,
+  /** Optional Exp05 sculptural tangential deformation (0 = identity). */
+  sculpturalStrength = 0,
 }) {
   const meshRef = useRef(null)
   const bundleRef = useRef(null)
@@ -145,12 +209,32 @@ export default function ExploreWorldBody({
   const morphStrengthRef = useRef(morphStrength)
   const deformationStrengthRef = useRef(deformationStrength)
   const lobeAmplitudeRef = useRef(lobeAmplitude)
+  const temperatureRef = useRef(temperature)
+  const sculpturalStrengthRef = useRef(sculpturalStrength)
+  const sculpturalSamplerRef = useRef(null)
   lifeRef.current = life
   morphStrengthRef.current = morphStrength
   deformationStrengthRef.current = deformationStrength
   lobeAmplitudeRef.current = lobeAmplitude
+  temperatureRef.current = temperature
+  sculpturalStrengthRef.current = sculpturalStrength
 
   const seed = normalizeSeed(life?.seed ?? EXP05_LIFE_SEED)
+  const morphType = normalizeExp05MorphologyType(morphologyType)
+  const appearance = normalizeExp05DiagnosticMode(diagnosticMode)
+  const bodyMaterialMode = normalizeExp05MaterialMode(materialMode)
+  const tempValue = normalizeExp05Temperature(temperature)
+  const sculptValue = normalizeExp05SculpturalStrength(sculpturalStrength)
+
+  if (
+    !sculpturalSamplerRef.current ||
+    sculpturalSamplerRef.current.seed !== seed
+  ) {
+    sculpturalSamplerRef.current = {
+      seed,
+      sampler: createExp05SculpturalSampler(seed),
+    }
+  }
 
   const uniforms = useMemo(
     () => ({
@@ -176,7 +260,29 @@ export default function ExploreWorldBody({
     [],
   )
 
-  const material = useMemo(
+  const pearlescentUniforms = useMemo(
+    () =>
+      createPearlescentMembraneUniforms({
+        seed: individuality.seed,
+        age: development.age,
+        speed: development.speed,
+        noiseScale: individuality.noiseScale,
+      }),
+    [],
+  )
+
+  const pearlescentV2Uniforms = useMemo(
+    () =>
+      createPearlescentMembraneV2Uniforms({
+        seed: individuality.seed,
+        age: development.age,
+        speed: development.speed,
+        noiseScale: individuality.noiseScale,
+      }),
+    [],
+  )
+
+  const exploreMaterial = useMemo(
     () =>
       new THREE.ShaderMaterial({
         vertexShader: exploreWorldBodyVertexShader,
@@ -190,9 +296,74 @@ export default function ExploreWorldBody({
     [uniforms],
   )
 
+  const pearlescentMaterial = useMemo(
+    () =>
+      createPearlescentMembraneMaterial(pearlescentUniforms, {
+        depthWrite: bodyDepthWrite,
+      }),
+    [pearlescentUniforms],
+  )
+
+  const pearlescentV2Material = useMemo(
+    () =>
+      createPearlescentMembraneV2Material(pearlescentV2Uniforms, {
+        depthWrite: bodyDepthWrite,
+      }),
+    [pearlescentV2Uniforms],
+  )
+
+  /* Neutral opaque gray — silhouette / form only. */
+  const geometryMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: '#9a9a9a',
+        roughness: 0.78,
+        metalness: 0.02,
+        flatShading: false,
+        transparent: false,
+        side: THREE.FrontSide,
+      }),
+    [],
+  )
+
+  /* Slightly brighter, lower roughness — raking light reads rib depth. */
+  const surfaceLitMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: '#d0d0d0',
+        roughness: 0.42,
+        metalness: 0.06,
+        flatShading: false,
+        transparent: false,
+        side: THREE.FrontSide,
+      }),
+    [],
+  )
+
+  const fullLookMaterial =
+    bodyMaterialMode === EXP05_MATERIAL_MODES.PEARLESCENT_V2
+      ? pearlescentV2Material
+      : bodyMaterialMode === EXP05_MATERIAL_MODES.PEARLESCENT
+        ? pearlescentMaterial
+        : exploreMaterial
+
+  const material =
+    appearance === EXP05_DIAGNOSTIC_MODES.GEOMETRY
+      ? geometryMaterial
+      : appearance === EXP05_DIAGNOSTIC_MODES.SURFACE_LIGHTING
+        ? surfaceLitMaterial
+        : fullLookMaterial
+
   useLayoutEffect(() => {
-    material.depthWrite = bodyDepthWrite
-  }, [material, bodyDepthWrite])
+    exploreMaterial.depthWrite = bodyDepthWrite
+    pearlescentMaterial.depthWrite = bodyDepthWrite
+    pearlescentV2Material.depthWrite = bodyDepthWrite
+  }, [
+    exploreMaterial,
+    pearlescentMaterial,
+    pearlescentV2Material,
+    bodyDepthWrite,
+  ])
 
   useLayoutEffect(() => {
     uniforms.uColorA.value.set(surface.colorA)
@@ -210,8 +381,20 @@ export default function ExploreWorldBody({
     uniforms.uAge.value = development.age
     uniforms.uSpeed.value = development.speed
     uniforms.uNoiseAmount.value = development.noiseAmount
+
+    pearlescentUniforms.uSeed.value = individuality.seed
+    pearlescentUniforms.uNoiseScale.value = individuality.noiseScale
+    pearlescentUniforms.uAge.value = development.age
+    pearlescentUniforms.uSpeed.value = development.speed
+
+    pearlescentV2Uniforms.uSeed.value = individuality.seed
+    pearlescentV2Uniforms.uNoiseScale.value = individuality.noiseScale
+    pearlescentV2Uniforms.uAge.value = development.age
+    pearlescentV2Uniforms.uSpeed.value = development.speed
   }, [
     uniforms,
+    pearlescentUniforms,
+    pearlescentV2Uniforms,
     surface,
     individuality,
     development.age,
@@ -220,22 +403,30 @@ export default function ExploreWorldBody({
   ])
 
   useLayoutEffect(() => {
-    const world = createExp05WorldGeometry(seed)
+    const world = createExp05WorldGeometry(seed, morphType)
     const rest = captureWorldRestState(world)
     const restMean = estimateRestPositionsMean(rest.surface)
-    bundleRef.current = { world, rest, restMean, seed }
+    bundleRef.current = { world, rest, restMean, seed, morphType }
     if (meshRef.current) meshRef.current.geometry = world.surface
     applyExp05BodySurface(world, rest, lifeRef.current, {
       morphStrength: morphStrengthRef.current,
       deformationStrength: deformationStrengthRef.current,
       lobeAmplitude: lobeAmplitudeRef.current,
+      temperature: temperatureRef.current,
+      sculpturalStrength: sculpturalStrengthRef.current,
+      sculpturalSampler: sculpturalSamplerRef.current?.sampler,
       restMean,
     })
     return () => {
       disposeWorldGeometry(world)
-      if (bundleRef.current?.seed === seed) bundleRef.current = null
+      if (
+        bundleRef.current?.seed === seed &&
+        bundleRef.current?.morphType === morphType
+      ) {
+        bundleRef.current = null
+      }
     }
-  }, [seed])
+  }, [seed, morphType])
 
   useLayoutEffect(() => {
     const bundle = bundleRef.current
@@ -244,20 +435,47 @@ export default function ExploreWorldBody({
       morphStrength,
       deformationStrength,
       lobeAmplitude,
+      temperature: tempValue,
+      sculpturalStrength: sculptValue,
+      sculpturalSampler: sculpturalSamplerRef.current?.sampler,
       restMean: bundle.restMean,
     })
-  }, [life, morphStrength, deformationStrength, lobeAmplitude])
+  }, [
+    life,
+    morphStrength,
+    deformationStrength,
+    lobeAmplitude,
+    tempValue,
+    sculptValue,
+  ])
 
   useFrame(({ clock }) => {
-    uniforms.uTime.value = clock.getElapsedTime()
-    uniforms.uAge.value = ageClock.current
+    if (appearance !== EXP05_DIAGNOSTIC_MODES.FULL) return
+    const t = clock.getElapsedTime()
+    const age = ageClock.current
+    uniforms.uTime.value = t
+    uniforms.uAge.value = age
+    pearlescentUniforms.uTime.value = t
+    pearlescentUniforms.uAge.value = age
+    pearlescentV2Uniforms.uTime.value = t
+    pearlescentV2Uniforms.uAge.value = age
   })
 
   useEffect(
     () => () => {
-      material.dispose()
+      exploreMaterial.dispose()
+      pearlescentMaterial.dispose()
+      pearlescentV2Material.dispose()
+      geometryMaterial.dispose()
+      surfaceLitMaterial.dispose()
     },
-    [material],
+    [
+      exploreMaterial,
+      pearlescentMaterial,
+      pearlescentV2Material,
+      geometryMaterial,
+      surfaceLitMaterial,
+    ],
   )
 
   if (isDead) return null

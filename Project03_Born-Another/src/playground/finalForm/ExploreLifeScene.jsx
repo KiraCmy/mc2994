@@ -19,7 +19,18 @@ import {
   STUDIES_MAX_PIXELS,
 } from '../../renderBudget.js'
 import { mapLifeToExploreVisual } from './exploreLifeAdapter.js'
-import { EXP05_COMPOSITION_MODES } from './exp05LabParams.js'
+import {
+  EXP05_COMPOSITION_MODES,
+  EXP05_DIAGNOSTIC_MODES,
+  EXP05_MATERIAL_MODES,
+  normalizeExp05DiagnosticMode,
+  normalizeExp05MaterialMode,
+} from './exp05LabParams.js'
+import {
+  EXP05_ENV_TEMPERATURE_NEUTRAL,
+  normalizeExp05Temperature,
+} from './exp05EnvironmentCoupling.js'
+import { EXP05_DEFAULT_MORPHOLOGY_TYPE } from './exp05MorphologyTypes.js'
 
 function useStudiesDpr(maxPixels = STUDIES_MAX_PIXELS) {
   const [dpr, setDpr] = useState(() => {
@@ -67,6 +78,53 @@ function LifeAgeClockBridge({ age }) {
 }
 
 /**
+ * Exp05 clear + diagnostic lights (no bloom / decorative FX).
+ * Full Appearance always uses transparent clear so the page light gray-blue
+ * backdrop shows through — never rewrite that background for materials.
+ */
+function MorphologyDiagnosticStage({ mode }) {
+  const appearance = normalizeExp05DiagnosticMode(mode)
+
+  useFrame(({ gl }) => {
+    if (appearance === EXP05_DIAGNOSTIC_MODES.FULL) {
+      gl.toneMapping = THREE.NoToneMapping
+      gl.setClearColor(0x000000, 0)
+      return
+    }
+    /* Standard materials need tone mapping; Explore shaders stay unmapped. */
+    gl.toneMapping = THREE.ACESFilmicToneMapping
+    gl.toneMappingExposure = 1.05
+    if (appearance === EXP05_DIAGNOSTIC_MODES.GEOMETRY) {
+      gl.setClearColor(0x5e5e5e, 1)
+      return
+    }
+    gl.setClearColor(0x141618, 1)
+  })
+
+  if (appearance === EXP05_DIAGNOSTIC_MODES.FULL) return null
+
+  if (appearance === EXP05_DIAGNOSTIC_MODES.GEOMETRY) {
+    return (
+      <group>
+        <ambientLight intensity={0.48} />
+        <directionalLight position={[3.4, 4.6, 2.6]} intensity={1.05} />
+        <directionalLight position={[-2.8, -1.4, -3.2]} intensity={0.22} />
+      </group>
+    )
+  }
+
+  /* Raking key light to read rib valleys and surface curvature. */
+  return (
+    <group>
+      <hemisphereLight args={['#dfe6ec', '#1c2024', 0.5]} />
+      <directionalLight position={[5.2, 1.6, 0.8]} intensity={1.45} />
+      <directionalLight position={[-2.4, 4.8, -2.2]} intensity={0.38} />
+      <directionalLight position={[0.2, -3.4, 2.4]} intensity={0.2} />
+    </group>
+  )
+}
+
+/**
  * Exp05 Life → Explore stack.
  * Body / petals / particles share the C1 World surface evaluator (Explore framing).
  */
@@ -104,8 +162,18 @@ export default function ExploreLifeScene({
   const morphStrength = 1
   const lobeAmplitude = lab?.morphologyComplexity ?? 1
   const deformationStrength = lab?.macroDeformationStrength ?? 1
+  const sculpturalStrength = lab?.sculpturalStrength ?? 0
+  const morphologyType = lab?.morphologyType ?? EXP05_DEFAULT_MORPHOLOGY_TYPE
   const compositionMode =
     lab?.compositionMode ?? EXP05_COMPOSITION_MODES.FULL
+  const diagnosticMode = normalizeExp05DiagnosticMode(lab?.diagnosticMode)
+  const diagnosticLook = diagnosticMode !== EXP05_DIAGNOSTIC_MODES.FULL
+  const materialMode = normalizeExp05MaterialMode(
+    lab?.materialMode ?? EXP05_MATERIAL_MODES.PEARLESCENT,
+  )
+  const temperature = normalizeExp05Temperature(
+    lab?.temperature ?? EXP05_ENV_TEMPERATURE_NEUTRAL,
+  )
 
   const [particlesReady, setParticlesReady] = useState(() => !isHeavyWebGLHost())
   useEffect(() => {
@@ -139,11 +207,13 @@ export default function ExploreLifeScene({
   } = visual
 
   const allowPetals =
-    compositionMode === EXP05_COMPOSITION_MODES.FULL ||
-    compositionMode === EXP05_COMPOSITION_MODES.BODY_PETALS
+    !diagnosticLook &&
+    (compositionMode === EXP05_COMPOSITION_MODES.FULL ||
+      compositionMode === EXP05_COMPOSITION_MODES.BODY_PETALS)
   const allowParticles =
-    compositionMode === EXP05_COMPOSITION_MODES.FULL ||
-    compositionMode === EXP05_COMPOSITION_MODES.BODY_PARTICLES
+    !diagnosticLook &&
+    (compositionMode === EXP05_COMPOSITION_MODES.FULL ||
+      compositionMode === EXP05_COMPOSITION_MODES.BODY_PARTICLES)
 
   /* Keep GPU trees mounted for the whole life — AGE / composition only
    * toggle visibility and reseat. Unmounting disposed shared materials. */
@@ -163,6 +233,7 @@ export default function ExploreLifeScene({
       }}
     >
       <LifeAgeClockBridge age={age} />
+      <MorphologyDiagnosticStage mode={diagnosticMode} />
       <ExploreCamera active />
       <ExploreWorldBody
         life={life}
@@ -174,6 +245,11 @@ export default function ExploreLifeScene({
         morphStrength={morphStrength}
         deformationStrength={deformationStrength}
         lobeAmplitude={lobeAmplitude}
+        morphologyType={morphologyType}
+        diagnosticMode={diagnosticMode}
+        materialMode={materialMode}
+        temperature={temperature}
+        sculpturalStrength={sculpturalStrength}
       />
       {layersLive ? (
         <group visible={allowPetals}>
@@ -183,6 +259,9 @@ export default function ExploreLifeScene({
             morphStrength={morphStrength}
             deformationStrength={deformationStrength}
             lobeAmplitude={lobeAmplitude}
+            morphologyType={morphologyType}
+            temperature={temperature}
+            sculpturalStrength={sculpturalStrength}
             surfaceSeed={individuality.seed}
             noiseScale={individuality.noiseScale}
             age={development.age}
@@ -208,11 +287,14 @@ export default function ExploreLifeScene({
             morphStrength={morphStrength}
             deformationStrength={deformationStrength}
             lobeAmplitude={lobeAmplitude}
+            morphologyType={morphologyType}
+            temperature={temperature}
+            sculpturalStrength={sculpturalStrength}
             fieldThickness={particle.fieldThickness}
             pulseStrength={particle.pulseStrength}
-            tintCool={surface.rimColor}
-            tintWarm={individuality.accentColor}
-            tintSoft={surface.colorA}
+            tintCool="#f4f7fb"
+            tintWarm="#eef2f7"
+            tintSoft="#ffffff"
           />
         </group>
       ) : null}
@@ -221,6 +303,9 @@ export default function ExploreLifeScene({
         morphStrength={morphStrength}
         deformationStrength={deformationStrength}
         lobeAmplitude={lobeAmplitude}
+        morphologyType={morphologyType}
+        temperature={temperature}
+        sculpturalStrength={sculpturalStrength}
         enabled={debugAnchors}
       />
       <OrbitControls
