@@ -324,13 +324,21 @@ function createWorldBackground(study) {
   return texture
 }
 
-function WorldEnvironment({ view, backgroundStudy }) {
+function WorldEnvironment({
+  view,
+  backgroundStudy,
+  appearancePreset = 'world',
+  /** When true, clear alpha so Studies `.stage` page gradient shows through. */
+  seamlessPageBackground = false,
+}) {
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
   const interior = view !== 'exterior'
+  const ethereal = appearancePreset === 'final-form'
   const background = useMemo(
-    () => createWorldBackground(backgroundStudy),
-    [backgroundStudy],
+    () =>
+      seamlessPageBackground ? null : createWorldBackground(backgroundStudy),
+    [backgroundStudy, seamlessPageBackground],
   )
 
   useLayoutEffect(() => {
@@ -338,46 +346,77 @@ function WorldEnvironment({ view, backgroundStudy }) {
     // R3F owns the Scene object; this component owns and restores its world-only setup.
     // oxlint-disable-next-line react(immutability)
     scene.environment = environment
-    scene.environmentIntensity = 1.15
-    scene.fog = new THREE.FogExp2(0x010405, 0.028)
+    scene.environmentIntensity = ethereal
+      ? backgroundStudy === 'light'
+        ? 0.28
+        : 0.4
+      : backgroundStudy === 'light'
+        ? 0.95
+        : 1.15
     return () => {
       if (scene.environment === environment) scene.environment = null
-      scene.fog = null
       environment.dispose()
     }
-  }, [gl, scene])
+  }, [gl, scene, backgroundStudy, ethereal])
 
   useLayoutEffect(() => {
     // Background studies are isolated from the PMREM environment and lighting.
     // oxlint-disable-next-line react(immutability)
     scene.background = background
+    if (seamlessPageBackground) {
+      /* Match Studies body fill for fog; page CSS gradient shows through clear. */
+      scene.fog = new THREE.FogExp2(0xc3c7d0, ethereal ? 0.016 : 0.012)
+      gl.setClearColor(0x000000, 0)
+    } else {
+      const light = backgroundStudy === 'light'
+      scene.fog = light
+        ? new THREE.FogExp2(0xd9dee2, ethereal ? 0.018 : 0.014)
+        : new THREE.FogExp2(0x010405, 0.028)
+      gl.setClearColor(light ? 0xd9dee2 : 0x010405, 1)
+    }
     return () => {
       if (scene.background === background) scene.background = null
-      if (background.isTexture) background.dispose()
+      scene.fog = null
+      if (background?.isTexture) background.dispose()
     }
-  }, [background, scene])
+  }, [
+    background,
+    backgroundStudy,
+    ethereal,
+    gl,
+    scene,
+    seamlessPageBackground,
+  ])
 
   return (
     <>
       <directionalLight
         color="#e8ffff"
-        intensity={interior ? 0.45 : 2.4}
+        intensity={
+          interior ? 0.45 : ethereal ? (backgroundStudy === 'light' ? 0.55 : 0.9) : 2.4
+        }
         position={[4, 6, 5]}
       />
       <directionalLight
         color="#ff7096"
-        intensity={interior ? 0.25 : 1.1}
+        intensity={
+          interior ? 0.25 : ethereal ? (backgroundStudy === 'light' ? 0.28 : 0.45) : 1.1
+        }
         position={[-5, -2, 4]}
+      />
+      <ambientLight
+        color={ethereal ? '#f2f4f6' : '#000000'}
+        intensity={ethereal ? (backgroundStudy === 'light' ? 0.62 : 0.2) : 0}
       />
       <pointLight
         color="#4de5ed"
-        intensity={interior ? 3.5 : 0.08}
+        intensity={interior ? 3.5 : ethereal ? 0.02 : 0.08}
         distance={6}
         position={[0.8, 0.5, 0.2]}
       />
       <pointLight
         color="#ff658f"
-        intensity={interior ? 2.8 : 0.06}
+        intensity={interior ? 2.8 : ethereal ? 0.015 : 0.06}
         distance={5}
         position={[-1.1, -0.6, -0.5]}
       />
@@ -562,6 +601,43 @@ function CrystalDissolveDust({ seed, age, decay, emitters }) {
         blending={THREE.AdditiveBlending}
       />
     </points>
+  )
+}
+
+/**
+ * Local-space surface anchor for a growth site (same path as crystal roots).
+ * Used by Playground close-up follow; keep in sync with SpatialGrowthSites.
+ */
+function growthSiteLocalAnchor(world, site, life, extraRadialOffset = null) {
+  if (!world || !site?.direction) return null
+  const morph = formMorphAmount(life?.variables?.growth ?? 1)
+  const outwardNormal = new THREE.Vector3().fromArray(site.direction).normalize()
+  const restRadius = world.radiusAt(outwardNormal)
+  const shapedRadius = morphRestRadius(restRadius, morph)
+  const restPoint = [
+    site.direction[0] * shapedRadius,
+    site.direction[1] * shapedRadius,
+    site.direction[2] * shapedRadius,
+  ]
+  const playgroundExtra =
+    typeof extraRadialOffset === 'function'
+      ? extraRadialOffset(restPoint[0], restPoint[1], restPoint[2])
+      : 0
+  const extra =
+    playgroundExtra +
+    sampleTurbulenceFromLife(
+      restPoint[0],
+      restPoint[1],
+      restPoint[2],
+      life,
+    )
+  return primaryCrystalAnchor(
+    site,
+    restRadius,
+    life?.outputs?.form?.localDeformations ?? [],
+    0,
+    morph,
+    extra,
   )
 }
 
@@ -1034,6 +1110,50 @@ function WorldOrganism({
   geometryDebug = false,
   /** World-space translation; local membrane / stimulus space stays organism-local. */
   position = null,
+  /** When false, skip slow exterior spin (Playground close-up studies). */
+  autoRotate = true,
+  /** Playground: growth site id whose deformed root updates orbitPivotRef. */
+  followGrowthSiteId = null,
+  /** Playground: locked growth site ids — pivot = centroid of present members. */
+  followGrowthSiteIds = null,
+  /**
+   * Playground: when set, only these spatial growth site ids render.
+   * null = World default (all sites). Exp03 Study 01 hides off-cluster crystals.
+   */
+  visibleGrowthSiteIds = null,
+  /**
+   * When false, hide spatial + baked crystal meshes (Final Form Lab soft look).
+   * Default true — World / other experiments unchanged.
+   */
+  showSpatialCrystals = true,
+  /**
+   * 'world' (default) — Physical membrane materials.
+   * 'final-form' — Exp05 ethereal / barely-visible body (Explore-like).
+   */
+  appearancePreset = 'world',
+  /**
+   * Playground: optional node or (ctx) => node inside the organism group.
+   * ctx = { world, life, rest }.
+   */
+  organismOverlay = null,
+  /**
+   * How followGrowthSiteId(s) write orbitPivotRef:
+   * 'live' (default) — update every frame while membrane/sites move.
+   * 'once' — Exp03 Study 01: capture cluster centroid once, then stop so
+   *          Growth Time scrubbing never reframes the camera.
+   */
+  followGrowthSiteMode = 'live',
+  /** Fired once when followGrowthSiteMode='once' settles the pivot. */
+  onFollowPivotSettled = null,
+  /** Mutable [x,y,z] world pivot written each frame when following a site. */
+  orbitPivotRef = null,
+  /**
+   * Optional (seed) => world geometry. Playground Morphology Lab injects a
+   * rest-shape field; World / Exp01–03 omit this and keep createWorldGeometry.
+   */
+  createGeometry = null,
+  /** Bump when morphology params change so rest geometry rebuilds. */
+  geometryRevision = 0,
 }) {
   const group = useRef(null)
   const skinMaterial = useRef(null)
@@ -1057,10 +1177,31 @@ function WorldOrganism({
   const resolveRef = useRef(resolveLifeForRender)
   const extraRadialRef = useRef(extraRadialOffset)
   const influenceRef = useRef(influenceOverlay)
+  const followSiteRef = useRef(followGrowthSiteId)
+  const followSitesRef = useRef(followGrowthSiteIds)
+  const followModeRef = useRef(followGrowthSiteMode)
+  const followOnceDoneRef = useRef(false)
+  const onFollowPivotSettledRef = useRef(onFollowPivotSettled)
+  const visibleSitesRef = useRef(visibleGrowthSiteIds)
+  const orbitPivotOutRef = useRef(orbitPivotRef)
+  const createGeometryRef = useRef(createGeometry)
+  const _followWorld = useRef(new THREE.Vector3())
+  const _followAccum = useRef(new THREE.Vector3())
   lifeRef.current = life
   resolveRef.current = resolveLifeForRender
   extraRadialRef.current = extraRadialOffset
   influenceRef.current = influenceOverlay
+  followSiteRef.current = followGrowthSiteId
+  followSitesRef.current = followGrowthSiteIds
+  followModeRef.current = followGrowthSiteMode === 'once' ? 'once' : 'live'
+  onFollowPivotSettledRef.current = onFollowPivotSettled
+  visibleSitesRef.current = visibleGrowthSiteIds
+  orbitPivotOutRef.current = orbitPivotRef
+  createGeometryRef.current = createGeometry
+
+  useEffect(() => {
+    followOnceDoneRef.current = false
+  }, [followGrowthSiteId, followGrowthSiteIds, followGrowthSiteMode])
   const ampScale = Number.isFinite(deformAmplitudeScale)
     ? deformAmplitudeScale
     : 1
@@ -1072,13 +1213,17 @@ function WorldOrganism({
     : 0.0035
 
   useEffect(() => {
-    const next = createWorldGeometry(life.seed)
+    const factory = createGeometryRef.current
+    const next =
+      typeof factory === 'function'
+        ? factory(life.seed)
+        : createWorldGeometry(life.seed)
     const rest = captureWorldRestState(next)
     // Geometry is created after mount so StrictMode's test mount is also disposed.
     // oxlint-disable-next-line react(set-state-in-effect)
     setBundle({ world: next, rest })
     return () => disposeWorldGeometry(next)
-  }, [life.seed])
+  }, [life.seed, geometryRevision])
 
   const applyDisplayLife = (elapsed, { updateNormals }) => {
     if (!bundle) return
@@ -1126,9 +1271,13 @@ function WorldOrganism({
     const sharedTime = sharedTimeRef?.current
     const elapsed =
       typeof sharedTime === 'number' ? sharedTime : clock.elapsedTime
+    const source = lifeRef.current
+    const resolve = resolveRef.current
+    const displayLife =
+      typeof resolve === 'function' ? resolve(source, elapsed) : source
     // Playground: refresh temporal ambient + spatial / turbulence each frame.
     if (
-      (typeof resolveRef.current === 'function' ||
+      (typeof resolve === 'function' ||
         typeof extraRadialRef.current === 'function') &&
       bundle
     ) {
@@ -1139,7 +1288,7 @@ function WorldOrganism({
     }
     // Slow exterior turn while alive; death freezes the remnant in place.
     // Shared clock → absolute yaw so dual compare viewports stay matched.
-    if (view === 'exterior' && !life.dead) {
+    if (autoRotate && view === 'exterior' && !life.dead) {
       if (typeof sharedTime === 'number') {
         group.current.rotation.y = elapsed * 0.045
       } else {
@@ -1152,12 +1301,109 @@ function WorldOrganism({
         breathAmp *
         ampScale *
         visual.motion
-    group.current.scale.setScalar(life.outputs.form.scale * breath)
+    group.current.scale.setScalar(
+      (displayLife?.outputs?.form?.scale ?? life.outputs.form.scale) * breath,
+    )
+
+    /* Playground close-up: orbit pivot on locked growth site(s). */
+    const followIds = followSitesRef.current
+    const followId = followSiteRef.current
+    const pivotOut = orbitPivotOutRef.current
+    const followOnceDone =
+      followModeRef.current === 'once' && followOnceDoneRef.current
+    const idList = Array.isArray(followIds)
+      ? followIds
+      : followId != null
+        ? [followId]
+        : null
+    if (
+      !followOnceDone &&
+      idList?.length &&
+      pivotOut &&
+      bundle?.world &&
+      Array.isArray(pivotOut.current)
+    ) {
+      const sites = displayLife?.outputs?.surface?.spatialGrowthSites ?? []
+      const wanted = new Set(idList)
+      _followAccum.current.set(0, 0, 0)
+      let counted = 0
+      for (const site of sites) {
+        if (!wanted.has(site.id)) continue
+        const local = growthSiteLocalAnchor(
+          bundle.world,
+          site,
+          displayLife,
+          extraRadialRef.current,
+        )
+        if (!local) continue
+        _followWorld.current.set(local[0], local[1], local[2])
+        group.current.localToWorld(_followWorld.current)
+        _followAccum.current.add(_followWorld.current)
+        counted += 1
+      }
+      if (counted > 0) {
+        _followAccum.current.multiplyScalar(1 / counted)
+        pivotOut.current[0] = _followAccum.current.x
+        pivotOut.current[1] = _followAccum.current.y
+        pivotOut.current[2] = _followAccum.current.z
+        if (followModeRef.current === 'once') {
+          followOnceDoneRef.current = true
+          onFollowPivotSettledRef.current?.([
+            pivotOut.current[0],
+            pivotOut.current[1],
+            pivotOut.current[2],
+          ])
+        }
+      }
+    }
 
     const presence = visual.membrane
     const fade = 1 - presence
     // Geometry Debug uses static opaque materials — skip presence fades.
     if (geometryDebug) return
+    /* Final Form Lab: hold an ethereal body — never ramp to solid World gloss. */
+    if (appearancePreset === 'final-form') {
+      if (skinMaterial.current) {
+        const material = skinMaterial.current
+        material.transparent = true
+        /* Soft ghost body — readable on light gray, never solid World gloss. */
+        material.opacity = 0.22 * THREE.MathUtils.lerp(0.65, 1, presence)
+        material.depthWrite = false
+        material.roughness = 0.88
+        material.metalness = 0
+        material.clearcoat = 0
+        material.iridescence = 0.06 * presence
+        material.envMapIntensity = 0.12
+        material.transmission = 0.55
+        material.thickness = 0.28
+        material.color.setRGB(0.92, 0.88, 0.9)
+      }
+      if (shellMaterial.current) {
+        const material = shellMaterial.current
+        material.visible = true
+        material.transparent = true
+        material.opacity = 0.1 * presence
+        material.transmission = 0.7
+        material.iridescence = 0.08
+        material.envMapIntensity = 0.16
+        material.clearcoat = 0
+        material.depthWrite = false
+        material.color.set('#c8eef2')
+      }
+      if (liningMaterial.current) {
+        const material = liningMaterial.current
+        material.transparent = true
+        material.opacity = 0.08 * presence
+        material.depthWrite = false
+        material.emissiveIntensity = 0.03
+        material.iridescence = 0
+        material.envMapIntensity = 0.06
+        material.roughness = 0.92
+        material.metalness = 0
+        material.clearcoat = 0
+      }
+      return
+    }
     if (skinMaterial.current) {
       const material = skinMaterial.current
       material.transparent = presence < 0.98
@@ -1300,20 +1546,39 @@ function WorldOrganism({
       ) : (
         <>
           <mesh geometry={world.surface} renderOrder={0}>
-            <meshPhysicalMaterial
-              ref={skinMaterial}
-              color="#ffffff"
-              vertexColors
-              roughness={0.34}
-              metalness={0.08}
-              clearcoat={0.72}
-              clearcoatRoughness={0.14}
-              iridescence={0.24}
-              iridescenceIOR={1.28}
-              iridescenceThicknessRange={[120, 430]}
-              envMapIntensity={1.35}
-              side={THREE.FrontSide}
-            />
+            {appearancePreset === 'final-form' ? (
+              <meshPhysicalMaterial
+                ref={skinMaterial}
+                color="#f0e6ea"
+                roughness={0.88}
+                metalness={0}
+                transmission={0.55}
+                thickness={0.28}
+                ior={1.28}
+                clearcoat={0}
+                iridescence={0.06}
+                envMapIntensity={0.12}
+                transparent
+                opacity={0.22}
+                depthWrite={false}
+                side={THREE.FrontSide}
+              />
+            ) : (
+              <meshPhysicalMaterial
+                ref={skinMaterial}
+                color="#ffffff"
+                vertexColors
+                roughness={0.34}
+                metalness={0.08}
+                clearcoat={0.72}
+                clearcoatRoughness={0.14}
+                iridescence={0.24}
+                iridescenceIOR={1.28}
+                iridescenceThicknessRange={[120, 430]}
+                envMapIntensity={1.35}
+                side={THREE.FrontSide}
+              />
+            )}
           </mesh>
 
           <mesh
@@ -1323,22 +1588,22 @@ function WorldOrganism({
           >
             <meshPhysicalMaterial
               ref={shellMaterial}
-              color="#9eeff1"
-              roughness={0.12}
+              color={appearancePreset === 'final-form' ? '#c8eef2' : '#9eeff1'}
+              roughness={appearancePreset === 'final-form' ? 0.55 : 0.12}
               metalness={0}
-              transmission={0.38}
+              transmission={appearancePreset === 'final-form' ? 0.82 : 0.38}
               thickness={0.16}
               ior={1.36}
               attenuationColor="#5fb9c2"
               attenuationDistance={2.8}
-              iridescence={0.34}
+              iridescence={appearancePreset === 'final-form' ? 0.06 : 0.34}
               iridescenceIOR={1.32}
               iridescenceThicknessRange={[160, 520]}
-              clearcoat={1}
+              clearcoat={appearancePreset === 'final-form' ? 0 : 1}
               clearcoatRoughness={0.07}
-              envMapIntensity={1.45}
+              envMapIntensity={appearancePreset === 'final-form' ? 0.12 : 1.45}
               transparent
-              opacity={0.18}
+              opacity={appearancePreset === 'final-form' ? 0.1 : 0.18}
               depthWrite={false}
               side={THREE.FrontSide}
             />
@@ -1348,20 +1613,25 @@ function WorldOrganism({
             <meshPhysicalMaterial
               ref={liningMaterial}
               color="#ffffff"
-              vertexColors
-              emissive="#061a20"
-              emissiveIntensity={0.14}
-              roughness={0.68}
-              metalness={0.03}
-              clearcoat={0.52}
+              vertexColors={appearancePreset !== 'final-form'}
+              emissive={
+                appearancePreset === 'final-form' ? '#000000' : '#061a20'
+              }
+              emissiveIntensity={appearancePreset === 'final-form' ? 0.02 : 0.14}
+              roughness={appearancePreset === 'final-form' ? 0.95 : 0.68}
+              metalness={0}
+              clearcoat={appearancePreset === 'final-form' ? 0 : 0.52}
               clearcoatRoughness={0.22}
-              iridescence={0.16}
-              envMapIntensity={0.48}
+              iridescence={appearancePreset === 'final-form' ? 0 : 0.16}
+              envMapIntensity={appearancePreset === 'final-form' ? 0.05 : 0.48}
+              transparent={appearancePreset === 'final-form'}
+              opacity={appearancePreset === 'final-form' ? 0.04 : 1}
+              depthWrite={appearancePreset !== 'final-form'}
               side={THREE.BackSide}
             />
           </mesh>
 
-          {CRYSTAL_DEBUG ? null : (
+          {CRYSTAL_DEBUG || !showSpatialCrystals ? null : (
             <>
               <mesh geometry={world.outside} renderOrder={3}>
                 <meshPhysicalMaterial
@@ -1421,14 +1691,25 @@ function WorldOrganism({
               </mesh>
             </>
           )}
-          <SpatialGrowthSites
-            world={world}
-            sites={life.outputs.surface.spatialGrowthSites}
-            deformations={life.outputs.form.localDeformations}
-            life={life}
-            restOutside={bundle.rest.outside}
-            extraRadialOffset={extraRadialOffset}
-          />
+          {showSpatialCrystals ? (
+            <SpatialGrowthSites
+              world={world}
+              sites={
+                Array.isArray(visibleGrowthSiteIds)
+                  ? life.outputs.surface.spatialGrowthSites.filter((site) =>
+                      visibleGrowthSiteIds.includes(site.id),
+                    )
+                  : life.outputs.surface.spatialGrowthSites
+              }
+              deformations={life.outputs.form.localDeformations}
+              life={life}
+              restOutside={bundle.rest.outside}
+              extraRadialOffset={extraRadialOffset}
+            />
+          ) : null}
+          {typeof organismOverlay === 'function'
+            ? organismOverlay({ world, life, rest: bundle.rest })
+            : organismOverlay}
           <TouchFeedback
             world={world}
             feedback={touchFeedback}
@@ -1467,21 +1748,70 @@ function WorldFlyCamera({
   sharedOrbitRef = null,
   /** Optional [x,y,z] exterior orbit look-at (default world origin). */
   orbitPivot = null,
+  /** Mutable [x,y,z] — preferred over orbitPivot when present (live follow). */
+  orbitPivotRef = null,
+  /** Optional exterior orbit radius clamps (Playground close-up). */
+  orbitRadiusMin = null,
+  orbitRadiusMax = null,
+  /**
+   * 'orbit' (default) — full exterior orbit drag.
+   * 'macro' — lock yaw, vertical tilt, wheel zoom.
+   * 'observe' — framing locked, wheel zoom only.
+   * 'inspect' — Exp03 Study 01 modeling-viewport: left orbit, middle pan,
+   *             wheel zoom; pivot is user-owned (no auto-reframe).
+   */
+  exteriorControlMode = 'orbit',
 }) {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
   const viewRef = useRef(view)
   viewRef.current = view
+  const controlModeRef = useRef(exteriorControlMode)
+  controlModeRef.current =
+    exteriorControlMode === 'macro' ||
+    exteriorControlMode === 'observe' ||
+    exteriorControlMode === 'inspect'
+      ? exteriorControlMode
+      : 'orbit'
+  const panRight = useRef(new THREE.Vector3())
+  const panUp = useRef(new THREE.Vector3())
   const pivotRef = useRef(ORGANISM_PIVOT.clone())
-  if (Array.isArray(orbitPivot) && orbitPivot.length >= 3) {
-    pivotRef.current.set(
-      Number(orbitPivot[0]) || 0,
-      Number(orbitPivot[1]) || 0,
-      Number(orbitPivot[2]) || 0,
-    )
-  } else {
+  const radiusMinRef = useRef(CAMERA_ORBIT_RADIUS_MIN)
+  const radiusMaxRef = useRef(CAMERA_ORBIT_RADIUS_MAX)
+  radiusMinRef.current = Number.isFinite(orbitRadiusMin)
+    ? orbitRadiusMin
+    : CAMERA_ORBIT_RADIUS_MIN
+  radiusMaxRef.current = Number.isFinite(orbitRadiusMax)
+    ? orbitRadiusMax
+    : CAMERA_ORBIT_RADIUS_MAX
+  /** Macro: lock frontal yaw; phi tilts around the locked base angle. */
+  const MACRO_TILT_RANGE = 0.72
+  const MACRO_TILT_SENSITIVITY = 0.0048
+  const macroAnglesLocked = useRef(false)
+  const macroTheta = useRef(0)
+  const macroPhi = useRef(Math.PI / 2)
+  const macroPhiBase = useRef(Math.PI / 2)
+  const syncPivotFromProps = () => {
+    const live = orbitPivotRef?.current
+    if (Array.isArray(live) && live.length >= 3) {
+      pivotRef.current.set(
+        Number(live[0]) || 0,
+        Number(live[1]) || 0,
+        Number(live[2]) || 0,
+      )
+      return
+    }
+    if (Array.isArray(orbitPivot) && orbitPivot.length >= 3) {
+      pivotRef.current.set(
+        Number(orbitPivot[0]) || 0,
+        Number(orbitPivot[1]) || 0,
+        Number(orbitPivot[2]) || 0,
+      )
+      return
+    }
     pivotRef.current.copy(ORGANISM_PIVOT)
   }
+  syncPivotFromProps()
   const outsideQuaternion = useRef(
     lookQuaternion(EXTERIOR_POSITION, ORGANISM_PIVOT),
   )
@@ -1512,6 +1842,8 @@ function WorldFlyCamera({
   const pitch = useRef(0)
   const drag = useRef({
     pointerId: null,
+    button: 0,
+    mode: 'orbit',
     x: 0,
     y: 0,
     startX: 0,
@@ -1537,20 +1869,42 @@ function WorldFlyCamera({
   }
 
   const applyExteriorOrbit = () => {
+    syncPivotFromProps()
     const orbit = readOrbitState()
+    const framed =
+      controlModeRef.current === 'macro' ||
+      controlModeRef.current === 'observe'
+    if (framed && !macroAnglesLocked.current) {
+      macroTheta.current = orbit.theta
+      const basePhi = THREE.MathUtils.clamp(
+        orbit.phi,
+        CAMERA_ORBIT_PHI_MIN,
+        CAMERA_ORBIT_PHI_MAX,
+      )
+      macroPhiBase.current = basePhi
+      macroPhi.current = basePhi
+      macroAnglesLocked.current = true
+    }
+    const theta = framed ? macroTheta.current : orbit.theta
     const phi = THREE.MathUtils.clamp(
-      orbit.phi,
+      framed ? macroPhi.current : orbit.phi,
       CAMERA_ORBIT_PHI_MIN,
       CAMERA_ORBIT_PHI_MAX,
     )
     const radius = THREE.MathUtils.clamp(
       orbit.radius,
-      CAMERA_ORBIT_RADIUS_MIN,
-      CAMERA_ORBIT_RADIUS_MAX,
+      radiusMinRef.current,
+      radiusMaxRef.current,
     )
-    orbit.phi = phi
+    if (!framed) {
+      orbit.theta = theta
+      orbit.phi = phi
+    } else {
+      /* Keep shared state readable for HUD / reset without rewriting yaw. */
+      orbit.phi = phi
+    }
     orbit.radius = radius
-    offsetFromSpherical(orbit.theta, phi, radius, orbitOffset.current)
+    offsetFromSpherical(theta, phi, radius, orbitOffset.current)
     const pivot = pivotRef.current
     camera.position.copy(pivot).add(orbitOffset.current)
     camera.lookAt(pivot)
@@ -1560,7 +1914,39 @@ function WorldFlyCamera({
     appliedOrbitRevision.current = orbit.revision ?? 0
   }
 
+  const panOrbitPivot = (deltaX, deltaY) => {
+    const live = orbitPivotRef?.current
+    if (!Array.isArray(live) || live.length < 3) return
+    const orbit = readOrbitState()
+    const scale = Math.max(0.35, orbit.radius) * 0.00165
+    panRight.current.set(1, 0, 0).applyQuaternion(camera.quaternion)
+    panUp.current.set(0, 1, 0).applyQuaternion(camera.quaternion)
+    live[0] +=
+      -deltaX * scale * panRight.current.x + deltaY * scale * panUp.current.x
+    live[1] +=
+      -deltaX * scale * panRight.current.y + deltaY * scale * panUp.current.y
+    live[2] +=
+      -deltaX * scale * panRight.current.z + deltaY * scale * panUp.current.z
+    applyExteriorOrbit()
+  }
+
+  const unlockMacroAngles = () => {
+    macroAnglesLocked.current = false
+  }
+
   const snapToExterior = () => {
+    if (
+      controlModeRef.current === 'macro' ||
+      controlModeRef.current === 'observe' ||
+      controlModeRef.current === 'inspect'
+    ) {
+      /* Exp03 owns framing in sharedOrbitRef — do not jump to World defaults. */
+      unlockMacroAngles()
+      velocity.current.set(0, 0, 0)
+      wheel.current.set(0, 0, 0)
+      applyExteriorOrbit()
+      return
+    }
     const defaults = createDefaultOrbitState()
     writeOrbitState(defaults)
     velocity.current.set(0, 0, 0)
@@ -1642,6 +2028,7 @@ function WorldFlyCamera({
       keys.current.shift = false
       drag.current.pointerId = null
       drag.current.looking = false
+      drag.current.mode = 'orbit'
     }
 
     const onFocus = () => {
@@ -1652,11 +2039,29 @@ function WorldFlyCamera({
       clearMotion()
     }
     if (document.activeElement === element) focused.current = true
+
+    /* Block browser autoscroll / middle-click default on the canvas. */
+    const onMouseDown = (event) => {
+      if (event.button === 1) event.preventDefault()
+    }
+    const onAuxClick = (event) => {
+      event.preventDefault()
+    }
+
     const onPointerDown = (event) => {
-      if (event.button !== 0) return
-      element.focus()
+      const inspect = controlModeRef.current === 'inspect'
+      if (event.button === 1) {
+        event.preventDefault()
+        if (!inspect || viewRef.current !== 'exterior') return
+      } else if (event.button !== 0) {
+        return
+      }
+      element.focus({ preventScroll: true })
+      element.setPointerCapture?.(event.pointerId)
       drag.current = {
         pointerId: event.pointerId,
+        button: event.button,
+        mode: event.button === 1 ? 'pan' : 'orbit',
         x: event.clientX,
         y: event.clientY,
         startX: event.clientX,
@@ -1682,7 +2087,45 @@ function WorldFlyCamera({
       drag.current.looking = true
 
       if (viewRef.current === 'exterior') {
-        // Orbit around organism center — no FPS look-pan.
+        if (
+          controlModeRef.current === 'inspect' &&
+          drag.current.mode === 'pan'
+        ) {
+          panOrbitPivot(deltaX, deltaY)
+          return
+        }
+        if (
+          controlModeRef.current === 'macro' ||
+          controlModeRef.current === 'observe'
+        ) {
+          /* Observe: framing locked (zoom only). Macro: vertical tilt. */
+          if (controlModeRef.current === 'observe') {
+            return
+          }
+          if (!macroAnglesLocked.current) applyExteriorOrbit()
+          const lo = Math.max(
+            CAMERA_ORBIT_PHI_MIN,
+            macroPhiBase.current - MACRO_TILT_RANGE,
+          )
+          const hi = Math.min(
+            CAMERA_ORBIT_PHI_MAX,
+            macroPhiBase.current + MACRO_TILT_RANGE,
+          )
+          macroPhi.current = THREE.MathUtils.clamp(
+            macroPhi.current - deltaY * MACRO_TILT_SENSITIVITY,
+            lo,
+            hi,
+          )
+          const orbit = readOrbitState()
+          writeOrbitState({
+            theta: macroTheta.current,
+            phi: macroPhi.current,
+            radius: orbit.radius,
+          })
+          applyExteriorOrbit()
+          return
+        }
+        // Orbit / inspect: full orbit around current pivot.
         const orbit = readOrbitState()
         writeOrbitState({
           theta: orbit.theta - deltaX * CAMERA_ORBIT_SENSITIVITY,
@@ -1706,8 +2149,10 @@ function WorldFlyCamera({
     }
     const onPointerUp = (event) => {
       if (drag.current.pointerId !== event.pointerId) return
+      element.releasePointerCapture?.(event.pointerId)
       drag.current.pointerId = null
       drag.current.looking = false
+      drag.current.mode = 'orbit'
     }
     const onWheel = (event) => {
       event.preventDefault()
@@ -1720,13 +2165,19 @@ function WorldFlyCamera({
 
       if (viewRef.current === 'exterior') {
         const orbit = readOrbitState()
+        const dollyScale =
+          controlModeRef.current === 'macro' ||
+          controlModeRef.current === 'observe' ||
+          controlModeRef.current === 'inspect'
+            ? 0.012
+            : 0.02
         writeOrbitState({
           theta: orbit.theta,
           phi: orbit.phi,
           radius: THREE.MathUtils.clamp(
-            orbit.radius + pixels * 0.02,
-            CAMERA_ORBIT_RADIUS_MIN,
-            CAMERA_ORBIT_RADIUS_MAX,
+            orbit.radius + pixels * dollyScale,
+            radiusMinRef.current,
+            radiusMaxRef.current,
           ),
         })
         applyExteriorOrbit()
@@ -1769,6 +2220,8 @@ function WorldFlyCamera({
 
     element.addEventListener('focus', onFocus)
     element.addEventListener('blur', onBlur)
+    element.addEventListener('mousedown', onMouseDown)
+    element.addEventListener('auxclick', onAuxClick)
     element.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerUp)
@@ -1780,6 +2233,8 @@ function WorldFlyCamera({
     return () => {
       element.removeEventListener('focus', onFocus)
       element.removeEventListener('blur', onBlur)
+      element.removeEventListener('mousedown', onMouseDown)
+      element.removeEventListener('auxclick', onAuxClick)
       element.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)
@@ -1789,7 +2244,7 @@ function WorldFlyCamera({
       window.removeEventListener('keyup', onKeyUp)
       clearMotion()
     }
-  }, [camera, gl, onReset, sharedOrbitRef])
+  }, [camera, gl, onReset, sharedOrbitRef, orbitPivotRef])
 
   useFrame((_, delta) => {
     const dt = Math.min(0.05, Math.max(0, delta))
@@ -1832,11 +2287,8 @@ function WorldFlyCamera({
     }
 
     if (view === 'exterior') {
-      // Follow shared Playground orbit revisions written by the sibling viewport.
-      const orbit = readOrbitState()
-      if ((orbit.revision ?? 0) !== appliedOrbitRevision.current) {
-        applyExteriorOrbit()
-      }
+      // Always re-apply so live orbitPivotRef follow stays glued to the site.
+      applyExteriorOrbit()
       velocity.current.set(0, 0, 0)
       wheel.current.set(0, 0, 0)
       return
@@ -1897,11 +2349,17 @@ function WorldFlyCamera({
   return null
 }
 
-function WorldPostprocessing({ view, backgroundStudy, geometryDebug = false }) {
+function WorldPostprocessing({
+  view,
+  backgroundStudy,
+  geometryDebug = false,
+  appearancePreset = 'world',
+}) {
   const session = useRef(null)
   const get = useThree((state) => state.get)
   const size = useThree((state) => state.size)
   const shaderStudy = backgroundStudy === 'shader' && !geometryDebug
+  const softBloom = appearancePreset === 'final-form'
 
   useLayoutEffect(() => {
     const { gl, scene, camera, size: currentSize } = get()
@@ -1914,9 +2372,9 @@ function WorldPostprocessing({ view, backgroundStudy, geometryDebug = false }) {
         Math.max(1, currentSize.width * 0.5),
         Math.max(1, currentSize.height * 0.5),
       ),
-      0.34,
-      0.42,
-      0.8,
+      softBloom ? 0.12 : 0.34,
+      softBloom ? 0.55 : 0.42,
+      softBloom ? 0.92 : 0.8,
     )
     composer.addPass(bloom)
     const output = new OutputPass()
@@ -1964,8 +2422,13 @@ function WorldPostprocessing({ view, backgroundStudy, geometryDebug = false }) {
     if (!current) return
     // Geometry Debug: strip bloom / finish grade so silhouette reads clearly.
     current.bloom.enabled = !geometryDebug
-    current.finish.enabled = !geometryDebug
-  }, [geometryDebug])
+    current.finish.enabled = !geometryDebug && !softBloom
+    if (current.bloom) {
+      current.bloom.strength = softBloom ? 0.12 : 0.34
+      current.bloom.radius = softBloom ? 0.55 : 0.42
+      current.bloom.threshold = softBloom ? 0.92 : 0.8
+    }
+  }, [geometryDebug, softBloom])
 
   useFrame(({ clock }) => {
     const current = session.current
@@ -2008,6 +2471,22 @@ function WorldScene({
    */
   organisms = null,
   orbitPivot = null,
+  orbitPivotRef = null,
+  orbitRadiusMin = null,
+  orbitRadiusMax = null,
+  autoRotate = true,
+  followGrowthSiteId = null,
+  followGrowthSiteIds = null,
+  visibleGrowthSiteIds = null,
+  showSpatialCrystals = true,
+  appearancePreset = 'world',
+  seamlessPageBackground = false,
+  organismOverlay = null,
+  followGrowthSiteMode = 'live',
+  onFollowPivotSettled = null,
+  exteriorControlMode = 'orbit',
+  createGeometry = null,
+  geometryRevision = 0,
 }) {
   const multi =
     Array.isArray(organisms) && organisms.length > 0 ? organisms : null
@@ -2027,6 +2506,18 @@ function WorldScene({
             influenceOverlay,
             geometryDebug,
             position: [0, 0, 0],
+            autoRotate,
+            followGrowthSiteId,
+            followGrowthSiteIds,
+            visibleGrowthSiteIds,
+            showSpatialCrystals,
+            appearancePreset,
+            organismOverlay,
+            followGrowthSiteMode,
+            onFollowPivotSettled,
+            orbitPivotRef,
+            createGeometry,
+            geometryRevision,
           },
         ]
       : []
@@ -2036,6 +2527,8 @@ function WorldScene({
       <WorldEnvironment
         view={view}
         backgroundStudy={backgroundStudy}
+        appearancePreset={appearancePreset}
+        seamlessPageBackground={seamlessPageBackground}
       />
       {organismList.map((org) => {
         if (!org?.life) return null
@@ -2065,6 +2558,28 @@ function WorldScene({
             }
             geometryDebug={orgDebug}
             position={org.position}
+            autoRotate={org.autoRotate ?? autoRotate}
+            followGrowthSiteId={org.followGrowthSiteId ?? followGrowthSiteId}
+            followGrowthSiteIds={
+              org.followGrowthSiteIds ?? followGrowthSiteIds
+            }
+            visibleGrowthSiteIds={
+              org.visibleGrowthSiteIds ?? visibleGrowthSiteIds
+            }
+            showSpatialCrystals={
+              org.showSpatialCrystals ?? showSpatialCrystals
+            }
+            appearancePreset={org.appearancePreset ?? appearancePreset}
+            organismOverlay={org.organismOverlay ?? organismOverlay}
+            followGrowthSiteMode={
+              org.followGrowthSiteMode ?? followGrowthSiteMode
+            }
+            onFollowPivotSettled={
+              org.onFollowPivotSettled ?? onFollowPivotSettled
+            }
+            orbitPivotRef={org.orbitPivotRef ?? orbitPivotRef}
+            createGeometry={org.createGeometry ?? createGeometry}
+            geometryRevision={org.geometryRevision ?? geometryRevision}
           />
         )
       })}
@@ -2073,11 +2588,16 @@ function WorldScene({
         onReset={onCameraReset}
         sharedOrbitRef={sharedOrbitRef}
         orbitPivot={orbitPivot}
+        orbitPivotRef={orbitPivotRef}
+        orbitRadiusMin={orbitRadiusMin}
+        orbitRadiusMax={orbitRadiusMax}
+        exteriorControlMode={exteriorControlMode}
       />
       <WorldPostprocessing
         view={view}
         backgroundStudy={backgroundStudy}
         geometryDebug={geometryDebug}
+        appearancePreset={appearancePreset}
       />
     </>
   )
@@ -2118,13 +2638,49 @@ export function WorldViewport({
   organisms = null,
   /** Exterior orbit look-at; default [0,0,0]. */
   orbitPivot = null,
+  /** Mutable [x,y,z] live pivot (Playground growth-site follow). */
+  orbitPivotRef = null,
+  /** Optional exterior orbit radius clamps (defaults: 4.2 … 36). */
+  orbitRadiusMin = null,
+  orbitRadiusMax = null,
   /** Optional camera start position override (array). */
   cameraPosition = null,
+  /** Slow exterior body spin (World / Exp01–02 default). */
+  autoRotate = true,
+  /** Playground: keep orbit pivot on this spatial growth site while membrane deforms. */
+  followGrowthSiteId = null,
+  /** Playground: locked site id list — pivot = centroid (Study 01 cluster). */
+  followGrowthSiteIds = null,
+  /** Playground: render only these growth site ids (null = all). */
+  visibleGrowthSiteIds = null,
+  /** When false, hide crystal meshes (Final Form Lab). Default true. */
+  showSpatialCrystals = true,
+  /** 'world' | 'final-form' — Exp05 ethereal body; default preserves World. */
+  appearancePreset = 'world',
+  /**
+   * Exp05: transparent WebGL clear so Studies `.stage` page gradient shows.
+   * Default false — World / other experiments keep opaque clear.
+   */
+  seamlessPageBackground = false,
+  /** Playground: node or (ctx) => node inside organism group. */
+  organismOverlay = null,
+  /** 'live' (default) or 'once' — see WorldOrganism. */
+  followGrowthSiteMode = 'live',
+  onFollowPivotSettled = null,
+  /**
+   * Exterior controls: 'orbit' (World default), 'macro' (tilt + zoom),
+   * 'observe' (zoom only), or 'inspect' (Exp03 — orbit / pan / zoom).
+   */
+  exteriorControlMode = 'orbit',
+  /** Optional (seed) => world; Morphology Lab rest-shape injection. */
+  createGeometry = null,
+  geometryRevision = 0,
 }) {
   const worldDpr = useWorldDpr()
   const startCamera = Array.isArray(cameraPosition)
     ? cameraPosition
     : EXTERIOR_POSITION.toArray()
+  const lightClear = backgroundStudy === 'light'
   return (
     <WebGLCanvas
       className={className}
@@ -2135,11 +2691,21 @@ export function WorldViewport({
         far: CAMERA_FAR,
       }}
       dpr={worldDpr}
-      gl={{ antialias: true, alpha: false, powerPreference: 'default' }}
+      gl={{
+        antialias: true,
+        alpha: seamlessPageBackground,
+        powerPreference: 'default',
+      }}
       onCreated={({ gl }) => {
-        gl.setClearColor(0x010405, 1)
-        gl.toneMapping = THREE.AgXToneMapping
-        gl.toneMappingExposure = 1.12
+        if (seamlessPageBackground) {
+          gl.setClearColor(0x000000, 0)
+          gl.toneMapping = THREE.AgXToneMapping
+          gl.toneMappingExposure = 1.02
+        } else {
+          gl.setClearColor(lightClear ? 0xd9dee2 : 0x010405, 1)
+          gl.toneMapping = THREE.AgXToneMapping
+          gl.toneMappingExposure = lightClear ? 1.02 : 1.12
+        }
       }}
     >
       <WorldScene
@@ -2159,6 +2725,22 @@ export function WorldViewport({
         geometryDebug={geometryDebug}
         organisms={organisms}
         orbitPivot={orbitPivot}
+        orbitPivotRef={orbitPivotRef}
+        orbitRadiusMin={orbitRadiusMin}
+        orbitRadiusMax={orbitRadiusMax}
+        autoRotate={autoRotate}
+        followGrowthSiteId={followGrowthSiteId}
+        followGrowthSiteIds={followGrowthSiteIds}
+        visibleGrowthSiteIds={visibleGrowthSiteIds}
+        showSpatialCrystals={showSpatialCrystals}
+        appearancePreset={appearancePreset}
+        seamlessPageBackground={seamlessPageBackground}
+        organismOverlay={organismOverlay}
+        followGrowthSiteMode={followGrowthSiteMode}
+        onFollowPivotSettled={onFollowPivotSettled}
+        exteriorControlMode={exteriorControlMode}
+        createGeometry={createGeometry}
+        geometryRevision={geometryRevision}
       />
     </WebGLCanvas>
   )

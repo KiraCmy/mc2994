@@ -304,7 +304,130 @@ Open `#playground` → Experiment 01:
 
 - Transfer validated Moisture / Turbulence method into World UI.  
 - Optional richer semantics (intensity, better negation, later model swap).  
-- Optional single-canvas / shared GPU path if dual viewports become too heavy.
+- Optional single-canvas / shared GPU path if dual viewports become too heavy.  
+- Experiment 03 Study 01 follow-ups: agent states (Growing / Dormant / Dying), neighbor perception, competition.  
+- Studies 02–03 placeholders (Organism Agents, Environmental Signals).
+
+---
+
+## Experiment 03 — Agent Behaviors
+
+**Research question:** Can crystal growth be observed and eventually controlled as local agent behavior on a stable membrane substrate, before whole-organism or environmental-signal agency?
+
+**Status:** Study 01 — Crystal Growth Agent Lab (baseline) complete. Membrane frozen; Growth Time drives crystals only; fixed observation camera. Agent FSM / neighbor perception / competition not enabled. Studies 02–03 remain placeholders.
+
+---
+
+### Why Study 01 first
+
+Earlier Playground work treated the organism as a full lifecycle viewer (AGE drives membrane morph, deformations, vitality, and crystals together). That makes it hard to isolate **crystal growth behavior**.
+
+Study 01 establishes a **Baseline Growth Experiment**:
+
+- Macro close-up of a locked local crystal cluster (~3–5 sites).
+- Membrane geometry held at a fixed reference AGE.
+- Only crystal growth evolves with the timeline.
+- Camera and observation region stay stable.
+- Environment constant; no Moisture / Temperature / Turbulence experiments here.
+- No Agent FSM yet — observation lab before agency.
+
+---
+
+### Step 01 — Scaffold (macro framing)
+
+1. Registry entry **Agent Behaviors** (`id: '03'`) with Study tabs: Crystal Agents (active), Organism Agents / Environmental Signals (placeholders).
+2. Scene mounts shared `WorldViewport` + dedicated `useLifeEngine` (World Dark presentation).
+3. One-shot **stable growth cluster** lock at observation AGE (`selectStableGrowthCluster` in `agentBehaviors/growthFocus.js`) — site IDs fixed for the session; no AGE-driven site switching.
+4. Frontal membrane patch camera: locked yaw, limited zoom; organism silhouette mostly out of frame.
+5. Optional WorldViewport hooks only (defaults preserve World): `followGrowthSiteIds`, `exteriorControlMode` (`macro` → later `observe`), `visibleGrowthSiteIds`.
+
+**Not in Step 01:** agent states, competition, env coupling, Life Engine forks.
+
+---
+
+### Step 02 — Membrane / crystal time decoupling
+
+**Problem:** Scrubbing AGE still deformed the membrane, so crystal growth could not be read in isolation. Roots also ride membrane morph + `localDeformations`, so a naive “freeze mesh” would detach crystals.
+
+**Audit:** Life Engine keeps a single `age`. Membrane morph (`variables.growth` → `formMorphAmount`), stimulus deformations, and `spatialGrowthSites` crystal lengths all derive from that sample — but they only meet at the **render adapter**. Safe to composite at display time without duplicating or changing Life Engine logic.
+
+**Smallest safe approach (implemented)**
+
+1. Seek to membrane reference AGE **0.45** and `captureMembraneFreeze(life)` — snapshot form scale / vitality / integrity / `localDeformations` (+ display growth & decay used for membrane presence).
+2. While Growth Time scrubs the live Life Engine sample, pass  
+   `composeFrozenMembraneLife(growthLife, freeze)` into `WorldViewport`:
+   - **Frozen:** membrane morph, deformations, body scale, presence (no breath).
+   - **Live:** `spatialGrowthSites` crystal lengths / branches (existing growth rules).
+3. Crystal roots still use `primaryCrystalAnchor` with the frozen morph + deformations → roots stay seated; no drift when Growth Time changes.
+4. Environment left at Life defaults; stimulus no-op in Study 01. Camera mode **`observe`**: fixed framing, scroll / slider zoom only (no orbit, no tilt, no reframing on scrub).
+
+**UI rename:** timeline **AGE → Growth Time**. Panel separates **Fixed conditions** (Membrane AGE 0.45, Environment Constant, Agent Behavior Not enabled, Camera Fixed) from **Evolving growth** (Growth Time, visible site counts, mean length). Selected-site checkboxes filter which locked clusters render; other sites hidden.
+
+**Acceptance:** Growth Time scrub / Play → crystals lengthen or recede; membrane silhouette and camera framing hold; roots stay attached; World / Exp 01 / Exp 02 defaults unchanged.
+
+**Still out of scope for Study 01:** Growing / Dormant / Dying FSM, neighbor perception, resource competition, Moisture/Temp/Turbulence labs, new crystal morphology.
+
+---
+
+### Why this shape
+
+- Treat crystals as the first **agent-scale** observable before inventing new simulation rules.
+- Freeze membrane at the display boundary so Life Engine replay / growth logic stays authoritative and shared with World.
+- Lock cluster IDs + observe camera so the lab reads as a controlled microscope, not another full-organism lifecycle scrubber.
+- Keep Studies 02–03 as named placeholders so the multi-scale agent roadmap stays visible.
+
+### Key files
+
+| File | Notes |
+|------|--------|
+| `src/playground/Experiment03.jsx` | Study tabs; Study 01 baseline lab UI (Growth Time, freeze readout, sites, zoom) |
+| `src/playground/agentBehaviors/growthFocus.js` | Cluster lock, membrane freeze capture/compose, site listing |
+| `src/playground/experiments.js` | Exp 03 title / description |
+| `src/playground/playground.css` | Exp 03 chrome, fixed vs evolving panel, site list |
+| `src/worldv2/WorldViewport.jsx` | Optional `exteriorControlMode: 'observe'`, `visibleGrowthSiteIds`, follow-site pivot (defaults = World) |
+
+### Manual check
+
+Open `#playground` → Experiment 03 → Study 01:
+
+1. Viewport is a macro close-up of a few crystal clusters on a local membrane patch (full organism not readable).  
+2. Panel shows Membrane (AGE) **Fixed (0.45)** once capture completes; Freeze Membrane control reads pressed.  
+3. Scrub **Growth Time** or Play — crystals evolve; membrane shape does not morph with the scrubber.  
+4. Crystal roots stay on the membrane (no floating / sliding off).  
+5. Camera does not auto-orbit or jump sites; Zoom slider / scroll only change distance.  
+6. Toggling Selected sites shows/hides those clusters; “Other sites (hidden)” stay off.  
+7. World and Experiments 01 / 02 still behave as before (no membrane-freeze default).
+
+---
+
+## Experiment 05 — Final Form Lab
+
+**Research question:** Can World morphology drive a Life-shaped body while Explore’s ethereal fragment look (body + petals + particles) stays intact, so a final form can be tuned in Playground without touching World / Life Engine / Studies?
+
+**Status:** Phase C2 lab usable — shared surface evaluator, stable composition toggles, AGE scrub + Space play/pause, morphology Low / Medium / High presets (same AGE / Seed).
+
+---
+
+### Done
+
+1. **Life → Explore path** — World `radiusAt` + form morph / growth sites shape the membrane; Explore fragment shading stays for body, petals, and particles. Original Explore remains a side-by-side visual reference.
+2. **Shared surface evaluator** (`exp05SurfaceEvaluator`) — one Exp05-only evaluator seats body, petals, and particles on the same Explore-framed field (no Life Engine / World forks).
+3. **Composition stability** — body / petals / particles stay mounted across AGE scrub and composition modes (`dispose={null}`, visibility + reseat). Fixed earlier white-out / vanish when AGE or layer toggles remounted shared GPU materials.
+4. **Morphology calibration (audit → presets)** — World `formMorphAmount` saturates early (~AGE 0.45); empty `localDeformations` without stimuli made old “macro deform” knobs inert. Lab **Morphology Complexity** now scales rest-radius lobe amplitude on the existing `radiusAt` field (no new morph algorithm). Presets **Low / Medium / High** only change morph knobs; AGE, Seed, petals, and particles stay put.
+5. **Lab chrome** — petal / particle density & scale, composition modes (Body Only → Full), AGE bar, Space play/pause.
+
+**Out of scope (held):** Life Engine / World / Studies / Exp 01–04 edits; crystal-fold morph matching World’s stimulus deformations; new shape algorithms.
+
+### Key files
+
+| File | Notes |
+|------|--------|
+| `src/playground/Experiment05.jsx` | Life→Explore / Original Explore; AGE + Space |
+| `src/playground/finalForm/ExploreLifeScene.jsx` | Composition visibility; lobe amplitude wiring |
+| `src/playground/finalForm/exp05SurfaceEvaluator.js` | Shared body / petal / particle seating |
+| `src/playground/finalForm/exp05MorphologyCalibration.js` | Lobe amp remap + Low / Med / High presets |
+| `src/playground/finalForm/Exp05LabPanel.jsx` | Lab knobs, presets, composition |
+| `src/playground/finalForm/ExploreWorld{Body,Scatter,Particles}.jsx` | Keep-mounted Explore layers |
 
 ---
 
@@ -337,3 +460,25 @@ Full exposure (Thermal Exposure / Persistent Memory Magnitude at 1.0) under dark
 Compare after environmental language: **A — Baseline** at neutral T/M/Turb vs **B — Environment Affected** with live Temperature, Moisture, and Disturbance→Turbulence.
 
 ![[born-another-playground-exp01-language-life-sync.jpg]]
+
+---
+
+## Screenshots — Experiment 05
+
+### Life → Explore — full composition
+
+Shared World surface evaluator with Explore look: body, petals, and particles seated together (default lab, AGE ≈ 0.45).
+
+![[born-another-playground-exp05-life-explore.jpg]]
+
+### Morphology High preset
+
+Same AGE / Seed; **High** exaggerates rest-radius lobe amplitude on the existing `radiusAt` field (no new morph algorithm).
+
+![[born-another-playground-exp05-morph-high.jpg]]
+
+### Body Only composition
+
+Layers stay mounted; composition mode hides petals / particles without remount white-out.
+
+![[born-another-playground-exp05-body-only.jpg]]

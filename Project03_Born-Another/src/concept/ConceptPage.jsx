@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import heroShot from '../assets/hero-shot.png'
 import concept02Fossil from '../assets/concept-02-fossil.jpg'
 import concept02Fossil2 from '../assets/concept-02-fossil2.jpg'
@@ -10,17 +10,75 @@ import concept043 from '../assets/concept-04-3.jpg'
 import concept044 from '../assets/concept-04-4.jpg'
 import concept051 from '../assets/concept-05-1.jpg'
 import concept06 from '../assets/concept-06.jpg'
+import keywordMemoryStill from '../assets/concept-keyword-memory.jpg'
+import keywordMortalityStill from '../assets/concept-keyword-mortality.jpg'
+import keywordExistenceStill from '../assets/concept-keyword-existence.jpg'
 import SiteHud from '../SiteHud.jsx'
 import { useAutoHideHeader } from '../useAutoHideHeader.js'
 import './concept.css'
 
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(
+    () =>
+      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false,
+  )
+  useEffect(() => {
+    const query = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+    if (!query) return undefined
+    const onChange = () => setReduced(query.matches)
+    query.addEventListener?.('change', onChange)
+    return () => query.removeEventListener?.('change', onChange)
+  }, [])
+  return reduced
+}
+
 const SECTIONS = [
-  { id: '01', label: 'Origin' },
-  { id: '02', label: 'The Proposition' },
-  { id: '03', label: 'The Encounter' },
-  { id: '04', label: 'Coexistence' },
-  { id: '05', label: 'Impermanence' },
-  { id: '06', label: 'Revelation' },
+  { id: '01', label: 'Origin', trace: 'Origin' },
+  { id: '02', label: 'The Proposition', trace: 'Proposition' },
+  { id: '03', label: 'The Encounter', trace: 'Encounter' },
+  { id: '04', label: 'Coexistence', trace: 'Coexistence' },
+  { id: '05', label: 'Impermanence', trace: 'Impermanence' },
+  { id: '06', label: 'Revelation', trace: 'Revelation' },
+]
+
+/**
+ * Origin keyword panels — edit copy / stills here.
+ * Image sources: docs/assets/image/memory.jpg, morality.jpg, Existence.jpg
+ */
+const ORIGIN_KEYWORDS = [
+  {
+    id: 'memory',
+    label: 'Memory',
+    image: keywordMemoryStill,
+    imageAlt: 'A hand holding a Polaroid of a shared past — Blade Runner',
+    bladeRunner:
+      "Rachael's implanted memories shape her sense of identity, even though her past is not truly her own.",
+    interpretation:
+      'Memory does not simply preserve the past. It shapes how a life understands itself and responds to the world.',
+    translation: 'Past interactions → Persistent traces → Future responses',
+  },
+  {
+    id: 'mortality',
+    label: 'Mortality',
+    image: keywordMortalityStill,
+    imageAlt: 'Roy Batty in his final moments holding a dove — Blade Runner',
+    bladeRunner:
+      "Replicants are created with limited lifespans. Roy Batty's final moments reveal the fragility and significance of a finite life.",
+    interpretation:
+      'A life becomes meaningful not because it lasts forever, but because its existence is temporary and irreversible.',
+    translation: 'Birth → Growth → Decay → Death',
+  },
+  {
+    id: 'existence',
+    label: 'Existence',
+    image: keywordExistenceStill,
+    imageAlt: 'Rachael and Deckard — Blade Runner',
+    bladeRunner:
+      'The boundary between humans and replicants becomes increasingly uncertain, questioning what makes a life truly real.',
+    interpretation:
+      'An artificial life does not need to resemble a human or a natural organism to evoke empathy, curiosity, or attachment.',
+    translation: 'Autonomy → Interaction → Emotional connection',
+  },
 ]
 
 function HeadingLines({ as: Tag = 'h2', id, lines, className = '' }) {
@@ -75,14 +133,141 @@ function PanelCaption({ children }) {
  */
 export default function ConceptPage({ header }) {
   const { hidden, scrolled, scrollerRef } = useAutoHideHeader()
+  const reducedMotion = usePrefersReducedMotion()
   const [cinematic, setCinematic] = useState(true)
   const [activeId, setActiveId] = useState('01')
   const [scroller, setScroller] = useState(null)
+  const [activeKeywordId, setActiveKeywordId] = useState(null)
+  const [keywordFade, setKeywordFade] = useState(false)
+  /* 'playing' | 'settled' — cinematic hero open; settled matches static hero */
+  const [heroIntro, setHeroIntro] = useState(() =>
+    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+      ? 'settled'
+      : 'playing',
+  )
+  const keywordPanelRef = useRef(null)
+  const keywordsRef = useRef(null)
+  const keywordFadeTimer = useRef(null)
 
   const bindScroller = (node) => {
     setScroller(node)
     scrollerRef(node)
   }
+
+  const activeKeyword =
+    ORIGIN_KEYWORDS.find((k) => k.id === activeKeywordId) ?? null
+
+  const closeKeywordPanel = () => {
+    setActiveKeywordId(null)
+    setKeywordFade(false)
+  }
+
+  const openKeyword = (id) => {
+    if (keywordFadeTimer.current) {
+      window.clearTimeout(keywordFadeTimer.current)
+      keywordFadeTimer.current = null
+    }
+    if (id === activeKeywordId) {
+      closeKeywordPanel()
+      return
+    }
+    if (activeKeywordId) {
+      setKeywordFade(true)
+      keywordFadeTimer.current = window.setTimeout(() => {
+        setActiveKeywordId(id)
+        setKeywordFade(false)
+        keywordFadeTimer.current = null
+      }, 180)
+      return
+    }
+    setActiveKeywordId(id)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (keywordFadeTimer.current) window.clearTimeout(keywordFadeTimer.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setHeroIntro('settled')
+      return undefined
+    }
+    if (heroIntro !== 'playing') return undefined
+    const settle = window.setTimeout(() => setHeroIntro('settled'), 4800)
+    return () => window.clearTimeout(settle)
+  }, [heroIntro, reducedMotion])
+
+  useEffect(() => {
+    if (!activeKeywordId) return undefined
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') closeKeywordPanel()
+    }
+
+    const onPointerDown = (event) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (keywordPanelRef.current?.contains(target)) return
+      if (keywordsRef.current?.contains(target)) return
+      closeKeywordPanel()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [activeKeywordId])
+
+  /* Align panel top to the heading; expand left toward the intro body. */
+  useLayoutEffect(() => {
+    if (!activeKeywordId) return undefined
+
+    const heading = document.getElementById('concept-01-heading')
+    const inner = heading?.closest('.concept-hero-inner')
+    const copy = heading?.closest('.concept-hero-copy')
+    const body = copy?.querySelector('.concept-body--hero')
+    const panel = keywordPanelRef.current
+    if (!heading || !inner || !panel) return undefined
+
+    const syncPosition = () => {
+      const innerRect = inner.getBoundingClientRect()
+      const headingRect = heading.getBoundingClientRect()
+      const bodyRect = body?.getBoundingClientRect()
+      const copyRect = copy?.getBoundingClientRect() ?? headingRect
+      const panelWidth = panel.offsetWidth || 680
+
+      const top = headingRect.top - innerRect.top
+      const gap = 20
+      /* Sit just right of the intro paragraph so the panel grows into the center gap. */
+      const preferredLeft = bodyRect
+        ? bodyRect.right - innerRect.left + gap
+        : copyRect.right - innerRect.left + gap
+      const maxLeft = Math.max(0, innerRect.width - panelWidth - 12)
+      const left = Math.min(Math.max(preferredLeft, 0), maxLeft)
+
+      panel.style.top = `${Math.round(top)}px`
+      panel.style.left = `${Math.round(left)}px`
+    }
+
+    syncPosition()
+    const raf = window.requestAnimationFrame(syncPosition)
+    const ro = new ResizeObserver(syncPosition)
+    ro.observe(inner)
+    if (copy) ro.observe(copy)
+    if (body) ro.observe(body)
+    ro.observe(panel)
+    window.addEventListener('resize', syncPosition)
+
+    return () => {
+      window.cancelAnimationFrame(raf)
+      ro.disconnect()
+      window.removeEventListener('resize', syncPosition)
+    }
+  }, [activeKeywordId])
 
   useEffect(() => {
     if (!scroller) return undefined
@@ -133,6 +318,13 @@ export default function ConceptPage({ header }) {
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  const activeIndex = Math.max(
+    0,
+    SECTIONS.findIndex((s) => s.id === activeId),
+  )
+  const traceProgress =
+    SECTIONS.length > 1 ? activeIndex / (SECTIONS.length - 1) : 0
+
   const hudClass = ['concept-hud', cinematic ? 'is-cinematic' : '']
     .filter(Boolean)
     .join(' ')
@@ -143,31 +335,54 @@ export default function ConceptPage({ header }) {
         {header}
       </SiteHud>
 
-      <nav className="concept-side-nav" aria-label="Concept sections">
-        {SECTIONS.map((section) => (
-          <button
-            key={section.id}
-            type="button"
-            className={activeId === section.id ? 'is-active' : ''}
-            aria-current={activeId === section.id ? 'true' : undefined}
-            aria-label={`${section.id} ${section.label}`}
-            onClick={() => jumpTo(section.id)}
-          >
-            {section.id}
-          </button>
-        ))}
+      <nav
+        className="concept-side-nav"
+        aria-label="Concept sections"
+        style={{ '--trace-progress': String(traceProgress) }}
+      >
+        <div className="concept-side-nav__rail" aria-hidden="true">
+          <span className="concept-side-nav__rail-track" />
+          <span className="concept-side-nav__rail-progress" />
+        </div>
+        <ol className="concept-side-nav__list">
+          {SECTIONS.map((section) => {
+            const active = activeId === section.id
+            return (
+              <li key={section.id}>
+                <button
+                  type="button"
+                  className={`concept-side-nav__item${active ? ' is-active' : ''}`}
+                  aria-current={active ? 'true' : undefined}
+                  aria-label={`${section.id} ${section.label}`}
+                  onClick={() => jumpTo(section.id)}
+                >
+                  <span className="concept-side-nav__label">{section.trace}</span>
+                  <span className="concept-side-nav__node" aria-hidden="true" />
+                </button>
+              </li>
+            )
+          })}
+        </ol>
       </nav>
 
       <div className="concept" ref={bindScroller}>
         {/* 01 — Origin (unchanged cinematic hero) */}
         <section
           id="concept-01"
-          className="concept-hero"
+          className={`concept-hero${
+            heroIntro === 'playing' ? ' is-intro-playing' : ' is-intro-settled'
+          }`}
           aria-labelledby="concept-01-heading"
         >
           <div className="concept-hero-bg" aria-hidden="true">
             <img src={heroShot} alt="" decoding="async" />
             <div className="concept-hero-veil" />
+            {heroIntro === 'playing' ? (
+              <>
+                <div className="concept-hero-intro__night" />
+                <div className="concept-hero-intro__glass" />
+              </>
+            ) : null}
           </div>
 
           <div className="concept-hero-inner">
@@ -184,20 +399,98 @@ export default function ConceptPage({ header }) {
                 lives with finite time, fragile memory, and the need to mean something before they
                 disappear.
               </p>
-              <ul className="concept-keywords">
-                <li>Memory</li>
-                <li>Mortality</li>
-                <li>Existence</li>
-              </ul>
+              <div className="concept-keywords" ref={keywordsRef}>
+                <p className="concept-keywords__hint">Select a concept</p>
+                <ul className="concept-keywords__list">
+                  {ORIGIN_KEYWORDS.map((keyword) => {
+                    const selected = keyword.id === activeKeywordId
+                    return (
+                      <li key={keyword.id}>
+                        <button
+                          type="button"
+                          className={`concept-keyword${selected ? ' is-active' : ''}`}
+                          aria-pressed={selected}
+                          aria-expanded={selected}
+                          aria-controls="concept-keyword-panel"
+                          onClick={() => openKeyword(keyword.id)}
+                        >
+                          <span className="concept-keyword__label">{keyword.label}</span>
+                          <span className="concept-keyword__mark" aria-hidden="true">
+                            {selected ? '−' : '+'}
+                          </span>
+                          <span className="concept-keyword__rule" aria-hidden="true" />
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
             </div>
 
-            <aside className="concept-hero-quote">
-              <blockquote>
-                “All those moments will be lost in time, like tears in rain.”
-              </blockquote>
-              <p className="concept-cite">Roy Batty / Blade Runner (1982)</p>
-            </aside>
+            {activeKeyword ? (
+              <aside
+                id="concept-keyword-panel"
+                ref={keywordPanelRef}
+                className={`concept-keyword-panel${keywordFade ? ' is-fading' : ''}`}
+                role="dialog"
+                aria-modal="false"
+                aria-label={`${activeKeyword.label} concept note`}
+              >
+                <button
+                  type="button"
+                  className="concept-keyword-panel__close"
+                  aria-label="Close keyword panel"
+                  onClick={closeKeywordPanel}
+                >
+                  ×
+                </button>
+
+                <div className="concept-keyword-panel__layout" key={activeKeyword.id}>
+                  <figure className="concept-keyword-panel__still">
+                    <img
+                      src={activeKeyword.image}
+                      alt={activeKeyword.imageAlt}
+                      decoding="async"
+                    />
+                  </figure>
+
+                  <div className="concept-keyword-panel__copy">
+                    <p className="concept-keyword-panel__meta">Concept / 01</p>
+                    <h2 className="concept-keyword-panel__title">{activeKeyword.label}</h2>
+
+                    <section className="concept-keyword-panel__block">
+                      <p className="concept-keyword-panel__kicker">In Blade Runner</p>
+                      <p className="concept-keyword-panel__text">
+                        {activeKeyword.bladeRunner}
+                      </p>
+                    </section>
+
+                    <section className="concept-keyword-panel__block">
+                      <p className="concept-keyword-panel__kicker">My Interpretation</p>
+                      <p className="concept-keyword-panel__text">
+                        {activeKeyword.interpretation}
+                      </p>
+                    </section>
+
+                    <section className="concept-keyword-panel__block">
+                      <p className="concept-keyword-panel__kicker">Design Translation</p>
+                      <p className="concept-keyword-panel__translation">
+                        {activeKeyword.translation}
+                      </p>
+                    </section>
+                  </div>
+                </div>
+              </aside>
+            ) : null}
           </div>
+
+          {/* Anchored to .concept-hero (not .concept-hero-inner) so bottom-right stays viewport-relative */}
+          <aside className="concept-hero-quote">
+            <blockquote>
+              “All those moments will be lost in time, like tears in rain.”
+            </blockquote>
+            <p className="concept-cite">Roy Batty / Blade Runner (1982)</p>
+          </aside>
         </section>
 
         <div className="concept-story">

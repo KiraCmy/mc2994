@@ -17,6 +17,27 @@ export const PLAYGROUND_EXPERIMENTS = [
     description:
       'Two autonomous procedural organisms share one 3D scene and camera while keeping independent Life Engines, AGE, seeds, crystals, and local stimuli. Environmental coupling between A and B is not introduced yet.',
   },
+  {
+    id: '03',
+    label: 'Experiment 03',
+    title: 'Agent Behaviors',
+    description:
+      'Multi-scale agent studies for BORN ANOTHER. Study 01 is a Crystal Growth Agent Lab: membrane frozen at a reference AGE, Growth Time drives crystal evolution only, fixed observation camera. Agent FSM / competition not enabled yet. Studies 02–03 are placeholders.',
+  },
+  {
+    id: '04',
+    label: 'Experiment 04',
+    title: 'Morphology Lab',
+    description:
+      'Compare Flattened, Spiral, and Segmented rest shapes in one WorldViewport. Silhouette comes from injectable radial radius fields; membrane deformation, growth sites, and crystals stay on the existing World pipeline.',
+  },
+  {
+    id: '05',
+    label: 'Experiment 05',
+    title: 'Final Form Lab',
+    description:
+      'Phase C2: World morphology shapes the body while Explore fragment shading keeps the ethereal look. Lab controls tune petals, particles, and morph strength. Original Explore remains a visual reference.',
+  },
 ]
 
 export const DEFAULT_PLAYGROUND_EXPERIMENT_ID = PLAYGROUND_EXPERIMENTS[0].id

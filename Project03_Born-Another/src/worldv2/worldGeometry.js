@@ -291,8 +291,18 @@ function buildCrystalGrowths(field, seed) {
   return { outside, inside, minerals, anchors: anchorData }
 }
 
-export function createWorldGeometry(seed = WORLD_V2_SEED) {
-  const field = makeField(seed)
+/**
+ * @param {number} [seed]
+ * @param {{ radiusAt?: (direction: import('three').Vector3) => number }} [options]
+ *        Optional rest-shape override (Playground Morphology Lab). When omitted,
+ *        World / default seed field is unchanged.
+ */
+export function createWorldGeometry(seed = WORLD_V2_SEED, options = {}) {
+  const base = makeField(seed)
+  const field =
+    typeof options?.radiusAt === 'function'
+      ? { random: base.random, radiusAt: options.radiusAt }
+      : base
   const surface = buildBodyGeometry(field)
   const growths = buildCrystalGrowths(field, seed)
   return {

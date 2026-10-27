@@ -3,6 +3,9 @@ import SiteHud from '../SiteHud.jsx'
 import { useAutoHideHeader } from '../useAutoHideHeader.js'
 import Experiment01 from './Experiment01.jsx'
 import Experiment02 from './Experiment02.jsx'
+import Experiment03 from './Experiment03.jsx'
+import Experiment04 from './Experiment04.jsx'
+import Experiment05 from './Experiment05.jsx'
 import {
   DEFAULT_PLAYGROUND_EXPERIMENT_ID,
   getPlaygroundExperiment,
@@ -13,6 +16,9 @@ import './playground.css'
 const EXPERIMENT_VIEWS = {
   '01': Experiment01,
   '02': Experiment02,
+  '03': Experiment03,
+  '04': Experiment04,
+  '05': Experiment05,
 }
 
 export default function PlaygroundPage({ header }) {
@@ -22,8 +28,12 @@ export default function PlaygroundPage({ header }) {
   const experiment = getPlaygroundExperiment(activeId)
   const View = EXPERIMENT_VIEWS[experiment.id] ?? Experiment01
 
+  const isExp05 = experiment.id === '05'
+
   return (
-    <div className="playground-page">
+    <div
+      className={`playground-page${isExp05 ? ' playground-page--exp05' : ''}`}
+    >
       <SiteHud
         className="playground-page__hud"
         hidden={hidden}
