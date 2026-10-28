@@ -1,29 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { WorldViewport } from '../worldv2/WorldViewport.jsx'
+import { useCallback, useEffect, useState } from 'react'
 import { useLifeEngine } from '../worldv2/life/useLifeEngine.js'
-import { WORLD_V2_SEED } from '../worldv2/worldGeometry.js'
-import '../worldv2/worldV2.css'
+import CrystalAgentInspector from './agentBehaviors/CrystalAgentInspector.jsx'
+import CrystalAgentsStaticScene from './agentBehaviors/CrystalAgentsStaticScene.jsx'
+import { useCrystalAgentSim } from './agentBehaviors/useCrystalAgentSim.js'
+import { CRYSTAL_AGENT_DEFAULTS } from './agentBehaviors/crystalAgentTypes.js'
 import {
-  MEMBRANE_FREEZE_AGE,
-  captureMembraneFreeze,
-  composeFrozenMembraneLife,
-  describeGrowthFocus,
-  listGrowthSites,
-  selectStableGrowthCluster,
-} from './agentBehaviors/growthFocus.js'
-
-const BACKGROUND_STUDY = 'dark'
-const LIFE_SEED = WORLD_V2_SEED
-
-/**
- * Crystal-focused inspect framing: close enough that clusters dominate;
- * organism silhouette stays mostly out of frame. User orbit / pan / zoom.
- */
-const MACRO_RADIUS = 1.72
-const MACRO_RADIUS_MIN = 0.95
-const MACRO_RADIUS_MAX = 3.15
-/** Approximate membrane radius at freeze AGE — seeds pivot before mesh settle. */
-const CLUSTER_PIVOT_RADIUS = 1.3
+  EXP05_LIFE_SEED,
+  EXP05_OBSERVE_AGE,
+} from './finalForm/exploreLifeAdapter.js'
+import {
+  EXP05_COMPOSITION_MODES,
+  EXP05_LAB_DEFAULTS,
+  normalizeExp05LabParams,
+} from './finalForm/exp05LabParams.js'
 
 const STUDIES = [
   {
@@ -32,7 +21,7 @@ const STUDIES = [
     title: 'Crystal Agents',
     status: 'active',
     blurb:
-      'Baseline growth lab: frozen membrane, live crystal growth, free inspect camera.',
+      'Autonomous crystal growth agents on the Exp05 membrane — FSM + moisture.',
   },
   {
     id: 'organism-agents',
@@ -50,491 +39,158 @@ const STUDIES = [
   },
 ]
 
-function sphericalFromDirection(direction, radius) {
-  const x = Number(direction?.[0]) || 0
-  const y = Number(direction?.[1]) || 0
-  const z = Number(direction?.[2]) || 1
-  const len = Math.hypot(x, y, z) || 1
-  const nx = x / len
-  const ny = y / len
-  const nz = z / len
-  return {
-    theta: Math.atan2(nx, nz),
-    phi: Math.acos(Math.min(1, Math.max(-1, ny))),
-    radius,
-    revision: 0,
-  }
-}
-
-function createInspectOrbitState(direction) {
-  return sphericalFromDirection(direction ?? [0.2, 0.55, 0.8], MACRO_RADIUS)
-}
-
-function pivotFromDirection(direction, radius = CLUSTER_PIVOT_RADIUS) {
-  const x = Number(direction?.[0]) || 0
-  const y = Number(direction?.[1]) || 0
-  const z = Number(direction?.[2]) || 1
-  const len = Math.hypot(x, y, z) || 1
-  return [(x / len) * radius, (y / len) * radius, (z / len) * radius]
-}
-
-function copyOrbitState(orbit) {
-  return {
-    theta: orbit.theta,
-    phi: orbit.phi,
-    radius: orbit.radius,
-    revision: orbit.revision ?? 0,
-  }
-}
-
-function cameraPositionFromOrbit(orbit, pivot = [0, 0, 0]) {
-  const sinPhi = Math.sin(orbit.phi)
-  return [
-    pivot[0] + orbit.radius * sinPhi * Math.sin(orbit.theta),
-    pivot[1] + orbit.radius * Math.cos(orbit.phi),
-    pivot[2] + orbit.radius * sinPhi * Math.cos(orbit.theta),
-  ]
-}
-
-function zoomPercentFromRadius(radius) {
-  const t =
-    (MACRO_RADIUS_MAX - radius) / (MACRO_RADIUS_MAX - MACRO_RADIUS_MIN)
-  return Math.round(Math.min(1, Math.max(0, t)) * 100)
-}
-
-function radiusFromZoomPercent(percent) {
-  const t = Math.min(1, Math.max(0, Number(percent) || 0) / 100)
-  return MACRO_RADIUS_MAX - t * (MACRO_RADIUS_MAX - MACRO_RADIUS_MIN)
-}
-
 function StudyPlaceholder({ study }) {
   return (
-    <div
-      className="playground-experiment__study-placeholder"
-      role="status"
-      aria-live="polite"
-    >
-      <p className="playground-experiment__controls-label">
+    <div className="exp03-panel exp03-panel--placeholder" role="status">
+      <p className="exp03-panel__label">
         {study.label} — {study.title}
       </p>
-      <p className="playground-experiment__controls-note">{study.blurb}</p>
-      <p className="playground-experiment__placeholder">Coming soon</p>
+      <p className="exp03-panel__note">{study.blurb}</p>
+      <p className="exp03-panel__hint">Coming soon</p>
     </div>
   )
 }
 
+/**
+ * Study 01 — Crystal Agent MVP: FSM growth on frozen Exp05 membrane.
+ */
 function CrystalAgentsStudy() {
-  const [cameraEpoch, setCameraEpoch] = useState(0)
-  const [zoomPercent, setZoomPercent] = useState(
-    () => zoomPercentFromRadius(MACRO_RADIUS),
+  const { life, seekToAge, setPlaying, setMoistureAtStep } =
+    useLifeEngine(EXP05_LIFE_SEED)
+  const [lab] = useState(() =>
+    normalizeExp05LabParams({
+      ...EXP05_LAB_DEFAULTS,
+      compositionMode: EXP05_COMPOSITION_MODES.BODY,
+    }),
   )
-  /** Locked once after membrane freeze — never re-picked while studying. */
-  const [lockedCluster, setLockedCluster] = useState(null)
-  const [selectedSiteIds, setSelectedSiteIds] = useState([])
-  const [membraneFreeze, setMembraneFreeze] = useState(null)
-  const defaultPivot = pivotFromDirection([0.25, 0.45, 0.85])
-  const orbitPivotRef = useRef([...defaultPivot])
-  const sharedOrbitRef = useRef(createInspectOrbitState([0.25, 0.45, 0.85]))
-  /** Crystal-focused home view for Reset Camera (orbit + pivot). */
-  const initialViewRef = useRef({
-    orbit: copyOrbitState(sharedOrbitRef.current),
-    pivot: [...defaultPivot],
-  })
-  const clusterLockedRef = useRef(false)
-  const membraneCapturedRef = useRef(false)
-  const pivotSettledRef = useRef(false)
+  const [cameraEpoch, setCameraEpoch] = useState(0)
+  const [agentSeed, setAgentSeed] = useState(EXP05_LIFE_SEED)
+  const [agentPlaying, setAgentPlaying] = useState(true)
+  const [moisture, setMoisture] = useState(
+    () => life.environment?.moisture ?? CRYSTAL_AGENT_DEFAULTS.moisture,
+  )
 
-  const {
-    life,
-    playing,
-    togglePlaying,
-    restart,
-    seekToAge,
-    setPlaying,
-  } = useLifeEngine(LIFE_SEED)
-
-  /* Park at membrane freeze AGE, paused — capture form snapshot once. */
   useEffect(() => {
-    seekToAge(MEMBRANE_FREEZE_AGE, { resume: false })
+    seekToAge(EXP05_OBSERVE_AGE, { resume: false })
     setPlaying(false)
     return () => setPlaying(false)
   }, [seekToAge, setPlaying])
 
+  /*
+   * Sync life env moisture once for infrastructure reuse (no AGE rebuild).
+   * Agent sim owns the live moisture signal; avoid per-frame life identity churn
+   * that rebuilt crystal seating while agents were growing.
+   */
   useEffect(() => {
-    if (membraneCapturedRef.current) return
-    if (Math.abs(life.age - MEMBRANE_FREEZE_AGE) > 0.02) return
-    const freeze = captureMembraneFreeze(life)
-    if (!freeze) return
-    membraneCapturedRef.current = true
-    setMembraneFreeze(freeze)
+    setMoistureAtStep(moisture)
+  }, [moisture, setMoistureAtStep])
 
-    if (clusterLockedRef.current) return
-    const cluster = selectStableGrowthCluster(life, {
-      maxSites: 5,
-      minDot: 0.62,
-      preferCount: 4,
-    })
-    if (!cluster.siteIds.length) return
-    clusterLockedRef.current = true
-    pivotSettledRef.current = false
-    const orbit = createInspectOrbitState(cluster.direction)
-    const pivot = pivotFromDirection(cluster.direction)
-    sharedOrbitRef.current = { ...orbit, revision: 1 }
-    orbitPivotRef.current = [...pivot]
-    initialViewRef.current = {
-      orbit: copyOrbitState(sharedOrbitRef.current),
-      pivot: [...pivot],
-    }
-    setZoomPercent(zoomPercentFromRadius(orbit.radius))
-    setLockedCluster(cluster)
-    setSelectedSiteIds(cluster.siteIds)
-    setCameraEpoch((n) => n + 1)
-  }, [life])
-
-  const displayLife = useMemo(
-    () => composeFrozenMembraneLife(life, membraneFreeze),
-    [life, membraneFreeze],
-  )
-
-  const focus = useMemo(
-    () =>
-      describeGrowthFocus(
-        life,
-        lockedCluster?.siteIds,
-        lockedCluster?.anchorSiteId,
-      ),
-    [life, lockedCluster],
-  )
-
-  const allSites = useMemo(() => listGrowthSites(life), [life])
-  const totalSiteCount = allSites.length
-  const visibleSelected = selectedSiteIds.filter((id) =>
-    focus.presentIds?.includes(id),
-  )
-
-  const startCamera = useMemo(
-    () =>
-      cameraPositionFromOrbit(
-        sharedOrbitRef.current,
-        orbitPivotRef.current,
-      ),
-    [cameraEpoch],
-  )
-
-  const handleFollowPivotSettled = useCallback((pivot) => {
-    if (!Array.isArray(pivot) || pivot.length < 3) return
-    orbitPivotRef.current = [pivot[0], pivot[1], pivot[2]]
-    if (!pivotSettledRef.current) {
-      pivotSettledRef.current = true
-      initialViewRef.current = {
-        orbit: copyOrbitState(sharedOrbitRef.current),
-        pivot: [pivot[0], pivot[1], pivot[2]],
-      }
-    }
-  }, [])
-
-  const handleTogglePlay = useCallback(() => {
-    togglePlaying()
-  }, [togglePlaying])
-
-  const handleRestart = useCallback(() => {
-    clusterLockedRef.current = false
-    membraneCapturedRef.current = false
-    pivotSettledRef.current = false
-    setLockedCluster(null)
-    setSelectedSiteIds([])
-    setMembraneFreeze(null)
-    const orbit = createInspectOrbitState([0.25, 0.45, 0.85])
-    const pivot = pivotFromDirection([0.25, 0.45, 0.85])
-    sharedOrbitRef.current = { ...orbit, revision: 1 }
-    orbitPivotRef.current = [...pivot]
-    initialViewRef.current = {
-      orbit: copyOrbitState(sharedOrbitRef.current),
-      pivot: [...pivot],
-    }
-    setZoomPercent(zoomPercentFromRadius(MACRO_RADIUS))
-    setCameraEpoch((n) => n + 1)
-    restart({ clearEnvironment: true })
-    seekToAge(MEMBRANE_FREEZE_AGE, { resume: false })
-  }, [restart, seekToAge])
+  const {
+    sim,
+    growthByPieceId,
+    getGrowthMap,
+    diagnostics,
+    meanProgress,
+    scrubProgress,
+    reset,
+  } = useCrystalAgentSim({
+    agentSeed,
+    moisture,
+    playing: agentPlaying,
+  })
 
   const handleResetCamera = useCallback(() => {
-    const home = initialViewRef.current
-    const direction = lockedCluster?.direction ?? [0.25, 0.45, 0.85]
-    const orbit = home?.orbit
-      ? { ...copyOrbitState(home.orbit) }
-      : createInspectOrbitState(direction)
-    const pivot = home?.pivot ? [...home.pivot] : pivotFromDirection(direction)
-    sharedOrbitRef.current = {
-      ...orbit,
-      revision: (sharedOrbitRef.current?.revision ?? 0) + 1,
-    }
-    orbitPivotRef.current = pivot
-    setZoomPercent(zoomPercentFromRadius(orbit.radius))
-  }, [lockedCluster])
+    setCameraEpoch((n) => n + 1)
+  }, [])
 
-  const handleSeekGrowthTime = useCallback(
-    (growthTime) => {
-      seekToAge(growthTime, { resume: false })
+  const handleResetSim = useCallback(() => {
+    reset()
+  }, [reset])
+
+  const handleTogglePlay = useCallback(() => {
+    setAgentPlaying((p) => !p)
+  }, [])
+
+  const handleSeedChange = useCallback((seed) => {
+    setAgentSeed(seed)
+    setAgentPlaying(true)
+  }, [])
+
+  const handleMoistureChange = useCallback((value) => {
+    setMoisture(value)
+  }, [])
+
+  const handleProgressChange = useCallback(
+    (value) => {
+      setAgentPlaying(false)
+      scrubProgress(value)
     },
-    [seekToAge],
+    [scrubProgress],
   )
 
-  const handleZoom = useCallback((percent) => {
-    const radius = radiusFromZoomPercent(percent)
-    const orbit = sharedOrbitRef.current
-    sharedOrbitRef.current = {
-      ...orbit,
-      radius,
-      revision: (orbit?.revision ?? 0) + 1,
-    }
-    setZoomPercent(percent)
-  }, [])
-
-  const toggleSite = useCallback((siteId) => {
-    setSelectedSiteIds((current) => {
-      if (current.includes(siteId)) {
-        if (current.length <= 1) return current
-        return current.filter((id) => id !== siteId)
-      }
-      return [...current, siteId].sort((a, b) => a - b)
-    })
-  }, [])
-
-  const membraneReady = Boolean(membraneFreeze)
-  const growthTime = life.age
-
   return (
-    <div className="playground-experiment__workspace playground-experiment__workspace--exp03">
-      <div className="playground-experiment__stage">
-        <section
-          className="playground-experiment__scene playground-experiment__scene--live playground-experiment__scene--exp03"
-          aria-label="Crystal Agents growth lab viewport"
-        >
-          <WorldViewport
-            key={cameraEpoch}
-            className="playground-experiment__viewport"
-            view="exterior"
-            life={displayLife}
-            onStimulus={() => {}}
-            backgroundStudy={BACKGROUND_STUDY}
-            onCameraReset={handleResetCamera}
-            sharedOrbitRef={sharedOrbitRef}
-            orbitPivotRef={orbitPivotRef}
-            orbitRadiusMin={MACRO_RADIUS_MIN}
-            orbitRadiusMax={MACRO_RADIUS_MAX}
-            cameraPosition={startCamera}
-            autoRotate={false}
-            breathAmplitude={0}
-            followGrowthSiteIds={lockedCluster?.siteIds ?? null}
-            followGrowthSiteMode="once"
-            onFollowPivotSettled={handleFollowPivotSettled}
-            visibleGrowthSiteIds={
-              selectedSiteIds.length ? selectedSiteIds : null
-            }
-            exteriorControlMode="inspect"
-          />
-          <div className="playground-experiment__scene-chrome playground-experiment__scene-chrome--exp03">
-            <div className="playground-experiment__scene-hud">
-              <button type="button" onClick={handleTogglePlay}>
-                {life.dead ? 'Ended' : playing ? 'Pause' : 'Play'}
-              </button>
-              <button type="button" onClick={handleRestart}>
-                Reset
-              </button>
-              <button type="button" aria-pressed={membraneReady} disabled>
-                Freeze Membrane
-              </button>
-              <button type="button" onClick={handleResetCamera}>
-                Reset Camera
-              </button>
-            </div>
-            <div className="playground-experiment__exp03-sliders">
-              <label className="playground-experiment__timeline">
-                <span className="playground-experiment__timeline-labels">
-                  <span>Growth Time</span>
-                  <span>{growthTime.toFixed(2)} / 1.00</span>
-                </span>
-                <input
-                  className="playground-experiment__timeline-range"
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.001}
-                  value={growthTime}
-                  aria-valuemin={0}
-                  aria-valuemax={1}
-                  aria-valuenow={Number(growthTime.toFixed(3))}
-                  aria-valuetext={`Growth time ${growthTime.toFixed(3)}`}
-                  onChange={(event) =>
-                    handleSeekGrowthTime(Number(event.target.value))
-                  }
-                />
-              </label>
-              <label className="playground-experiment__timeline playground-experiment__timeline--zoom">
-                <span className="playground-experiment__timeline-labels">
-                  <span>Zoom</span>
-                  <span>{zoomPercent}%</span>
-                </span>
-                <input
-                  className="playground-experiment__timeline-range"
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={zoomPercent}
-                  aria-valuetext={`Zoom ${zoomPercent} percent`}
-                  onChange={(event) => handleZoom(Number(event.target.value))}
-                />
-              </label>
-            </div>
-          </div>
-        </section>
+    <div className="exp03-immerse">
+      <CrystalAgentsStaticScene
+        key={cameraEpoch}
+        life={life}
+        lab={lab}
+        className="exp03-viewport"
+        planSeed={agentSeed}
+        growthByPieceId={growthByPieceId}
+        getGrowthMap={getGrowthMap}
+      />
+
+      <div className="exp03-intro">
+        <p className="exp03-intro__eyebrow">
+          Playground · Experiment 03 · Study 01
+        </p>
+        <p className="exp03-intro__title">Crystal Agents</p>
+        <p className="exp03-intro__desc">
+          Primary growth nodes act as autonomous agents (Dormant → Growing →
+          Branching / Stressed / Decaying). Secondary and tertiary crystals
+          emerge over time. Membrane AGE stays frozen at{' '}
+          {EXP05_OBSERVE_AGE.toFixed(2)}.
+        </p>
       </div>
 
-      <aside
-        className="playground-experiment__controls playground-experiment__controls--exp03"
-        aria-label="Crystal Agents baseline controls"
-      >
-        <p className="playground-experiment__controls-label">
-          Study 01 — Crystal Agents
-        </p>
-        <p className="playground-experiment__controls-title">
-          Baseline Growth Experiment
-        </p>
-        <p className="playground-experiment__controls-note">
-          Observe crystal growth on a fixed membrane surface. Membrane and
-          environment stay constant. Only crystal growth evolves with Growth
-          Time. Camera is fully user-controlled and never auto-reframes.
-        </p>
+      <CrystalAgentInspector
+        sim={sim}
+        agentSeed={agentSeed}
+        moisture={moisture}
+        playing={agentPlaying}
+        progress={meanProgress}
+        diagnostics={diagnostics}
+        onTogglePlay={handleTogglePlay}
+        onReset={handleResetSim}
+        onSeedChange={handleSeedChange}
+        onMoistureChange={handleMoistureChange}
+        onProgressChange={handleProgressChange}
+      />
 
-        <div className="playground-experiment__exp03-section">
-          <p className="playground-experiment__exp03-section-label">
-            Fixed conditions
-          </p>
-          <dl className="playground-experiment__coupling-readout">
-            <div>
-              <dt>Membrane (AGE)</dt>
-              <dd>
-                Fixed ({MEMBRANE_FREEZE_AGE.toFixed(2)})
-                {membraneReady ? '' : ' · capturing…'}
-              </dd>
-            </div>
-            <div>
-              <dt>Environment</dt>
-              <dd>Constant</dd>
-            </div>
-            <div>
-              <dt>Agent Behavior</dt>
-              <dd>Not enabled</dd>
-            </div>
-            <div>
-              <dt>Camera</dt>
-              <dd>Inspect (orbit / pan / zoom)</dd>
-            </div>
-          </dl>
+      <div className="exp03-chrome">
+        <div className="exp03-chrome__actions">
+          <button type="button" onClick={handleTogglePlay}>
+            {agentPlaying ? 'Pause Agents' : 'Play Agents'}
+          </button>
+          <button type="button" onClick={handleResetSim}>
+            Reset Growth
+          </button>
+          <button type="button" onClick={handleResetCamera}>
+            Reset Camera
+          </button>
         </div>
-
-        <div className="playground-experiment__exp03-section">
-          <p className="playground-experiment__exp03-section-label">
-            Camera controls
-          </p>
-          <dl className="playground-experiment__coupling-readout">
-            <div>
-              <dt>Left drag</dt>
-              <dd>Orbit</dd>
-            </div>
-            <div>
-              <dt>Middle drag</dt>
-              <dd>Pan</dd>
-            </div>
-            <div>
-              <dt>Wheel</dt>
-              <dd>Zoom</dd>
-            </div>
-            <div>
-              <dt>Reset Camera</dt>
-              <dd>Home framing</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className="playground-experiment__exp03-section">
-          <p className="playground-experiment__exp03-section-label">
-            Evolving growth
-          </p>
-          <dl className="playground-experiment__coupling-readout">
-            <div>
-              <dt>Growth Time</dt>
-              <dd>
-                {growthTime.toFixed(2)} / 1.00
-              </dd>
-            </div>
-            <div>
-              <dt>Growth Sites (visible)</dt>
-              <dd>
-                {visibleSelected.length} / {Math.max(totalSiteCount, 1)}
-              </dd>
-            </div>
-            <div>
-              <dt>{focus.metricLabel}</dt>
-              <dd>{focus.metric.toFixed(3)}</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className="playground-experiment__exp03-section">
-          <p className="playground-experiment__exp03-section-label">
-            Selected sites
-          </p>
-          <ul className="playground-experiment__exp03-sites">
-            {(lockedCluster?.siteIds ?? []).map((siteId, index) => {
-              const present = focus.presentIds?.includes(siteId)
-              const checked = selectedSiteIds.includes(siteId)
-              return (
-                <li key={siteId}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleSite(siteId)}
-                    />
-                    <span
-                      className={`playground-experiment__exp03-site-dot playground-experiment__exp03-site-dot--${
-                        index % 3
-                      }`}
-                      aria-hidden
-                    />
-                    Site {String(siteId + 1).padStart(2, '0')}
-                    {!present ? ' · dormant' : ''}
-                  </label>
-                </li>
-              )
-            })}
-            {lockedCluster?.siteIds?.length ? (
-              <li className="playground-experiment__exp03-sites-other">
-                Other sites (hidden)
-              </li>
-            ) : (
-              <li className="playground-experiment__exp03-sites-other">
-                Locking cluster at membrane AGE {MEMBRANE_FREEZE_AGE.toFixed(2)}…
-              </li>
-            )}
-          </ul>
-        </div>
-
-        <p className="playground-experiment__controls-note">
-          In later studies: enable agent states (Growing / Dormant / Dying),
-          neighbor perception, and competition.
+        <p className="exp03-chrome__hint">
+          Left orbit · middle pan · wheel zoom · AGE frozen · agents{' '}
+          {agentPlaying ? 'live' : 'paused'}
         </p>
-      </aside>
+      </div>
     </div>
   )
 }
 
 /**
  * Experiment 03 — Agent Behaviors
- * Study 01 = Crystal Growth Agent Lab (baseline); Studies 02–03 placeholders.
+ * Study 01 = Crystal Agent MVP (FSM + moisture + inspector).
  */
 export default function Experiment03({ title, description }) {
   const [studyId, setStudyId] = useState(STUDIES[0].id)
@@ -542,14 +198,8 @@ export default function Experiment03({ title, description }) {
 
   return (
     <article className="playground-experiment playground-experiment--exp03">
-      <header className="playground-experiment__intro">
-        <p className="playground-experiment__eyebrow">Playground · Experiment 03</p>
-        <h1 className="playground-experiment__title">{title}</h1>
-        <p className="playground-experiment__desc">{description}</p>
-      </header>
-
       <div
-        className="playground-experiment__study-tabs"
+        className="exp03-study-tabs"
         role="tablist"
         aria-label="Experiment 03 studies"
       >
@@ -561,9 +211,9 @@ export default function Experiment03({ title, description }) {
               type="button"
               role="tab"
               aria-selected={active}
-              className={`playground-experiment__study-tab${
-                active ? ' is-active' : ''
-              }${item.status === 'placeholder' ? ' is-placeholder' : ''}`}
+              className={`exp03-study-tab${active ? ' is-active' : ''}${
+                item.status === 'placeholder' ? ' is-placeholder' : ''
+              }`}
               onClick={() => setStudyId(item.id)}
             >
               <span>{item.label}</span>
@@ -576,7 +226,14 @@ export default function Experiment03({ title, description }) {
       {study.status === 'active' ? (
         <CrystalAgentsStudy />
       ) : (
-        <StudyPlaceholder study={study} />
+        <>
+          <div className="exp03-intro">
+            <p className="exp03-intro__eyebrow">Playground · Experiment 03</p>
+            <p className="exp03-intro__title">{title}</p>
+            <p className="exp03-intro__desc">{description}</p>
+          </div>
+          <StudyPlaceholder study={study} />
+        </>
       )}
     </article>
   )

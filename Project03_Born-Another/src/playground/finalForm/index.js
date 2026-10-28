@@ -47,6 +47,16 @@ export {
   pearlescentMembraneV2FragmentShader,
 } from './exp05PearlescentMembraneV2.js'
 export {
+  createBiologicalMembraneMaterial,
+  createBiologicalMembraneUniforms,
+  biologicalMembraneFragmentShader,
+} from './exp05BiologicalMembrane.js'
+export {
+  createBiologicalMembraneV2Material,
+  createBiologicalMembraneV2Uniforms,
+  biologicalMembraneV2FragmentShader,
+} from './exp05BiologicalMembraneV2.js'
+export {
   EXP05_ENV_META,
   EXP05_ENV_MOISTURE_NEUTRAL,
   EXP05_ENV_TEMPERATURE_NEUTRAL,

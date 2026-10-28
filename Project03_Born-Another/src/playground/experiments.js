@@ -22,7 +22,7 @@ export const PLAYGROUND_EXPERIMENTS = [
     label: 'Experiment 03',
     title: 'Agent Behaviors',
     description:
-      'Multi-scale agent studies for BORN ANOTHER. Study 01 is a Crystal Growth Agent Lab: membrane frozen at a reference AGE, Growth Time drives crystal evolution only, fixed observation camera. Agent FSM / competition not enabled yet. Studies 02–03 are placeholders.',
+      'Multi-scale agent studies. Study 01 — Crystal Agents: autonomous FSM growth on the Exp05 membrane with moisture coupling and an inspector. Studies 02–03 placeholders.',
   },
   {
     id: '04',
@@ -36,7 +36,7 @@ export const PLAYGROUND_EXPERIMENTS = [
     label: 'Experiment 05',
     title: 'Final Form Lab',
     description:
-      'Phase C2: World morphology shapes the body while Explore fragment shading keeps the ethereal look. Lab controls tune petals, particles, and morph strength. Original Explore remains a visual reference.',
+      'Phase C2: World morphology + Explore ethereal look. Body material study — Biological Membrane (living tissue) with Pearlescent A/B. Lab tunes petals, particles, and morph strength.',
   },
 ]
 

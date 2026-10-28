@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import heroShot from '../assets/hero-shot.png'
 import concept02Fossil from '../assets/concept-02-fossil.jpg'
 import concept02Fossil2 from '../assets/concept-02-fossil2.jpg'
@@ -13,6 +14,7 @@ import concept06 from '../assets/concept-06.jpg'
 import keywordMemoryStill from '../assets/concept-keyword-memory.jpg'
 import keywordMortalityStill from '../assets/concept-keyword-mortality.jpg'
 import keywordExistenceStill from '../assets/concept-keyword-existence.jpg'
+import userJourneyDiagram from '../assets/concept-user-journey.png'
 import SiteHud from '../SiteHud.jsx'
 import { useAutoHideHeader } from '../useAutoHideHeader.js'
 import './concept.css'
@@ -39,7 +41,14 @@ const SECTIONS = [
   { id: '04', label: 'Coexistence', trace: 'Coexistence' },
   { id: '05', label: 'Impermanence', trace: 'Impermanence' },
   { id: '06', label: 'Revelation', trace: 'Revelation' },
+  { id: '07', label: 'Experience', trace: 'Experience' },
 ]
+
+/** User Journey diagram (docs/assets/image/userjounery.png). */
+const USER_JOURNEY_DIAGRAM = {
+  src: userJourneyDiagram,
+  alt: 'Born Another user journey — from encounter to coexistence, loss, and revelation',
+}
 
 /**
  * Origin keyword panels — edit copy / stills here.
@@ -125,6 +134,134 @@ function MediaSlot({ label, src, className = '' }) {
 
 function PanelCaption({ children }) {
   return <p className="concept-caption">{children}</p>
+}
+
+/**
+ * 07 — EXPERIENCE: collapsible User Journey accordion + optional lightbox.
+ * Image `src` is a single constant — swap the asset without restructuring.
+ */
+function UserJourneySection({ diagram, reducedMotion }) {
+  const [open, setOpen] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const panelId = 'concept-07-journey-panel'
+  const hasImage = Boolean(diagram?.src)
+
+  useEffect(() => {
+    if (!lightboxOpen) return undefined
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setLightboxOpen(false)
+    }
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [lightboxOpen])
+
+  const lightbox =
+    lightboxOpen && hasImage && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className="concept-journey-lightbox"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Enlarged user journey diagram"
+            onClick={() => setLightboxOpen(false)}
+          >
+            <button
+              type="button"
+              className="concept-journey-lightbox__close"
+              aria-label="Close enlarged view"
+              onClick={() => setLightboxOpen(false)}
+            >
+              ×
+            </button>
+            <img
+              src={diagram.src}
+              alt={diagram.alt}
+              className="concept-journey-lightbox__image"
+              onClick={(event) => event.stopPropagation()}
+            />
+          </div>,
+          document.body,
+        )
+      : null
+
+  return (
+    <section
+      id="concept-07"
+      className={`concept-journey${open ? ' is-open' : ''}${
+        reducedMotion ? ' is-reduced-motion' : ''
+      }`}
+      aria-labelledby="concept-07-title"
+    >
+      <button
+        type="button"
+        className="concept-journey__header"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <div className="concept-journey__intro">
+          <SectionLabel number="07" name="EXPERIENCE" />
+          <HeadingLines
+            id="concept-07-title"
+            lines={['Explore the User Journey']}
+          />
+          <p className="concept-body concept-journey__subtitle">
+            From encounter to coexistence, loss, and revelation.
+          </p>
+        </div>
+        <span className="concept-journey__mark" aria-hidden="true">
+          {open ? '−' : '+'}
+        </span>
+      </button>
+
+      <div
+        id={panelId}
+        className="concept-journey__panel"
+        role="region"
+        aria-labelledby="concept-07-title"
+        hidden={reducedMotion && !open ? true : undefined}
+      >
+        <div className="concept-journey__panel-inner">
+          {hasImage ? (
+            <button
+              type="button"
+              className="concept-journey__figure-btn"
+              onClick={() => setLightboxOpen(true)}
+              aria-label="Enlarge user journey diagram"
+            >
+              <figure className="concept-journey__figure">
+                <img
+                  src={diagram.src}
+                  alt={diagram.alt}
+                  loading="eager"
+                  decoding="async"
+                />
+              </figure>
+            </button>
+          ) : (
+            <figure
+              className="concept-journey__figure concept-journey__figure--placeholder"
+              aria-label="User journey diagram placeholder"
+            >
+              <span className="concept-journey__placeholder-mark">
+                User Journey diagram
+              </span>
+              <span className="concept-journey__placeholder-note">
+                Asset pending — replace USER_JOURNEY_DIAGRAM.src
+              </span>
+            </figure>
+          )}
+        </div>
+      </div>
+
+      {lightbox}
+    </section>
+  )
 }
 
 /**
@@ -671,10 +808,17 @@ export default function ConceptPage({ header }) {
             </section>
           </div>
 
+          <UserJourneySection
+            diagram={USER_JOURNEY_DIAGRAM}
+            reducedMotion={reducedMotion}
+          />
+
           <footer className="concept-coda">
-            <p className="concept-coda-question">
-              Can we form a meaningful relationship with a life we cannot fully understand or
-              control?
+            <p className="concept-coda-statement">
+              <span className="concept-coda-statement__line">
+                You never had the chance to meet.
+              </span>
+              <span className="concept-coda-statement__line">Until now.</span>
             </p>
             <span className="concept-coda-rule" aria-hidden="true" />
           </footer>

@@ -171,6 +171,8 @@ export default function ExploreLifeScene({
   const materialMode = normalizeExp05MaterialMode(
     lab?.materialMode ?? EXP05_MATERIAL_MODES.PEARLESCENT,
   )
+  const opticalDensity = lab?.opticalDensity ?? 1.2
+  const thicknessContrast = lab?.thicknessContrast ?? 1.15
   const temperature = normalizeExp05Temperature(
     lab?.temperature ?? EXP05_ENV_TEMPERATURE_NEUTRAL,
   )
@@ -250,6 +252,8 @@ export default function ExploreLifeScene({
         materialMode={materialMode}
         temperature={temperature}
         sculpturalStrength={sculpturalStrength}
+        opticalDensity={opticalDensity}
+        thicknessContrast={thicknessContrast}
       />
       {layersLive ? (
         <group visible={allowPetals}>

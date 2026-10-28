@@ -404,7 +404,7 @@ Open `#playground` → Experiment 03 → Study 01:
 
 **Research question:** Can World morphology drive a Life-shaped body while Explore’s ethereal fragment look (body + petals + particles) stays intact, so a final form can be tuned in Playground without touching World / Life Engine / Studies?
 
-**Status:** Phase C2 lab usable — shared surface evaluator, stable composition toggles, AGE scrub + Space play/pause, morphology Low / Medium / High presets (same AGE / Seed).
+**Status:** Phase C2 lab usable — shared surface evaluator, stable composition, AGE + Space, morph presets, and **Biological Membrane** body material (Pearlescent kept for A/B).
 
 ---
 
@@ -415,8 +415,27 @@ Open `#playground` → Experiment 03 → Study 01:
 3. **Composition stability** — body / petals / particles stay mounted across AGE scrub and composition modes (`dispose={null}`, visibility + reseat). Fixed earlier white-out / vanish when AGE or layer toggles remounted shared GPU materials.
 4. **Morphology calibration (audit → presets)** — World `formMorphAmount` saturates early (~AGE 0.45); empty `localDeformations` without stimuli made old “macro deform” knobs inert. Lab **Morphology Complexity** now scales rest-radius lobe amplitude on the existing `radiusAt` field (no new morph algorithm). Presets **Low / Medium / High** only change morph knobs; AGE, Seed, petals, and particles stay put.
 5. **Lab chrome** — petal / particle density & scale, composition modes (Body Only → Full), AGE bar, Space play/pause.
+6. **Biological Membrane material** — Exp05-only body shader toward soft living tissue (not liquid glass). Same CPU silhouette / Explore vertex contract; geometry, morphology, petals, particles, AGE, Life Engine, and page backdrop unchanged. Pearlescent Membrane (+ V2) remain for A/B.
 
 **Out of scope (held):** Life Engine / World / Studies / Exp 01–04 edits; crystal-fold morph matching World’s stimulus deformations; new shape algorithms.
+
+---
+
+### Body material — Biological Membrane
+
+**Goal:** fragile, translucent living tissue with delicate internal complexity — not a polished glass sculpture.
+
+**Visual direction (implemented)**
+
+- Soft wrap lighting + thickness-driven opacity (denser in folds, thinner on stretch)
+- Very low-frequency domain-warped mottling (no obvious procedural grain)
+- Gentle pastel iridescence (pink / lavender / cyan), low amplitude
+- Wet highlights gated to folds and stretched regions only
+- Richer optical depth in compressed areas; aggressive highlight compression (no bloom / white wash)
+
+**Avoided:** hard glass speculars, uniform plastic gloss, strong rainbow gradients, repetitive noise.
+
+**Lab control:** Body Material → Biological Membrane (default) | Pearlescent Membrane | Pearlescent V2 | Original Explore. Toggle does not reset AGE, Seed, morphology, or environment.
 
 ### Key files
 
@@ -426,8 +445,11 @@ Open `#playground` → Experiment 03 → Study 01:
 | `src/playground/finalForm/ExploreLifeScene.jsx` | Composition visibility; lobe amplitude wiring |
 | `src/playground/finalForm/exp05SurfaceEvaluator.js` | Shared body / petal / particle seating |
 | `src/playground/finalForm/exp05MorphologyCalibration.js` | Lobe amp remap + Low / Med / High presets |
-| `src/playground/finalForm/Exp05LabPanel.jsx` | Lab knobs, presets, composition |
-| `src/playground/finalForm/ExploreWorld{Body,Scatter,Particles}.jsx` | Keep-mounted Explore layers |
+| `src/playground/finalForm/exp05BiologicalMembrane.js` | Biological Membrane fragment + uniforms |
+| `src/playground/finalForm/exp05PearlescentMembrane.js` | Pearlescent A/B (preserved) |
+| `src/playground/finalForm/ExploreWorldBody.jsx` | Material mode switch (body shader only) |
+| `src/playground/finalForm/Exp05LabPanel.jsx` | Lab knobs, presets, composition, material A/B |
+| `src/playground/finalForm/ExploreWorld{Scatter,Particles}.jsx` | Keep-mounted Explore layers |
 
 ---
 
@@ -482,3 +504,15 @@ Same AGE / Seed; **High** exaggerates rest-radius lobe amplitude on the existing
 Layers stay mounted; composition mode hides petals / particles without remount white-out.
 
 ![[born-another-playground-exp05-body-only.jpg]]
+
+### Biological Membrane (body material)
+
+Soft living-tissue body shader — delicate translucency, fold thickness / optical depth, gentle pastel iridescence; petals and particles unchanged. Light-gray backdrop unchanged.
+
+![[born-another-playground-exp05-biological-membrane.jpg]]
+
+### Pearlescent Membrane (A/B)
+
+Same AGE / Seed / morphology; Pearlescent kept for glass-vs-tissue comparison via Body Material toggle.
+
+![[born-another-playground-exp05-pearlescent-ab.jpg]]

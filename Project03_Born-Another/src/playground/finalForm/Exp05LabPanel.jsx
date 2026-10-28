@@ -233,9 +233,9 @@ export default function Exp05LabPanel({
 
           <p className="exp05-lab__section">Body Material</p>
           <p className="exp05-lab__hint">
-            A/B/C study — body shader only. Pearlescent V2 refines gloss,
-            thickness, and fold optics. Petals / particles stay Explore. Does
-            not reset AGE, Seed, morphology, or environment.
+            Body shader only. Biological Membrane = washed-pastel A/B baseline;
+            Biological V2 = fold depth / soft occlusion / thickness density.
+            Evaluate V2 in Body Only. Does not reset AGE, Seed, or morphology.
           </p>
           <div
             className="exp05-lab__composition"
@@ -253,6 +253,23 @@ export default function Exp05LabPanel({
               </button>
             ))}
           </div>
+
+          <p className="exp05-lab__section">Biological depth</p>
+          <p className="exp05-lab__hint">
+            Biological V2 only. Optical Density densifies thick folds; Thickness
+            Contrast widens convex / concave separation. Geometric proxy — not
+            mesh thickness.
+          </p>
+          <LabSlider
+            id="opticalDensity"
+            value={values.opticalDensity}
+            onChange={handleChange}
+          />
+          <LabSlider
+            id="thicknessContrast"
+            value={values.thicknessContrast}
+            onChange={handleChange}
+          />
 
           <p className="exp05-lab__section">Morphology Diagnostic</p>
           <p className="exp05-lab__hint">

@@ -29,10 +29,15 @@ export default function PlaygroundPage({ header }) {
   const View = EXPERIMENT_VIEWS[experiment.id] ?? Experiment01
 
   const isExp05 = experiment.id === '05'
+  const isExp03 = experiment.id === '03'
+  /* Exp03 reuses Exp05 page atmosphere (soft pastel blooms + vignette). */
+  const useExp05Atmosphere = isExp05 || isExp03
 
   return (
     <div
-      className={`playground-page${isExp05 ? ' playground-page--exp05' : ''}`}
+      className={`playground-page${
+        useExp05Atmosphere ? ' playground-page--exp05' : ''
+      }${isExp03 ? ' playground-page--exp03' : ''}`}
     >
       <SiteHud
         className="playground-page__hud"

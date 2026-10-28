@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Project03_Born-Another/README.md",
+                "file": "docs/Progress-Recording/Born-Another_Playground.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "README"
+              "title": "Born-Another_Playground"
             }
           }
         ]
@@ -46,7 +46,7 @@
                 "searchQuery": ""
               },
               "icon": "lucide-folder-closed",
-              "title": "Files"
+              "title": "文件列表"
             }
           },
           {
@@ -99,7 +99,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "docs/tutorials/tutorial_.md",
+                "file": "docs/Progress-Recording/Born-Another_Playground.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -174,48 +174,49 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 300
   },
   "left-ribbon": {
     "hiddenItems": {
-      "switcher:Open quick switcher": false,
-      "graph:Open graph view": false,
-      "canvas:Create new canvas": false,
-      "daily-notes:Open today's daily note": false,
-      "templates:Insert template": false,
-      "command-palette:Open command palette": false,
-      "bases:Create new base": false
+      "switcher:打开快速切换": false,
+      "graph:查看关系图谱": false,
+      "canvas:新建白板": false,
+      "daily-notes:打开/创建今天的日记": false,
+      "templates:插入模板": false,
+      "command-palette:打开命令面板": false,
+      "bases:新建数据库": false
     }
   },
   "active": "6961be4248116655",
   "lastOpenFiles": [
-    "Project03_Born-Another/src/playground/finalForm/exp05PearlescentMembraneV2.js",
-    "Project03_Born-Another/src/playground/finalForm/exp05SculpturalDeformation.test.js",
-    "Project03_Born-Another/src/playground/finalForm/exp05SculpturalDeformation.js",
-    "Project03_Born-Another/src/playground/finalForm/exp05PearlescentMembrane.js",
-    "Project03_Born-Another/src/playground/finalForm/exp05EnvironmentCoupling.test.js",
-    "Project03_Born-Another/src/playground/finalForm/exp05EnvironmentCoupling.js",
-    "Project03_Born-Another/src/playground/finalForm/exp05MorphologyTypes.test.js",
-    "Project03_Born-Another/src/playground/finalForm/exp05MorphologyTypes.js",
+    "docs/assets/image/userjounery02.png",
+    "docs/assets/image/未确认 597882.crdownload",
+    "Project03_Born-Another/dist/assets/playground-Cf5y6Qbn.js",
+    "Project03_Born-Another/dist/assets/memoryLab-B3oYUusq.js",
+    "Project03_Born-Another/dist/assets/index-CnnemXrn.js",
+    "Project03_Born-Another/dist/assets/playground-r2HenuJE.css",
+    "Project03_Born-Another/dist/assets/playground-CUpbOO2x.js",
+    "Project03_Born-Another/dist/assets/memoryLab-yrJMIHTw.js",
+    "Project03_Born-Another/dist/assets/index-Bavlu2-4.js",
+    "Project03_Born-Another/src/playground/agentBehaviors/crystalAgentSim.test.js",
+    "Project03_Born-Another/src/playground/agentBehaviors/CrystalAgentInspector.jsx",
+    "Project03_Born-Another/node_modules/three-csg-ts/README.md",
+    "Project03_Born-Another/dist/assets/concept-user-journey-Dd7LLThs.png",
+    "Project03_Born-Another/dist/assets/concept-02-fossil2-DQt6Blbg.jpg",
+    "Project03_Born-Another/dist/assets/concept-02-fossil-CDRuFhF5.jpg",
+    "Project03_Born-Another/dist/assets/architectural-design-diagram-Di4J26et.png",
+    "Project03_Born-Another/src/assets/concept-user-journey.png",
+    "docs/assets/image/userjounery.png",
+    "docs/assets/image/roadmap.png",
+    "docs/assets/image/born-another-playground-exp05-pearlescent-ab.jpg",
+    "docs/assets/image/born-another-playground-exp05-biological-membrane.jpg",
+    "Project03_Born-Another/README.md",
     "docs/tutorials/Web_Page_Design_Method.md",
     "docs/planning/Website-Organization.md",
     "docs/planning/Born-Another-Technic-Log.md",
     "docs/concept/BORN_ANOTHER_Concept.md",
     "docs/assets/image/roy.jpg",
-    "docs/assets/image/rachel.jpg",
-    "docs/assets/image/morality.jpg",
-    "docs/assets/image/memory.jpg",
-    "docs/assets/image/fossil3.jpg",
-    "docs/assets/image/fossil2.jpg",
-    "docs/assets/image/fossil.jpg",
-    "docs/assets/image/eyes.jpg",
-    "docs/assets/image/born-another-world-v2-shader-milky.jpg",
-    "docs/assets/image/born-another-playground-exp05-morph-high.jpg",
     "docs/Progress-Recording/Born-Another_Playground.md",
-    "Project03_Born-Another/src/worldv2/turbulenceField.test.js",
-    "Project03_Born-Another/src/worldv2/turbulenceField.js",
-    "Project03_Born-Another/src/worldv2/WorldViewport.jsx",
     "docs/concept/project_reference.md",
     "Project03_Born-Another/node_modules/rc/node_modules/ini/README.md",
     "Project03_Born-Another/node_modules/rc/README.md",
@@ -234,8 +235,6 @@
     "Project03_Born-Another/node_modules/restore-cursor/node_modules/signal-exit/README.md",
     "Project03_Born-Another/node_modules/restore-cursor/readme.md",
     "Project03_Born-Another/node_modules/log-symbols/node_modules/chalk/readme.md",
-    "Project03_Born-Another/node_modules/log-symbols/readme.md",
-    "Project03_Born-Another/node_modules/basic-auth/node_modules/safe-buffer/README.md",
     "Untitled.canvas",
     "未命名.canvas"
   ]

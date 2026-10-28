@@ -49,6 +49,14 @@ import {
   createPearlescentMembraneV2Material,
   createPearlescentMembraneV2Uniforms,
 } from './exp05PearlescentMembraneV2.js'
+import {
+  createBiologicalMembraneMaterial,
+  createBiologicalMembraneUniforms,
+} from './exp05BiologicalMembrane.js'
+import {
+  createBiologicalMembraneV2Material,
+  createBiologicalMembraneV2Uniforms,
+} from './exp05BiologicalMembraneV2.js'
 
 /**
  * Pass-through vertex — World CPU morph owns silhouette.
@@ -196,12 +204,15 @@ export default function ExploreWorldBody({
   morphologyType = EXP05_DEFAULT_MORPHOLOGY_TYPE,
   /** Exp05 morphology diagnostic look — does not rebuild geometry. */
   diagnosticMode = EXP05_DIAGNOSTIC_MODES.FULL,
-  /** Body material study — Explore (default) | Pearlescent. */
+  /** Body material study — Explore | Pearlescent | Biological | Biological V2. */
   materialMode = EXP05_MATERIAL_MODES.EXPLORE,
   /** Playground Temperature coupling (not Life Engine). */
   temperature = EXP05_ENV_TEMPERATURE_NEUTRAL,
   /** Optional Exp05 sculptural tangential deformation (0 = identity). */
   sculpturalStrength = 0,
+  /** Biological V2 — optical density / thickness-proxy contrast (lab knobs). */
+  opticalDensity = 1.2,
+  thicknessContrast = 1.15,
 }) {
   const meshRef = useRef(null)
   const bundleRef = useRef(null)
@@ -282,6 +293,30 @@ export default function ExploreWorldBody({
     [],
   )
 
+  const biologicalUniforms = useMemo(
+    () =>
+      createBiologicalMembraneUniforms({
+        seed: individuality.seed,
+        age: development.age,
+        speed: development.speed,
+        noiseScale: individuality.noiseScale,
+      }),
+    [],
+  )
+
+  const biologicalV2Uniforms = useMemo(
+    () =>
+      createBiologicalMembraneV2Uniforms({
+        seed: individuality.seed,
+        age: development.age,
+        speed: development.speed,
+        noiseScale: individuality.noiseScale,
+        opticalDensity,
+        thicknessContrast,
+      }),
+    [],
+  )
+
   const exploreMaterial = useMemo(
     () =>
       new THREE.ShaderMaterial({
@@ -310,6 +345,22 @@ export default function ExploreWorldBody({
         depthWrite: bodyDepthWrite,
       }),
     [pearlescentV2Uniforms],
+  )
+
+  const biologicalMaterial = useMemo(
+    () =>
+      createBiologicalMembraneMaterial(biologicalUniforms, {
+        depthWrite: bodyDepthWrite,
+      }),
+    [biologicalUniforms],
+  )
+
+  const biologicalV2Material = useMemo(
+    () =>
+      createBiologicalMembraneV2Material(biologicalV2Uniforms, {
+        depthWrite: bodyDepthWrite,
+      }),
+    [biologicalV2Uniforms],
   )
 
   /* Neutral opaque gray — silhouette / form only. */
@@ -341,11 +392,15 @@ export default function ExploreWorldBody({
   )
 
   const fullLookMaterial =
-    bodyMaterialMode === EXP05_MATERIAL_MODES.PEARLESCENT_V2
-      ? pearlescentV2Material
-      : bodyMaterialMode === EXP05_MATERIAL_MODES.PEARLESCENT
-        ? pearlescentMaterial
-        : exploreMaterial
+    bodyMaterialMode === EXP05_MATERIAL_MODES.BIOLOGICAL_V2
+      ? biologicalV2Material
+      : bodyMaterialMode === EXP05_MATERIAL_MODES.BIOLOGICAL
+        ? biologicalMaterial
+        : bodyMaterialMode === EXP05_MATERIAL_MODES.PEARLESCENT_V2
+          ? pearlescentV2Material
+          : bodyMaterialMode === EXP05_MATERIAL_MODES.PEARLESCENT
+            ? pearlescentMaterial
+            : exploreMaterial
 
   const material =
     appearance === EXP05_DIAGNOSTIC_MODES.GEOMETRY
@@ -358,10 +413,14 @@ export default function ExploreWorldBody({
     exploreMaterial.depthWrite = bodyDepthWrite
     pearlescentMaterial.depthWrite = bodyDepthWrite
     pearlescentV2Material.depthWrite = bodyDepthWrite
+    biologicalMaterial.depthWrite = bodyDepthWrite
+    biologicalV2Material.depthWrite = bodyDepthWrite
   }, [
     exploreMaterial,
     pearlescentMaterial,
     pearlescentV2Material,
+    biologicalMaterial,
+    biologicalV2Material,
     bodyDepthWrite,
   ])
 
@@ -391,15 +450,32 @@ export default function ExploreWorldBody({
     pearlescentV2Uniforms.uNoiseScale.value = individuality.noiseScale
     pearlescentV2Uniforms.uAge.value = development.age
     pearlescentV2Uniforms.uSpeed.value = development.speed
+
+    biologicalUniforms.uSeed.value = individuality.seed
+    biologicalUniforms.uNoiseScale.value = individuality.noiseScale
+    biologicalUniforms.uAge.value = development.age
+    biologicalUniforms.uSpeed.value = development.speed
+
+    biologicalV2Uniforms.uSeed.value = individuality.seed
+    biologicalV2Uniforms.uNoiseScale.value = individuality.noiseScale
+    biologicalV2Uniforms.uAge.value = development.age
+    biologicalV2Uniforms.uSpeed.value = development.speed
+    biologicalV2Uniforms.uOpticalDensity.value = Number(opticalDensity) || 1.35
+    biologicalV2Uniforms.uThicknessContrast.value =
+      Number(thicknessContrast) || 1.25
   }, [
     uniforms,
     pearlescentUniforms,
     pearlescentV2Uniforms,
+    biologicalUniforms,
+    biologicalV2Uniforms,
     surface,
     individuality,
     development.age,
     development.speed,
     development.noiseAmount,
+    opticalDensity,
+    thicknessContrast,
   ])
 
   useLayoutEffect(() => {
@@ -459,6 +535,10 @@ export default function ExploreWorldBody({
     pearlescentUniforms.uAge.value = age
     pearlescentV2Uniforms.uTime.value = t
     pearlescentV2Uniforms.uAge.value = age
+    biologicalUniforms.uTime.value = t
+    biologicalUniforms.uAge.value = age
+    biologicalV2Uniforms.uTime.value = t
+    biologicalV2Uniforms.uAge.value = age
   })
 
   useEffect(
@@ -466,6 +546,8 @@ export default function ExploreWorldBody({
       exploreMaterial.dispose()
       pearlescentMaterial.dispose()
       pearlescentV2Material.dispose()
+      biologicalMaterial.dispose()
+      biologicalV2Material.dispose()
       geometryMaterial.dispose()
       surfaceLitMaterial.dispose()
     },
@@ -473,6 +555,8 @@ export default function ExploreWorldBody({
       exploreMaterial,
       pearlescentMaterial,
       pearlescentV2Material,
+      biologicalMaterial,
+      biologicalV2Material,
       geometryMaterial,
       surfaceLitMaterial,
     ],

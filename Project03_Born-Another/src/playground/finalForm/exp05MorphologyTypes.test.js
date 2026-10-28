@@ -123,20 +123,35 @@ test('material mode defaults to Pearlescent and survives morph presets', () => {
     EXP05_MATERIAL_MODES.EXPLORE,
   )
   assert.equal(
+    normalizeExp05MaterialMode(EXP05_MATERIAL_MODES.PEARLESCENT),
+    EXP05_MATERIAL_MODES.PEARLESCENT,
+  )
+  assert.equal(
     normalizeExp05MaterialMode(EXP05_MATERIAL_MODES.PEARLESCENT_V2),
     EXP05_MATERIAL_MODES.PEARLESCENT_V2,
+  )
+  assert.equal(
+    normalizeExp05MaterialMode(EXP05_MATERIAL_MODES.BIOLOGICAL),
+    EXP05_MATERIAL_MODES.BIOLOGICAL,
+  )
+  assert.equal(
+    normalizeExp05MaterialMode(EXP05_MATERIAL_MODES.BIOLOGICAL_V2),
+    EXP05_MATERIAL_MODES.BIOLOGICAL_V2,
   )
   assert.equal(
     normalizeExp05MaterialMode('nope'),
     EXP05_MATERIAL_MODES.PEARLESCENT,
   )
+  const depthLab = normalizeExp05LabParams({})
+  assert.equal(depthLab.opticalDensity, 1.2)
+  assert.equal(depthLab.thicknessContrast, 1.15)
   const lab = normalizeExp05LabParams({
-    materialMode: EXP05_MATERIAL_MODES.PEARLESCENT_V2,
+    materialMode: EXP05_MATERIAL_MODES.PEARLESCENT,
     morphologyType: EXP05_MORPHOLOGY_TYPES.WORLD,
   })
-  assert.equal(lab.materialMode, EXP05_MATERIAL_MODES.PEARLESCENT_V2)
+  assert.equal(lab.materialMode, EXP05_MATERIAL_MODES.PEARLESCENT)
   const high = applyMorphPreset(lab, 'high')
-  assert.equal(high.materialMode, EXP05_MATERIAL_MODES.PEARLESCENT_V2)
+  assert.equal(high.materialMode, EXP05_MATERIAL_MODES.PEARLESCENT)
 })
 
 test('same type+seed is deterministic across evaluations', () => {

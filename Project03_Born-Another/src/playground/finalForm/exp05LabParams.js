@@ -58,12 +58,14 @@ export const EXP05_DIAGNOSTIC_MODE_OPTIONS = [
 
 /**
  * Body material study — same geometry / Life; Explore default unchanged.
- * Pearlescent is Exp05-scoped custom shader (not World MeshPhysical).
+ * Pearlescent / Biological are Exp05-scoped custom shaders (not World MeshPhysical).
  */
 export const EXP05_MATERIAL_MODES = {
   EXPLORE: 'explore',
   PEARLESCENT: 'pearlescent',
   PEARLESCENT_V2: 'pearlescent-v2',
+  BIOLOGICAL: 'biological',
+  BIOLOGICAL_V2: 'biological-v2',
 }
 
 export const EXP05_MATERIAL_MODE_OPTIONS = [
@@ -75,6 +77,14 @@ export const EXP05_MATERIAL_MODE_OPTIONS = [
   {
     id: EXP05_MATERIAL_MODES.PEARLESCENT_V2,
     label: 'Pearlescent V2',
+  },
+  {
+    id: EXP05_MATERIAL_MODES.BIOLOGICAL,
+    label: 'Biological Membrane',
+  },
+  {
+    id: EXP05_MATERIAL_MODES.BIOLOGICAL_V2,
+    label: 'Biological V2',
   },
 ]
 
@@ -104,8 +114,18 @@ export const EXP05_LAB_DEFAULTS = {
   compositionMode: EXP05_COMPOSITION_MODES.FULL,
   /** Morphology diagnostic look (geometry / lit / full Explore). */
   diagnosticMode: EXP05_DIAGNOSTIC_MODES.FULL,
-  /** Body material: Pearlescent Membrane (default) | Original Explore. */
+  /** Body material: Pearlescent Membrane (default) | Biological A/B | Explore. */
   materialMode: EXP05_MATERIAL_MODES.PEARLESCENT,
+  /**
+   * Biological V2 only — Beer-Lambert optical density through thickness proxy.
+   * Higher = denser folds / richer pastels; thin faces stay more translucent.
+   */
+  opticalDensity: 1.35,
+  /**
+   * Biological V2 only — expands geometric thickness proxy away from midtone.
+   * Higher = stronger thin-vs-thick contrast (approximation, not mesh thickness).
+   */
+  thicknessContrast: 1.25,
   /**
    * Playground Temperature coupling (membrane expand/contract).
    * Not Life Engine state — immediate visual; neutral 0.5 = recovered.
@@ -175,6 +195,22 @@ export const EXP05_LAB_META = {
     available: true,
     binding: 'tangential seed-driven silhouette offset (post-radial)',
   },
+  opticalDensity: {
+    label: 'Optical Density',
+    min: 0.35,
+    max: 2.2,
+    step: 0.01,
+    available: true,
+    binding: 'Biological V2 Beer-Lambert density (folds denser)',
+  },
+  thicknessContrast: {
+    label: 'Thickness Contrast',
+    min: 0.35,
+    max: 1.85,
+    step: 0.01,
+    available: true,
+    binding: 'Biological V2 geometric thickness proxy span',
+  },
 }
 
 export function particleCountFromLabDensity(density) {
@@ -224,6 +260,20 @@ export function normalizeExp05LabParams(partial = {}) {
   )
   next.sculpturalStrength = normalizeExp05SculpturalStrength(
     next.sculpturalStrength,
+  )
+  next.opticalDensity = Math.min(
+    EXP05_LAB_META.opticalDensity.max,
+    Math.max(
+      EXP05_LAB_META.opticalDensity.min,
+      Number(next.opticalDensity) || EXP05_LAB_DEFAULTS.opticalDensity,
+    ),
+  )
+  next.thicknessContrast = Math.min(
+    EXP05_LAB_META.thicknessContrast.max,
+    Math.max(
+      EXP05_LAB_META.thicknessContrast.min,
+      Number(next.thicknessContrast) || EXP05_LAB_DEFAULTS.thicknessContrast,
+    ),
   )
   next.morphologyType = normalizeExp05MorphologyType(next.morphologyType)
   next.compositionMode = normalizeCompositionMode(next.compositionMode)
