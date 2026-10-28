@@ -213,6 +213,12 @@ export default function ExploreWorldBody({
   /** Biological V2 — optical density / thickness-proxy contrast (lab knobs). */
   opticalDensity = 1.2,
   thicknessContrast = 1.15,
+  /**
+   * true (default): read the shared global ageClock (single-organism scenes).
+   * false: use this instance's development.age — required when several
+   * organisms at different life stages share one canvas (Exp04 Population).
+   */
+  useAgeClock = true,
 }) {
   const meshRef = useRef(null)
   const bundleRef = useRef(null)
@@ -525,10 +531,13 @@ export default function ExploreWorldBody({
     sculptValue,
   ])
 
+  const ownAgeRef = useRef(development.age)
+  ownAgeRef.current = development.age
+
   useFrame(({ clock }) => {
     if (appearance !== EXP05_DIAGNOSTIC_MODES.FULL) return
     const t = clock.getElapsedTime()
-    const age = ageClock.current
+    const age = useAgeClock ? ageClock.current : ownAgeRef.current
     uniforms.uTime.value = t
     uniforms.uAge.value = age
     pearlescentUniforms.uTime.value = t

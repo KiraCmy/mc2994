@@ -5,19 +5,40 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  COMPETITION_DEFAULTS,
   createCrystalAgentSim,
   crystalAgentGrowthMap,
+  crystalAgentVitalityMap,
+  effectiveMoistureForCluster,
   meanCrystalAgentProgress,
   moistureGrowthFactor,
+  localMoistureForCluster,
   resetCrystalAgentSim,
   scrubCrystalAgentProgress,
+  setCrystalAgentCompetition,
   stepCrystalAgentSim,
 } from './crystalAgentSim.js'
 import { CRYSTAL_AGENT_DEFAULTS } from './crystalAgentTypes.js'
-import { planSingleBioCrystalPieces } from './singleBioCrystalPlan.js'
+import {
+  createMoistureField,
+  MOISTURE_FIELD_DEFAULTS,
+  moistureOffsetsForClusters,
+} from './crystalMoistureField.js'
+import {
+  flattenClusterPieces,
+  MULTI_CLUSTER_DEFAULT_COUNT,
+  planMultiBioCrystalClusters,
+} from './multiBioCrystalPlan.js'
 
 function clamp01(v) {
   return Math.min(1, Math.max(0, Number(v) || 0))
+}
+
+function sameOffsets(a, b) {
+  const ka = Object.keys(a || {})
+  const kb = Object.keys(b || {})
+  if (ka.length !== kb.length) return false
+  return ka.every((k) => a[k] === b?.[k])
 }
 
 /**
@@ -25,22 +46,44 @@ function clamp01(v) {
  *   agentSeed: number,
  *   moisture: number,
  *   playing?: boolean,
+ *   clusterCount?: number,
+ *   fieldContrast?: number,
+ *   competition?: number,
  * }} opts
  */
 export function useCrystalAgentSim({
   agentSeed = 1,
   moisture = CRYSTAL_AGENT_DEFAULTS.moisture,
   playing = true,
+  clusterCount = MULTI_CLUSTER_DEFAULT_COUNT,
+  fieldContrast = MOISTURE_FIELD_DEFAULTS.contrast,
+  competition = COMPETITION_DEFAULTS.strength,
 } = {}) {
-  const planPieces = useMemo(() => {
-    const { plan } = planSingleBioCrystalPieces(agentSeed)
-    return plan
-  }, [agentSeed])
+  /* Several clusters on the membrane patch; each primary is still one agent. */
+  const clusters = useMemo(
+    () => planMultiBioCrystalClusters(agentSeed, { count: clusterCount }),
+    [agentSeed, clusterCount],
+  )
+  const planPieces = useMemo(() => flattenClusterPieces(clusters), [clusters])
+
+  /* Local moisture field: global slider ± seeded wet-pocket offset per cluster. */
+  const moistureField = useMemo(
+    () => createMoistureField({ seed: agentSeed, contrast: fieldContrast }),
+    [agentSeed, fieldContrast],
+  )
+  const moistureOffsets = useMemo(
+    () => moistureOffsetsForClusters(moistureField, clusters),
+    [moistureField, clusters],
+  )
 
   const moistureRef = useRef(clamp01(moisture))
   const playingRef = useRef(Boolean(playing))
+  const offsetsRef = useRef(moistureOffsets)
+  const competitionRef = useRef(clamp01(competition))
   moistureRef.current = clamp01(moisture)
   playingRef.current = Boolean(playing)
+  offsetsRef.current = moistureOffsets
+  competitionRef.current = clamp01(competition)
 
   const simRef = useRef(null)
   if (simRef.current == null) {
@@ -48,22 +91,30 @@ export function useCrystalAgentSim({
       seed: agentSeed,
       planPieces,
       moisture: moistureRef.current,
+      moistureOffsets: offsetsRef.current,
+      clusters,
+      competition: competitionRef.current,
     })
     simRef.current.playing = playingRef.current
   }
 
   const [sim, setSim] = useState(() => simRef.current)
 
-  /* Recreate when seed / plan changes. */
+  /* Recreate when seed / plan (cluster count) changes. */
   useEffect(() => {
     const next = createCrystalAgentSim({
       seed: agentSeed,
       planPieces,
       moisture: moistureRef.current,
+      moistureOffsets: offsetsRef.current,
+      clusters,
+      competition: competitionRef.current,
     })
     next.playing = playingRef.current
     simRef.current = next
     setSim(next)
+    // clusters and planPieces change together (planPieces derives from clusters)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentSeed, planPieces])
 
   useEffect(() => {
@@ -82,15 +133,24 @@ export function useCrystalAgentSim({
 
       const nextMoisture = moistureRef.current
       const nextPlaying = playingRef.current
-      const moistureChanged = current.moisture !== nextMoisture
+      const nextOffsets = offsetsRef.current
+      const nextCompetition = competitionRef.current
+      const moistureChanged =
+        current.moisture !== nextMoisture ||
+        !sameOffsets(current.moistureOffsets, nextOffsets) ||
+        current.competition !== nextCompetition
       const playingChanged = current.playing !== nextPlaying
 
       if (moistureChanged || playingChanged) {
-        current = {
-          ...current,
-          moisture: nextMoisture,
-          playing: nextPlaying,
-        }
+        current = setCrystalAgentCompetition(
+          {
+            ...current,
+            moisture: nextMoisture,
+            moistureOffsets: { ...nextOffsets },
+            playing: nextPlaying,
+          },
+          nextCompetition,
+        )
         /*
          * While paused (typical after Progress scrub), re-express formation
          * under the new moisture so dry/wet is immediately visible.
@@ -133,6 +193,8 @@ export function useCrystalAgentSim({
     if (!simRef.current) return
     const next = resetCrystalAgentSim(simRef.current, {
       moisture: moistureRef.current,
+      moistureOffsets: offsetsRef.current,
+      competition: competitionRef.current,
     })
     next.playing = playingRef.current
     delete next.scrubAmount
@@ -146,6 +208,8 @@ export function useCrystalAgentSim({
     const withMoisture = {
       ...simRef.current,
       moisture: moistureRef.current,
+      moistureOffsets: { ...offsetsRef.current },
+      competition: competitionRef.current,
     }
     const next = scrubCrystalAgentProgress(withMoisture, amount)
     next.playing = playingRef.current
@@ -157,6 +221,10 @@ export function useCrystalAgentSim({
 
   const getGrowthMap = useCallback(() => {
     return crystalAgentGrowthMap(simRef.current)
+  }, [])
+
+  const getVitalityMap = useCallback(() => {
+    return crystalAgentVitalityMap(simRef.current)
   }, [])
 
   /* Slider shows scrub position when set; otherwise live mean progress. */
@@ -188,12 +256,51 @@ export function useCrystalAgentSim({
     }
   }, [sim, moisture, meanProgress])
 
+  /* Per-cluster readout for the inspector (local moisture, mean progress…). */
+  const clusterSummaries = useMemo(() => {
+    const agents = sim?.agents || []
+    return clusters.map((cluster) => {
+      const own = agents.filter((a) => a.clusterId === cluster.id)
+      const meanOf = (key) =>
+        own.length > 0
+          ? own.reduce((s, a) => s + (Number(a[key]) || 0), 0) / own.length
+          : 0
+      const stateCounts = {}
+      for (const a of own) stateCounts[a.state] = (stateCounts[a.state] || 0) + 1
+      const dominantState =
+        Object.entries(stateCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+      return {
+        id: cluster.id,
+        index: cluster.index,
+        agentCount: own.length,
+        moistureOffset: sim?.moistureOffsets?.[cluster.id] ?? 0,
+        /* Field-only moisture vs what is left after neighbours drain it. */
+        fieldMoisture: localMoistureForCluster(sim, cluster.id),
+        localMoisture: effectiveMoistureForCluster(sim, cluster.id),
+        drain: sim?.competitionState?.[cluster.id]?.drain ?? 0,
+        biomass: sim?.competitionState?.[cluster.id]?.biomass ?? 0,
+        drainedBy: Object.entries(sim?.competitionState?.[cluster.id]?.sources || {})
+          .filter(([, amount]) => amount >= 0.015)
+          .sort((a, b) => b[1] - a[1])
+          .map(([id]) => id),
+        meanProgress: meanOf('progress'),
+        meanStress: meanOf('stress'),
+        dominantState,
+      }
+    })
+  }, [sim, clusters])
+
   return {
     sim,
     simRef,
+    clusters,
+    clusterSummaries,
+    moistureField,
     planPieces,
     growthByPieceId,
     getGrowthMap,
+    getVitalityMap,
+    competitionState: sim?.competitionState ?? null,
     diagnostics,
     meanProgress,
     scrubProgress,

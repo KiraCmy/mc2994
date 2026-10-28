@@ -64,7 +64,8 @@ function makeGeometryFactory(morphologyId, params) {
 }
 
 /**
- * Experiment 04 — Morphology Lab
+ * Experiment 03 — Morphology Lab
+ * (Playground tab id `03`; internal CSS still uses exp04-*)
  * Three radial rest-shape presets in one WorldViewport (Exp 02 pattern).
  */
 export default function Experiment04({ title, description }) {
@@ -196,7 +197,7 @@ export default function Experiment04({ title, description }) {
   return (
     <article className="playground-experiment playground-experiment--exp04">
       <header className="playground-experiment__intro">
-        <p className="playground-experiment__eyebrow">Playground · Experiment 04</p>
+        <p className="playground-experiment__eyebrow">Playground · Experiment 03</p>
         <h1 className="playground-experiment__title">{title}</h1>
         <p className="playground-experiment__desc">{description}</p>
       </header>

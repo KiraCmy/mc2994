@@ -107,6 +107,12 @@ export default function ExploreLifeScatter({
   colorA = '#e7b6c2',
   colorB = '#a4e2e6',
   rimColor = '#a8feff',
+  /**
+   * true (default): read the shared global ageClock (single-organism scenes).
+   * false: use this instance's `age` prop — required when several organisms
+   * at different life stages share one canvas (Exp04 Population).
+   */
+  useAgeClock = true,
 }) {
   const meshRefs = useRef([])
   const lifeRef = useRef(life)
@@ -340,9 +346,12 @@ export default function ExploreLifeScatter({
     rimColor,
   ])
 
+  const ageRef = useRef(age)
+  ageRef.current = age
+
   useFrame(({ clock }) => {
     uniforms.uTime.value = clock.getElapsedTime()
-    uniforms.uAge.value = ageClock.current
+    uniforms.uAge.value = useAgeClock ? ageClock.current : ageRef.current
     const lifeState = lifeRef.current
     if (lifeState && lifeState.age !== seatedAgeRef.current) {
       seatRef.current()

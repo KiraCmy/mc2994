@@ -4,6 +4,15 @@ import CrystalAgentInspector from './agentBehaviors/CrystalAgentInspector.jsx'
 import CrystalAgentsStaticScene from './agentBehaviors/CrystalAgentsStaticScene.jsx'
 import { useCrystalAgentSim } from './agentBehaviors/useCrystalAgentSim.js'
 import { CRYSTAL_AGENT_DEFAULTS } from './agentBehaviors/crystalAgentTypes.js'
+import { MOISTURE_FIELD_DEFAULTS } from './agentBehaviors/crystalMoistureField.js'
+import { MULTI_CLUSTER_DEFAULT_COUNT } from './agentBehaviors/multiBioCrystalPlan.js'
+import { COMPETITION_DEFAULTS } from './agentBehaviors/crystalAgentSim.js'
+
+/*
+ * Study default: wet enough that every cluster thrives on its own, so
+ * switching Competition on/off shows the neighbour effect alone.
+ */
+const STUDY_DEFAULT_MOISTURE = 0.62
 import {
   EXP05_LIFE_SEED,
   EXP05_OBSERVE_AGE,
@@ -21,7 +30,7 @@ const STUDIES = [
     title: 'Crystal Agents',
     status: 'active',
     blurb:
-      'Autonomous crystal growth agents on the Exp05 membrane — FSM + moisture.',
+      'Autonomous crystal growth agents on the Exp05 membrane — FSM + local moisture field across several clusters.',
   },
   {
     id: 'organism-agents',
@@ -67,8 +76,16 @@ function CrystalAgentsStudy() {
   const [agentSeed, setAgentSeed] = useState(EXP05_LIFE_SEED)
   const [agentPlaying, setAgentPlaying] = useState(true)
   const [moisture, setMoisture] = useState(
-    () => life.environment?.moisture ?? CRYSTAL_AGENT_DEFAULTS.moisture,
+    () => STUDY_DEFAULT_MOISTURE ?? CRYSTAL_AGENT_DEFAULTS.moisture,
   )
+  /* Step 03 — several clusters + local moisture field. */
+  const [clusterCount, setClusterCount] = useState(MULTI_CLUSTER_DEFAULT_COUNT)
+  const [fieldContrast, setFieldContrast] = useState(
+    MOISTURE_FIELD_DEFAULTS.contrast,
+  )
+  /* Step 04 — neighbour perception + resource competition. */
+  const [competition, setCompetition] = useState(COMPETITION_DEFAULTS.strength)
+  const [showFlows, setShowFlows] = useState(true)
 
   useEffect(() => {
     seekToAge(EXP05_OBSERVE_AGE, { resume: false })
@@ -87,8 +104,12 @@ function CrystalAgentsStudy() {
 
   const {
     sim,
+    clusters,
+    clusterSummaries,
     growthByPieceId,
     getGrowthMap,
+    getVitalityMap,
+    competitionState,
     diagnostics,
     meanProgress,
     scrubProgress,
@@ -97,6 +118,9 @@ function CrystalAgentsStudy() {
     agentSeed,
     moisture,
     playing: agentPlaying,
+    clusterCount,
+    fieldContrast,
+    competition,
   })
 
   const handleResetCamera = useCallback(() => {
@@ -120,6 +144,23 @@ function CrystalAgentsStudy() {
     setMoisture(value)
   }, [])
 
+  const handleClusterCountChange = useCallback((value) => {
+    setClusterCount(value)
+    setAgentPlaying(true)
+  }, [])
+
+  const handleFieldContrastChange = useCallback((value) => {
+    setFieldContrast(value)
+  }, [])
+
+  const handleCompetitionChange = useCallback((value) => {
+    setCompetition(value)
+  }, [])
+
+  const handleToggleFlows = useCallback(() => {
+    setShowFlows((v) => !v)
+  }, [])
+
   const handleProgressChange = useCallback(
     (value) => {
       setAgentPlaying(false)
@@ -136,20 +177,27 @@ function CrystalAgentsStudy() {
         lab={lab}
         className="exp03-viewport"
         planSeed={agentSeed}
+        clusters={clusters}
+        getVitalityMap={getVitalityMap}
+        competitionState={competitionState}
+        showCompetitionFlows={showFlows}
         growthByPieceId={growthByPieceId}
         getGrowthMap={getGrowthMap}
       />
 
       <div className="exp03-intro">
         <p className="exp03-intro__eyebrow">
-          Playground · Experiment 03 · Study 01
+          Playground · Experiment 05 · Study 01
         </p>
         <p className="exp03-intro__title">Crystal Agents</p>
         <p className="exp03-intro__desc">
-          Primary growth nodes act as autonomous agents (Dormant → Growing →
-          Branching / Stressed / Decaying). Secondary and tertiary crystals
-          emerge over time. Membrane AGE stays frozen at{' '}
-          {EXP05_OBSERVE_AGE.toFixed(2)}.
+          {clusters.length} crystal clusters share one membrane patch. Primary
+          growth nodes act as autonomous agents (Dormant → Growing → Branching
+          / Stressed / Decaying) and read moisture where they stand. Each
+          cluster perceives its neighbours and competes for the same water:
+          large mature clusters drain small ones nearby (blue flows), starved
+          crystals cloud over and collapse, and empty sites re-seed. Membrane
+          AGE stays frozen at {EXP05_OBSERVE_AGE.toFixed(2)}.
         </p>
       </div>
 
@@ -157,6 +205,11 @@ function CrystalAgentsStudy() {
         sim={sim}
         agentSeed={agentSeed}
         moisture={moisture}
+        clusterCount={clusterCount}
+        fieldContrast={fieldContrast}
+        competition={competition}
+        showFlows={showFlows}
+        clusterSummaries={clusterSummaries}
         playing={agentPlaying}
         progress={meanProgress}
         diagnostics={diagnostics}
@@ -164,6 +217,10 @@ function CrystalAgentsStudy() {
         onReset={handleResetSim}
         onSeedChange={handleSeedChange}
         onMoistureChange={handleMoistureChange}
+        onClusterCountChange={handleClusterCountChange}
+        onFieldContrastChange={handleFieldContrastChange}
+        onCompetitionChange={handleCompetitionChange}
+        onToggleFlows={handleToggleFlows}
         onProgressChange={handleProgressChange}
       />
 
@@ -189,7 +246,8 @@ function CrystalAgentsStudy() {
 }
 
 /**
- * Experiment 03 — Agent Behaviors
+ * Experiment 05 — Agent Behaviors
+ * (Playground tab id `05`; internal CSS still uses exp03-*)
  * Study 01 = Crystal Agent MVP (FSM + moisture + inspector).
  */
 export default function Experiment03({ title, description }) {
@@ -201,7 +259,7 @@ export default function Experiment03({ title, description }) {
       <div
         className="exp03-study-tabs"
         role="tablist"
-        aria-label="Experiment 03 studies"
+        aria-label="Experiment 05 studies"
       >
         {STUDIES.map((item) => {
           const active = item.id === study.id
@@ -228,7 +286,7 @@ export default function Experiment03({ title, description }) {
       ) : (
         <>
           <div className="exp03-intro">
-            <p className="exp03-intro__eyebrow">Playground · Experiment 03</p>
+            <p className="exp03-intro__eyebrow">Playground · Experiment 05</p>
             <p className="exp03-intro__title">{title}</p>
             <p className="exp03-intro__desc">{description}</p>
           </div>

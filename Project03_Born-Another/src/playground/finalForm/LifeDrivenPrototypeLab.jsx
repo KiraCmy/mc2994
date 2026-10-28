@@ -95,7 +95,7 @@ export default function LifeDrivenPrototypeLab({
       />
 
       <header className="exp05-intro">
-        <p className="exp05-intro__eyebrow">Playground · Experiment 05</p>
+        <p className="exp05-intro__eyebrow">Playground · Experiment 04</p>
         <h1 className="exp05-intro__title">{title}</h1>
         <p className="exp05-intro__desc">{description}</p>
       </header>

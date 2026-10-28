@@ -18,7 +18,10 @@ import {
 } from './crystalClusterGeometry.js'
 import { estimateCrystalRadiusAt } from './crystalPolyhedronGeometry.js'
 import {
+  applyExp03CrystalVitality,
   bindExp03CrystalLayeredEnvMaps,
+  createExp03CrystalEdgeGeometry,
+  createExp03CrystalEdgeMaterial,
   createExp03CrystalLayeredMaterials,
   prepareExp03CrystalGeometry,
 } from './crystalClusterMaterial.js'
@@ -44,6 +47,7 @@ function buildCrystalTransforms(
     morphologyType,
     morphology = EXP03_MORPHOLOGY_DEFAULTS,
     planSeed = null,
+    clusterPlan = null,
   } = {},
 ) {
   if (!life) {
@@ -52,7 +56,10 @@ function buildCrystalTransforms(
 
   const membraneSeed = life.seed ?? 1
   const seed = planSeed != null ? planSeed : membraneSeed
-  const { site, plan } = planSingleBioCrystalPieces(seed, morphology)
+  /* Multi-cluster: a precomputed { site, plan } from multiBioCrystalPlan. */
+  const { site, plan } = clusterPlan?.site && Array.isArray(clusterPlan.plan)
+    ? clusterPlan
+    : planSingleBioCrystalPieces(seed, morphology)
   const radiusAt = createExp05RadiusAt(membraneSeed, morphologyType)
   const restMean = estimateRadiusAtMean(radiusAt)
 
@@ -220,9 +227,15 @@ export default function SingleBioCrystalCluster({
   growthByPieceId = null,
   /** Optional live getter polled each frame for smooth growth (sim≠render). */
   getGrowthMap = null,
+  /** Precomputed { site, plan } for one cluster of a multi-cluster layout. */
+  clusterPlan = null,
+  /** Live getter → pieceId → vitality 0..1 (competition / stress tint). */
+  getVitalityMap = null,
 }) {
   const geometryPoolRef = useRef(new Map())
   const materialPoolRef = useRef(new Map())
+  /** key → { geometry, material } facet ridge lines (child of each crystal). */
+  const edgePoolRef = useRef(new Map())
   const meshRefs = useRef(new Map())
   const baseScaleRef = useRef(new Map())
 
@@ -239,8 +252,9 @@ export default function SingleBioCrystalCluster({
         morphologyType,
         morphology,
         planSeed,
+        clusterPlan,
       }),
-    [seatingLife, lobeAmplitude, morphologyType, morphology, planSeed],
+    [seatingLife, lobeAmplitude, morphologyType, morphology, planSeed, clusterPlan],
   )
 
   useEffect(() => {
@@ -261,6 +275,12 @@ export default function SingleBioCrystalCluster({
       if (liveKeys.has(key)) continue
       for (const material of materials) material.dispose()
       materialPoolRef.current.delete(key)
+    }
+    for (const [key, edge] of edgePoolRef.current) {
+      if (liveKeys.has(key)) continue
+      edge.geometry.dispose()
+      edge.material.dispose()
+      edgePoolRef.current.delete(key)
     }
   }, [pieces])
 
@@ -299,6 +319,20 @@ export default function SingleBioCrystalCluster({
     }
   }
 
+  const edgePool = edgePoolRef.current
+  for (const entry of pieces) {
+    if (edgePool.has(entry.key)) continue
+    const geometry = geoPool.get(entry.key)
+    if (!geometry) continue
+    edgePool.set(entry.key, {
+      geometry: createExp03CrystalEdgeGeometry(geometry),
+      material: createExp03CrystalEdgeMaterial({
+        tint: entry.tint,
+        role: entry.role,
+      }),
+    })
+  }
+
   /* Bind env maps when they arrive / change — reflection-only update. */
   useEffect(() => {
     for (const materials of materialPoolRef.current.values()) {
@@ -316,6 +350,11 @@ export default function SingleBioCrystalCluster({
         for (const material of materials) material.dispose()
       }
       materialPoolRef.current.clear()
+      for (const edge of edgePoolRef.current.values()) {
+        edge.geometry.dispose()
+        edge.material.dispose()
+      }
+      edgePoolRef.current.clear()
     },
     [],
   )
@@ -351,6 +390,40 @@ export default function SingleBioCrystalCluster({
     }
   }
 
+  /*
+   * Vitality tint: ease each piece toward its target so stress / starvation
+   * reads as a gradual clouding rather than a flicker.
+   */
+  const vitalityRef = useRef(new Map())
+  useFrame((_, delta) => {
+    if (typeof getVitalityMap !== 'function') return
+    const targets = getVitalityMap() || {}
+    const k = 1 - Math.exp(-Math.min(0.1, delta) * 2.5)
+    for (const entry of piecesRef.current) {
+      const target = targets[entry.pieceId]
+      if (target == null) continue
+      const materials = materialPoolRef.current.get(entry.key)
+      if (!materials) continue
+      /* Keyed by material set: a re-seed builds fresh (fully vital) glass. */
+      const record = vitalityRef.current.get(entry.key)
+      const prev = record && record.materials === materials ? record.v : 1
+      const next = prev + (target - prev) * k
+      if (
+        record?.materials === materials &&
+        Math.abs(next - prev) < 1e-4 &&
+        Math.abs(next - target) < 1e-3
+      ) {
+        continue
+      }
+      vitalityRef.current.set(entry.key, { v: next, materials })
+      applyExp03CrystalVitality(
+        materials,
+        edgePoolRef.current.get(entry.key)?.material,
+        next,
+      )
+    }
+  })
+
   /* Live sim map smooths between React inspector ticks. */
   useFrame(() => {
     if (!useGrowth) return
@@ -379,6 +452,7 @@ export default function SingleBioCrystalCluster({
         const material = matPool.get(entry.key)
         const geometry = geoPool.get(entry.key)
         if (!material || !geometry) return null
+        const edge = edgePool.get(entry.key)
 
         let sx = entry.scale.x
         let sy = entry.scale.y
@@ -420,7 +494,16 @@ export default function SingleBioCrystalCluster({
             frustumCulled={false}
             renderOrder={renderOrderFor(entry.role)}
             visible={visible}
-          />
+          >
+            {edge ? (
+              <lineSegments
+                geometry={edge.geometry}
+                material={edge.material}
+                frustumCulled={false}
+                renderOrder={renderOrderFor(entry.role)}
+              />
+            ) : null}
+          </mesh>
         )
       })}
     </group>

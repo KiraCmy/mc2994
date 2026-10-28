@@ -181,6 +181,99 @@
   height: auto !important;
 }
 
+/*
+ * Exp01 / Exp02: organism fills the scene. HUD, timeline, and env readouts
+ * overlay the viewport instead of reserving a separate chrome strip.
+ * Language input stays a sibling below the scene.
+ */
+.playground-experiment--language-env .playground-experiment__intro,
+.playground-experiment--exp02 .playground-experiment__intro {
+  gap: 0.2rem;
+  padding-bottom: 0.4rem;
+}
+
+.playground-experiment--language-env .playground-experiment__desc,
+.playground-experiment--exp02 .playground-experiment__desc {
+  -webkit-line-clamp: 1;
+}
+
+.playground-experiment--language-env .playground-experiment__stage,
+.playground-experiment--exp02 .playground-experiment__stage {
+  gap: 0.5rem;
+}
+
+.playground-experiment--language-env .playground-experiment__scene--live,
+.playground-experiment--exp02 .playground-experiment__scene--live {
+  --scene-chrome-height: 0px;
+  flex: 1 1 0;
+  min-height: 22rem;
+}
+
+.playground-experiment--language-env .playground-experiment__compare,
+.playground-experiment--exp02 .playground-experiment__scene--exp02
+  .playground-experiment__viewport {
+  inset: 0;
+}
+
+.playground-experiment--language-env
+  .playground-experiment__compare-pane
+  .playground-experiment__viewport {
+  inset: 0;
+}
+
+.playground-experiment--language-env .playground-experiment__scene-chrome,
+.playground-experiment--exp02 .playground-experiment__scene-chrome {
+  background: linear-gradient(
+    to top,
+    rgba(1, 4, 5, 0.88) 0%,
+    rgba(1, 4, 5, 0.55) 58%,
+    rgba(1, 4, 5, 0) 100%
+  );
+  border-top: none;
+  pointer-events: none;
+}
+
+.playground-experiment--language-env .playground-experiment__scene-hud,
+.playground-experiment--language-env .playground-experiment__timeline,
+.playground-experiment--exp02 .playground-experiment__scene-hud {
+  pointer-events: none;
+}
+
+.playground-experiment--language-env .playground-experiment__scene-hud > *,
+.playground-experiment--language-env .playground-experiment__timeline-range,
+.playground-experiment--exp02 .playground-experiment__scene-hud > * {
+  pointer-events: auto;
+}
+
+.playground-experiment--language-env .playground-experiment__scene-hud,
+.playground-experiment--exp02 .playground-experiment__scene-hud {
+  padding: 0.55rem 0.55rem 0.25rem;
+}
+
+.playground-experiment--language-env .playground-experiment__timeline {
+  padding: 0.15rem 0.75rem 0.45rem;
+  border-top: none;
+}
+
+.playground-experiment--language-env .playground-experiment__compare-label {
+  top: 0;
+  bottom: auto;
+  background: linear-gradient(
+    to bottom,
+    rgba(1, 4, 5, 0.72) 0%,
+    rgba(1, 4, 5, 0.28) 70%,
+    transparent 100%
+  );
+  border-top: none;
+  border-bottom: none;
+  padding: 0.5rem 0.55rem 0.65rem;
+}
+
+.playground-experiment--language-env .playground-experiment__language,
+.playground-experiment--exp02 .playground-experiment__language {
+  max-height: min(9rem, 22%);
+}
+
 .playground-experiment__exp02-labels {
   display: flex;
   justify-content: space-between;
@@ -192,6 +285,18 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   pointer-events: none;
+}
+
+.playground-experiment--exp02 .playground-experiment__exp02-labels {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  top: 0.45rem;
+  bottom: auto;
+  padding: 0.35rem 0.75rem;
+  background: none;
+  text-shadow: 0 1px 8px rgba(1, 4, 5, 0.85);
 }
 
 .playground-experiment__organism-card {
@@ -934,6 +1039,13 @@
     max-height: 42vh;
   }
 
+  .playground-experiment--language-env .playground-experiment__scene--live,
+  .playground-experiment--exp02 .playground-experiment__scene--live {
+    --scene-chrome-height: 0px;
+    min-height: 22rem;
+    max-height: 58vh;
+  }
+
   .playground-experiment__compare--ab {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;
@@ -1617,6 +1729,170 @@
   opacity: 1;
 }
 
+/* Exp04 Population — environment + selected-organism editor */
+.exp05-pop-section {
+  margin: 0.2rem 0 0.6rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--exp05-line);
+}
+
+.exp05-pop-section__label {
+  margin: 0.35rem 0 0.4rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.exp05-pop-btn {
+  margin: 0.15rem 0 0;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--exp05-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--exp05-ink);
+  font: inherit;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.exp05-pop-row {
+  cursor: pointer;
+}
+
+.exp05-pop-row.is-selected {
+  outline: 1px solid var(--exp05-ink);
+  outline-offset: 3px;
+}
+
+.exp05-pop-editor {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 0.7rem;
+  padding: 0.55rem 0.6rem 0.65rem;
+  border: 1px solid var(--exp05-line);
+}
+
+.exp05-pop-editor__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+}
+
+.exp05-pop-editor__shapes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.25rem;
+}
+
+.exp05-pop-editor__shapes button {
+  padding: 0.35rem 0.2rem;
+  border: 1px solid var(--exp05-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--exp05-ink);
+  font: inherit;
+  font-size: 0.6rem;
+  cursor: pointer;
+}
+
+.exp05-pop-editor__shapes button[aria-pressed='true'] {
+  background: var(--exp05-ink);
+  color: var(--exp05-bg, #1d2230);
+}
+
+/* Exp04 Population — interaction toggles + organism roster */
+.exp05-pop-toggles {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.2rem 0 0.55rem;
+}
+
+.exp05-pop-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.exp05-pop-toggle input {
+  accent-color: currentColor;
+}
+
+.exp05-pop-roster {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 0.6rem;
+  padding: 0.5rem 0 0;
+  list-style: none;
+  border-top: 1px solid var(--exp05-line);
+}
+
+.exp05-pop-row {
+  display: grid;
+  grid-template-columns: 1.6rem 4.4rem 3.4rem minmax(0, 1fr) 2.2rem;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.64rem;
+  letter-spacing: 0.03em;
+}
+
+.exp05-pop-row strong {
+  font-weight: 600;
+}
+
+.exp05-pop-row em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  opacity: 0.85;
+}
+
+.exp05-pop-row__stage {
+  font-size: 0.56rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.exp05-pop-row.is-bud .exp05-pop-row__stage,
+.exp05-pop-row.is-young .exp05-pop-row__stage {
+  opacity: 1;
+}
+
+.exp05-pop-row.is-old .exp05-pop-row__stage {
+  opacity: 0.55;
+}
+
+.exp05-pop-row__age {
+  position: relative;
+  display: block;
+  height: 3px;
+  background: var(--exp05-line);
+}
+
+.exp05-pop-row__age i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+.exp05-pop-row__note,
+.exp05-pop-row__gen {
+  grid-column: 2 / -1;
+  margin-top: -0.15rem;
+  font-size: 0.56rem;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
 .exp05-panel__readout {
   display: grid;
   gap: 0.45rem;
@@ -2128,6 +2404,103 @@
   color: var(--exp05-ink, #fff);
   font: inherit;
   font-size: 0.72rem;
+}
+
+/* Step 03 — per-cluster local moisture readout */
+.exp03-cluster-list {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.2rem 0 0.4rem;
+  padding: 0.5rem 0 0;
+  list-style: none;
+  border-top: 1px solid var(--exp05-line, rgba(255, 255, 255, 0.58));
+}
+
+.exp03-cluster-row {
+  display: grid;
+  grid-template-columns: 1.8rem minmax(0, 1fr) 2.2rem 4.6rem 2.4rem;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+}
+
+.exp03-cluster-row strong {
+  font-weight: 600;
+}
+
+.exp03-cluster-row em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  opacity: 0.85;
+}
+
+.exp03-cluster-row__moisture {
+  position: relative;
+  display: block;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.exp03-cluster-row__moisture i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  background: rgba(160, 214, 240, 0.9);
+}
+
+/* Field supply (grey) behind what survives neighbour drain (blue). */
+.exp03-cluster-row__moisture b {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.exp03-cluster-row__drain {
+  grid-column: 2 / -1;
+  margin-top: -0.1rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  color: #8fdcff;
+}
+
+.exp03-lab__check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.1rem 0 0.35rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.exp03-lab__check input {
+  accent-color: #8fdcff;
+}
+
+.exp03-cluster-row__state {
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.exp03-cluster-row.is-growing .exp03-cluster-row__state,
+.exp03-cluster-row.is-branching .exp03-cluster-row__state {
+  color: #c8f0e0;
+}
+
+.exp03-cluster-row.is-stressed .exp03-cluster-row__state {
+  color: #f0d2a0;
+}
+
+.exp03-cluster-row.is-decaying .exp03-cluster-row__state {
+  color: #f0b0b0;
+}
+
+.exp03-cluster-row.is-dormant .exp03-cluster-row__state {
+  opacity: 0.65;
 }
 
 .exp03-agent-list {

@@ -583,6 +583,10 @@ export default function Experiment02({ title, description }) {
               orbitPivot={ORBIT_PIVOT}
               cameraPosition={SHARED_CAMERA_POSITION}
             />
+            <div className="playground-experiment__exp02-labels" aria-hidden="true">
+              <span>Organism A</span>
+              <span>Organism B</span>
+            </div>
             <div className="playground-experiment__scene-chrome">
               <div className="playground-experiment__scene-hud">
                 <span>
@@ -598,10 +602,6 @@ export default function Experiment02({ title, description }) {
                 >
                   {freezeSimTime ? 'Resume Time' : 'Pause Time'}
                 </button>
-              </div>
-              <div className="playground-experiment__exp02-labels" aria-hidden="true">
-                <span>Organism A</span>
-                <span>Organism B</span>
               </div>
             </div>
           </section>

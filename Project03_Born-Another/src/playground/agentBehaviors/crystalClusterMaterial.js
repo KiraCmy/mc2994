@@ -407,3 +407,96 @@ export function bindExp03CrystalLayeredEnvMaps(
     m.needsUpdate = true
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Facet edge highlights — thin bright ridge lines (reference "cut" look)     */
+/* -------------------------------------------------------------------------- */
+
+const EDGE_ROLE_OPACITY = {
+  primary: 0.2,
+  secondary: 0.18,
+  tertiary: 0.15,
+  micro: 0.1,
+}
+
+/**
+ * Ridge lines between facets whose normals differ by more than
+ * `thresholdAngle` degrees. Build from the *unit* crystal geometry and render
+ * as a child of the crystal mesh so growth scale / visibility carry over.
+ */
+export function createExp03CrystalEdgeGeometry(geometry, thresholdAngle = 32) {
+  return new THREE.EdgesGeometry(geometry, thresholdAngle)
+}
+
+/** Additive, unlit edge material; back edges stay visible through the glass. */
+export function createExp03CrystalEdgeMaterial({
+  tint = 0.2,
+  role = 'primary',
+} = {}) {
+  const slot = EXP03_GLASS_SLOTS[tintSlot(tint)]
+  const material = new THREE.LineBasicMaterial({
+    color: new THREE.Color('#ffffff').lerp(slot.tip, 0.25),
+    transparent: true,
+    opacity: EDGE_ROLE_OPACITY[role] ?? EDGE_ROLE_OPACITY.primary,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  })
+  material.userData.exp03Layer = 'edge'
+  return material
+}
+
+/* -------------------------------------------------------------------------- */
+/* Vitality — starved / stressed / decaying crystals turn ashen and dull      */
+/* -------------------------------------------------------------------------- */
+
+const ASH = new THREE.Color('#aaa3a8')
+const ASH_INNER = new THREE.Color('#8f888c')
+const _tmp = new THREE.Color()
+
+function rememberBase(material) {
+  const u = material.userData
+  if (u.exp03Base) return u.exp03Base
+  u.exp03Base = {
+    color: material.color ? material.color.clone() : null,
+    emissive: material.emissive ? material.emissive.clone() : null,
+    opacity: material.opacity,
+    iridescence: material.iridescence ?? null,
+    reflectivity: material.reflectivity ?? null,
+    clearcoat: material.clearcoat ?? null,
+  }
+  return u.exp03Base
+}
+
+/**
+ * Apply vitality v ∈ [0,1] to a crystal's [inner, body, glint] materials and
+ * optional edge material. Cheap uniform updates only (no recompiles).
+ */
+export function applyExp03CrystalVitality(materials, edgeMaterial, vitality) {
+  const v = Math.min(1, Math.max(0, Number(vitality)))
+  const dead = 1 - v
+  for (const m of materials || []) {
+    const layer = m?.userData?.exp03Layer
+    if (!layer) continue
+    const base = rememberBase(m)
+    if (layer === 'inner') {
+      m.color.copy(base.color).lerp(ASH_INNER, dead)
+      if (m.emissive) m.emissive.copy(base.emissive).multiplyScalar(v)
+      m.opacity = base.opacity * (0.55 + 0.45 * v)
+    } else if (layer === 'body') {
+      /* Healthy: white body (vertex tint carries colour). Starved: ash. */
+      m.color.copy(_tmp.set('#ffffff')).lerp(ASH, dead * 0.85)
+      if (m.emissive) m.emissive.copy(base.emissive).multiplyScalar(v)
+      /* Calcified crystals go milky — slightly more opaque, no film. */
+      m.opacity = base.opacity + dead * 0.18
+      if (base.iridescence != null) m.iridescence = base.iridescence * v
+      if (base.clearcoat != null) m.clearcoat = base.clearcoat * (0.3 + 0.7 * v)
+    } else if (layer === 'glint') {
+      if (base.reflectivity != null) m.reflectivity = base.reflectivity * v * v
+    }
+  }
+  if (edgeMaterial) {
+    const base = rememberBase(edgeMaterial)
+    edgeMaterial.opacity = base.opacity * (0.25 + 0.75 * v)
+  }
+}

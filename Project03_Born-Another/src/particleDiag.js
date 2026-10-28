@@ -39,6 +39,11 @@ function badgeText(mode) {
 export function updateDiagBadge(mode = readBaDiagMode()) {
   if (typeof document === 'undefined') return
   let el = document.getElementById('ba-build-badge')
+  /* Visible only while isolating particles via ?baDiag=… */
+  if (!mode) {
+    el?.remove()
+    return
+  }
   if (!el) {
     el = document.createElement('div')
     el.id = 'ba-build-badge'
@@ -59,10 +64,9 @@ export function updateDiagBadge(mode = readBaDiagMode()) {
     ].join(';')
     document.body.appendChild(el)
   }
-  const text = badgeText(mode)
-  el.textContent = text
+  el.textContent = badgeText(mode)
   el.setAttribute('data-ba-build', BA_BUILD_ID)
-  el.setAttribute('data-ba-diag', mode || 'off')
+  el.setAttribute('data-ba-diag', mode)
 }
 
 /** Call once at app boot. */

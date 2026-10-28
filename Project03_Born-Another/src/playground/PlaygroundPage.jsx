@@ -16,9 +16,10 @@ import './playground.css'
 const EXPERIMENT_VIEWS = {
   '01': Experiment01,
   '02': Experiment02,
-  '03': Experiment03,
-  '04': Experiment04,
-  '05': Experiment05,
+  /* Tab order: Morphology (03) → Final Form (04) → Agent Behaviors (05). */
+  '03': Experiment04,
+  '04': Experiment05,
+  '05': Experiment03,
 }
 
 export default function PlaygroundPage({ header }) {
@@ -28,16 +29,16 @@ export default function PlaygroundPage({ header }) {
   const experiment = getPlaygroundExperiment(activeId)
   const View = EXPERIMENT_VIEWS[experiment.id] ?? Experiment01
 
-  const isExp05 = experiment.id === '05'
-  const isExp03 = experiment.id === '03'
-  /* Exp03 reuses Exp05 page atmosphere (soft pastel blooms + vignette). */
-  const useExp05Atmosphere = isExp05 || isExp03
+  const isFinalForm = experiment.id === '04'
+  const isAgentBehaviors = experiment.id === '05'
+  /* Final Form + Agent Behaviors reuse Exp05 page atmosphere. */
+  const useExp05Atmosphere = isFinalForm || isAgentBehaviors
 
   return (
     <div
       className={`playground-page${
         useExp05Atmosphere ? ' playground-page--exp05' : ''
-      }${isExp03 ? ' playground-page--exp03' : ''}`}
+      }${isAgentBehaviors ? ' playground-page--exp03' : ''}`}
     >
       <SiteHud
         className="playground-page__hud"

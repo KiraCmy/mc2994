@@ -29,6 +29,7 @@ import {
   normalizeExp05Temperature,
 } from '../finalForm/exp05EnvironmentCoupling.js'
 import { EXP05_DEFAULT_MORPHOLOGY_TYPE } from '../finalForm/exp05MorphologyTypes.js'
+import CompetitionFlows from './CompetitionFlows.jsx'
 import SingleBioCrystalCluster from './SingleBioCrystalCluster.jsx'
 import {
   createCrystalPastelEnvMap,
@@ -38,6 +39,38 @@ import {
 
 /** Close framing: cohesive cluster fills most of the viewport (reference match). */
 const CRYSTAL_STUDY_CAMERA_DISTANCE = 1.18
+/** Medium framing: the whole multi-cluster patch reads in one view. */
+const CRYSTAL_FIELD_CAMERA_DISTANCE = 2.7
+/*
+ * Low side-on view for the multi-cluster field: crystals grow along the
+ * membrane normal, so a top-down camera foreshortens them into flat shards.
+ * Elevation = angle above the local membrane surface; azimuth = turn away
+ * from straight "below" toward the side for a three-quarter read.
+ */
+const CRYSTAL_FIELD_CAMERA_ELEVATION = 0.52
+const CRYSTAL_FIELD_CAMERA_AZIMUTH = 0.32
+/** Aim at mid-crystal height so standing formations sit mid-frame. */
+const CRYSTAL_FIELD_TARGET_LIFT = 0.04
+/*
+ * Shift the aim point along the surface "side" axis so the colony lands in
+ * the open area left of the Agent Inspector panel (moves content screen-left).
+ */
+const CRYSTAL_FIELD_TARGET_SIDE = 0.2
+
+/** Mean seat (position + normal) of every cluster that has reported one. */
+function centroidSeat(seats) {
+  const list = seats.filter((s) => s?.position && s?.normal)
+  if (list.length === 0) return null
+  const position = new THREE.Vector3()
+  const normal = new THREE.Vector3()
+  for (const s of list) {
+    position.add(s.position)
+    normal.add(s.normal)
+  }
+  position.multiplyScalar(1 / list.length)
+  normal.normalize()
+  return { position, normal }
+}
 
 function useStudiesDpr(maxPixels = STUDIES_MAX_PIXELS) {
   const [dpr, setDpr] = useState(() => {
@@ -128,19 +161,50 @@ function GrowthSiteFraming({
   seat,
   controlsRef,
   distance = CRYSTAL_STUDY_CAMERA_DISTANCE,
+  /** Radians above the membrane surface; null = legacy along-normal view. */
+  elevation = null,
+  azimuth = 0,
+  targetLift = 0,
+  targetSide = 0,
 }) {
   const camera = useThree((state) => state.camera)
 
   useEffect(() => {
     if (!seat?.position || !seat?.normal) return
-    const target = seat.position.clone()
     const outward = seat.normal.clone().normalize()
-    /* Slight lateral bias so elongated facets read in three-quarter view. */
-    const viewOffset = outward
-      .clone()
-      .multiplyScalar(distance)
-      .add(new THREE.Vector3(0.18, 0.16, 0))
-    const position = target.clone().add(viewOffset)
+    const target = seat.position.clone().addScaledVector(outward, targetLift)
+    let position
+    if (elevation == null) {
+      /* Slight lateral bias so elongated facets read in three-quarter view. */
+      const viewOffset = outward
+        .clone()
+        .multiplyScalar(distance)
+        .add(new THREE.Vector3(0.18, 0.16, 0))
+      position = target.clone().add(viewOffset)
+    } else {
+      /*
+       * Tangent frame on the membrane: `surfaceUp` = world +Y projected onto
+       * the surface. Placing the camera on the −surfaceUp side keeps world-up
+       * orbit controls, and crystals (growing along `outward`) read upright.
+       */
+      const worldUp = new THREE.Vector3(0, 1, 0)
+      const surfaceUp = worldUp
+        .clone()
+        .addScaledVector(outward, -worldUp.dot(outward))
+        .normalize()
+      const side = new THREE.Vector3().crossVectors(surfaceUp, outward)
+      const along = surfaceUp
+        .clone()
+        .multiplyScalar(-Math.cos(azimuth))
+        .addScaledVector(side, Math.sin(azimuth))
+      const dir = outward
+        .clone()
+        .multiplyScalar(Math.sin(elevation))
+        .addScaledVector(along, Math.cos(elevation))
+        .normalize()
+      target.addScaledVector(side, targetSide)
+      position = target.clone().addScaledVector(dir, distance)
+    }
 
     camera.position.copy(position)
     camera.near = 0.03
@@ -155,7 +219,16 @@ function GrowthSiteFraming({
       controls.minDistance = Math.min(EXPLORE_MIN_DISTANCE, 0.45)
       controls.update()
     }
-  }, [seat, camera, controlsRef, distance])
+  }, [
+    seat,
+    camera,
+    controlsRef,
+    distance,
+    elevation,
+    azimuth,
+    targetLift,
+    targetSide,
+  ])
 
   return null
 }
@@ -255,6 +328,13 @@ export default function CrystalAgentsStaticScene({
   growthByPieceId = null,
   getGrowthMap = null,
   planSeed = null,
+  /** Multi-cluster layout from planMultiBioCrystalClusters (null = single). */
+  clusters = null,
+  /** Live getter → pieceId → vitality 0..1 (stress / starvation tint). */
+  getVitalityMap = null,
+  /** clusterId → { drain, sources } from the agent sim (competition). */
+  competitionState = null,
+  showCompetitionFlows = true,
 }) {
   const dpr = useStudiesDpr()
   const controlsRef = useRef(null)
@@ -265,6 +345,35 @@ export default function CrystalAgentsStaticScene({
   const handleSeatReady = useCallback((nextSeat) => {
     setSeat(nextSeat)
   }, [])
+
+  /*
+   * Multi-cluster framing: every cluster reports its seat; the camera and
+   * studio lights centre on the mean seat of the clusters currently shown.
+   */
+  const multi = Array.isArray(clusters) && clusters.length > 0
+  const clusterSeatsRef = useRef(new Map())
+  const [seatVersion, setSeatVersion] = useState(0)
+  const clusterKey = multi ? clusters.map((c) => c.id).join(',') : ''
+  const clusterSeatHandlers = useMemo(() => {
+    const ids = clusterKey ? clusterKey.split(',') : []
+    const seats = clusterSeatsRef.current
+    for (const id of [...seats.keys()]) {
+      if (!ids.includes(id)) seats.delete(id)
+    }
+    const handlers = {}
+    for (const id of ids) {
+      handlers[id] = (nextSeat) => {
+        seats.set(id, nextSeat)
+        setSeat(centroidSeat(ids.map((key) => seats.get(key))))
+        setSeatVersion((n) => n + 1)
+      }
+    }
+    return handlers
+  }, [clusterKey])
+  const framingDistance =
+    multi && clusters.length > 1
+      ? CRYSTAL_FIELD_CAMERA_DISTANCE
+      : CRYSTAL_STUDY_CAMERA_DISTANCE
 
   const handleCrystalEnvReady = useCallback((maps) => {
     setCrystalEnvMaps(maps)
@@ -357,7 +466,33 @@ export default function CrystalAgentsStaticScene({
         opticalDensity={opticalDensity}
         thicknessContrast={thicknessContrast}
       />
-      {showCrystals ? (
+      {showCrystals && multi
+        ? clusters.map((cluster) => (
+            <SingleBioCrystalCluster
+              key={cluster.id}
+              life={life}
+              lobeAmplitude={lobeAmplitude}
+              morphologyType={morphologyType}
+              glintEnvMap={crystalEnvMaps?.glint ?? null}
+              bodyEnvMap={crystalEnvMaps?.body ?? null}
+              onSeatReady={clusterSeatHandlers[cluster.id]}
+              planSeed={planSeed}
+              clusterPlan={cluster}
+              growthByPieceId={growthByPieceId}
+              getGrowthMap={getGrowthMap}
+              getVitalityMap={getVitalityMap}
+            />
+          ))
+        : null}
+      {showCrystals && multi ? (
+        <CompetitionFlows
+          seats={clusterSeatsRef.current}
+          seatVersion={seatVersion}
+          competitionState={competitionState}
+          visible={showCompetitionFlows}
+        />
+      ) : null}
+      {showCrystals && !multi ? (
         <SingleBioCrystalCluster
           life={life}
           lobeAmplitude={lobeAmplitude}
@@ -370,7 +505,15 @@ export default function CrystalAgentsStaticScene({
           getGrowthMap={getGrowthMap}
         />
       ) : null}
-      <GrowthSiteFraming seat={seat} controlsRef={controlsRef} />
+      <GrowthSiteFraming
+        seat={seat}
+        controlsRef={controlsRef}
+        distance={framingDistance}
+        elevation={multi ? CRYSTAL_FIELD_CAMERA_ELEVATION : null}
+        azimuth={multi ? CRYSTAL_FIELD_CAMERA_AZIMUTH : 0}
+        targetLift={multi ? CRYSTAL_FIELD_TARGET_LIFT : 0}
+        targetSide={multi ? CRYSTAL_FIELD_TARGET_SIDE : 0}
+      />
       <OrbitControls
         ref={controlsRef}
         makeDefault

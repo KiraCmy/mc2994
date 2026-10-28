@@ -20,23 +20,23 @@ export const PLAYGROUND_EXPERIMENTS = [
   {
     id: '03',
     label: 'Experiment 03',
-    title: 'Agent Behaviors',
-    description:
-      'Multi-scale agent studies. Study 01 — Crystal Agents: autonomous FSM growth on the Exp05 membrane with moisture coupling and an inspector. Studies 02–03 placeholders.',
-  },
-  {
-    id: '04',
-    label: 'Experiment 04',
     title: 'Morphology Lab',
     description:
       'Compare Flattened, Spiral, and Segmented rest shapes in one WorldViewport. Silhouette comes from injectable radial radius fields; membrane deformation, growth sites, and crystals stay on the existing World pipeline.',
   },
   {
-    id: '05',
-    label: 'Experiment 05',
+    id: '04',
+    label: 'Experiment 04',
     title: 'Final Form Lab',
     description:
       'Phase C2: World morphology + Explore ethereal look. Body material study — Biological Membrane (living tissue) with Pearlescent A/B. Lab tunes petals, particles, and morph strength.',
+  },
+  {
+    id: '05',
+    label: 'Experiment 05',
+    title: 'Agent Behaviors',
+    description:
+      'Multi-scale agent studies. Study 01 — Crystal Agents: autonomous FSM growth on the Exp05 membrane with moisture coupling and an inspector. Studies 02–03 placeholders.',
   },
 ]
 

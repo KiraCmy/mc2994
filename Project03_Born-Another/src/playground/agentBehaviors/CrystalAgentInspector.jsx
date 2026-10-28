@@ -2,6 +2,7 @@
  * Exp03 Study 01 — compact Crystal Agent debug inspector.
  */
 import { CRYSTAL_AGENT_STATES } from './crystalAgentTypes.js'
+import { MULTI_CLUSTER_MAX } from './multiBioCrystalPlan.js'
 
 const STATE_LABEL = {
   [CRYSTAL_AGENT_STATES.DORMANT]: 'Dormant',
@@ -24,6 +25,11 @@ export default function CrystalAgentInspector({
   sim,
   agentSeed,
   moisture,
+  clusterCount = 1,
+  fieldContrast = 0,
+  competition = 0,
+  showFlows = true,
+  clusterSummaries = [],
   playing,
   progress = 0,
   diagnostics = null,
@@ -31,6 +37,10 @@ export default function CrystalAgentInspector({
   onReset,
   onSeedChange,
   onMoistureChange,
+  onClusterCountChange,
+  onFieldContrastChange,
+  onCompetitionChange,
+  onToggleFlows,
   onProgressChange,
 }) {
   const agents = sim?.agents || []
@@ -90,7 +100,24 @@ export default function CrystalAgentInspector({
 
       <label className="exp03-lab__row">
         <span>
-          Moisture
+          Clusters
+          <em className="exp03-lab__value">{clusterCount}</em>
+        </span>
+        <input
+          type="range"
+          min={1}
+          max={MULTI_CLUSTER_MAX}
+          step={1}
+          value={clusterCount}
+          onChange={(e) => onClusterCountChange?.(Number(e.target.value))}
+          aria-valuetext={`${clusterCount} clusters`}
+          aria-label="Crystal cluster count"
+        />
+      </label>
+
+      <label className="exp03-lab__row">
+        <span>
+          Global moisture
           <em className="exp03-lab__value">{moisture.toFixed(2)}</em>
         </span>
         <input
@@ -104,6 +131,87 @@ export default function CrystalAgentInspector({
           aria-label="Agent moisture"
         />
       </label>
+
+      <label className="exp03-lab__row">
+        <span>
+          Field contrast
+          <em className="exp03-lab__value">±{fieldContrast.toFixed(2)}</em>
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={0.4}
+          step={0.01}
+          value={fieldContrast}
+          onChange={(e) => onFieldContrastChange?.(Number(e.target.value))}
+          aria-valuetext={`Local moisture contrast ±${fieldContrast.toFixed(2)}`}
+          aria-label="Local moisture field contrast"
+        />
+      </label>
+
+      <label className="exp03-lab__row">
+        <span>
+          Competition
+          <em className="exp03-lab__value">
+            {competition > 0 ? competition.toFixed(2) : 'off'}
+          </em>
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={competition}
+          onChange={(e) => onCompetitionChange?.(Number(e.target.value))}
+          aria-valuetext={
+            competition > 0
+              ? `Neighbour competition ${competition.toFixed(2)}`
+              : 'Neighbour competition off'
+          }
+          aria-label="Neighbour competition strength"
+        />
+      </label>
+
+      <label className="exp03-lab__check">
+        <input
+          type="checkbox"
+          checked={showFlows}
+          onChange={() => onToggleFlows?.()}
+        />
+        <span>Show drain flows</span>
+      </label>
+
+      {clusterSummaries.length > 0 ? (
+        <ul className="exp03-cluster-list" aria-label="Clusters">
+          {clusterSummaries.map((c) => (
+            <li
+              key={c.id}
+              className={`exp03-cluster-row is-${c.dominantState || 'dormant'}`}
+            >
+              <strong>C{c.index}</strong>
+              <span
+                className="exp03-cluster-row__moisture"
+                title={`Field ${c.fieldMoisture.toFixed(2)} − drain ${c.drain.toFixed(2)} = ${c.localMoisture.toFixed(2)}`}
+              >
+                {/* Grey = what the field offers; blue = what is left after neighbours drain it. */}
+                <b style={{ width: `${clampPct(c.fieldMoisture)}%` }} />
+                <i style={{ width: `${clampPct(c.localMoisture)}%` }} />
+              </span>
+              <em>{c.localMoisture.toFixed(2)}</em>
+              <span className="exp03-cluster-row__state">
+                {STATE_LABEL[c.dominantState] || '—'}
+              </span>
+              <em>{formatPct(c.meanProgress)}</em>
+              {c.drain >= 0.015 ? (
+                <span className="exp03-cluster-row__drain">
+                  −{c.drain.toFixed(2)} drained by{' '}
+                  {c.drainedBy.map((id) => `C${id.slice(1)}`).join(', ')}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       <dl className="exp03-panel__readout">
         <div>
@@ -153,7 +261,10 @@ export default function CrystalAgentInspector({
           return (
             <li key={agent.id} className={`exp03-agent-card is-${agent.state}`}>
               <div className="exp03-agent-card__head">
-                <strong>P{agent.index}</strong>
+                <strong>
+                  {agent.clusterId ? `C${agent.clusterId.slice(1)}·` : ''}P
+                  {agent.localIndex ?? agent.index}
+                </strong>
                 <span className="exp03-agent-card__state">
                   {STATE_LABEL[agent.state] || agent.state}
                 </span>
@@ -214,7 +325,9 @@ export default function CrystalAgentInspector({
       </ul>
 
       <p className="exp03-panel__hint">
-        Progress = maturity · Moisture reshapes it (dry shrinks / wet branches)
+        Progress = maturity · Global moisture ± field − neighbour drain =
+        moisture each cluster receives · Contrast 0 = uniform field ·
+        Competition off = independent clusters
       </p>
     </aside>
   )
