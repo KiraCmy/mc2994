@@ -5,6 +5,7 @@ export const MODES = [
   { id: 'system', label: 'System' },
   { id: 'worldv2', label: 'World' },
   { id: 'playground', label: 'Playground' },
+  { id: 'world-final', label: 'World Final' },
   { id: 'memory-lab', label: 'Memory Lab' },
 ]
 
@@ -49,11 +50,19 @@ export function parseAppRoute(hash = '') {
     token === 'concept' ||
     token === 'system' ||
     token === 'playground' ||
+    token === 'world-final' ||
+    token === 'worldfinal' ||
     token === 'memory-lab' ||
     token === 'memorylab'
   ) {
+    const modeId =
+      token === 'memorylab'
+        ? 'memory-lab'
+        : token === 'worldfinal'
+          ? 'world-final'
+          : token
     return {
-      modeId: token === 'memorylab' ? 'memory-lab' : token,
+      modeId,
       studyId: null,
     }
   }
@@ -68,6 +77,7 @@ export function parseAppRoute(hash = '') {
 
 export function appRouteHash(modeId, studyId) {
   if (modeId === 'worldv2') return '#world'
+  if (modeId === 'world-final') return '#world-final'
   if (modeId === 'memory-lab') return '#memory-lab'
   if (modeId === 'shader' && studyId && studyId !== 'surface') {
     return `#shader/${studyId}`

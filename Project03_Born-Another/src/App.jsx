@@ -20,6 +20,9 @@ import WebGLCanvas from './WebGLCanvas.jsx'
 const PlaygroundPage = lazy(() =>
   import('./playground/index.js').then((mod) => ({ default: mod.PlaygroundPage })),
 )
+const WorldFinalPage = lazy(() =>
+  import('./worldFinal/index.js').then((mod) => ({ default: mod.WorldFinalPage })),
+)
 const MemoryLabPage = lazy(() =>
   import('./memoryLab/index.js').then((mod) => ({ default: mod.MemoryLabPage })),
 )
@@ -601,11 +604,12 @@ export default function App() {
     function onKeyDown(event) {
       if (event.code !== 'Space' && event.key !== ' ') return
       if (event.repeat) return
-      // Concept / System / Playground / Memory Lab keep Space for native scrolling; World owns its own clock.
+      // Concept / System / Playground / World Final / Memory Lab keep Space for native scrolling; World owns its own clock.
       if (
         modeIdRef.current === 'concept' ||
         modeIdRef.current === 'system' ||
         modeIdRef.current === 'playground' ||
+        modeIdRef.current === 'world-final' ||
         modeIdRef.current === 'memory-lab' ||
         modeIdRef.current === 'worldv2'
       ) {
@@ -788,6 +792,18 @@ export default function App() {
       <main className="stage">
         <Suspense fallback={null}>
           <PlaygroundPage
+            header={<SiteHeader modeId={modeId} onSelectMode={selectMode} />}
+          />
+        </Suspense>
+      </main>
+    )
+  }
+
+  if (modeId === 'world-final') {
+    return (
+      <main className="stage">
+        <Suspense fallback={null}>
+          <WorldFinalPage
             header={<SiteHeader modeId={modeId} onSelectMode={selectMode} />}
           />
         </Suspense>

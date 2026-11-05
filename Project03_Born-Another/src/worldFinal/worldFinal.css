@@ -1,0 +1,133 @@
+/*
+ * World Final — panel extras only. The page background is inherited
+ * unchanged from .playground-page--exp05 (Playground Experiment 04) and
+ * shows through the transparent canvas; do not override it here.
+ */
+
+.world-final-page__slider {
+  display: grid;
+  gap: 0.28rem;
+  margin: 0.45rem 0 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--exp05-ink, #fff);
+}
+
+.world-final-page__slider span {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.world-final-page__slider em {
+  font-style: normal;
+  opacity: 0.72;
+}
+
+.world-final-page__slider input[type='range'] {
+  width: 100%;
+  accent-color: rgba(255, 255, 255, 0.85);
+}
+
+.world-final-page .exp05-chrome__actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.world-final-page .exp05-chrome__hint {
+  margin: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--exp05-ink-faint, rgba(255, 255, 255, 0.82));
+}
+
+.world-final-page__group {
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--exp05-line);
+}
+
+.world-final-page__group-label {
+  margin: 0.2rem 0 0.1rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--exp05-ink-soft);
+}
+
+.world-final-page__advanced {
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--exp05-line);
+  color: var(--exp05-ink);
+}
+
+.world-final-page__advanced summary {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--exp05-ink-soft);
+  cursor: pointer;
+}
+
+.world-final-page__view-hint {
+  margin: -0.3rem 0 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: var(--exp05-ink-soft);
+}
+
+.world-final-page__mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.45rem 0 0.55rem;
+}
+
+.world-final-page__mode {
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--exp05-ink, #fff);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.55rem;
+  cursor: pointer;
+}
+
+.world-final-page__mode.is-active {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.world-final-page__check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0.55rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--exp05-ink, #fff);
+  cursor: pointer;
+}
+
+.world-final-page__debug-hud {
+  position: absolute;
+  left: 1.1rem;
+  bottom: 4.5rem;
+  z-index: 4;
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  max-width: min(28rem, 70vw);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(40, 36, 52, 0.45);
+  color: #f4f0fa;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.62rem;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  white-space: pre;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+}
