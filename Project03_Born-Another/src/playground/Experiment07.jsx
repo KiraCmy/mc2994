@@ -1,0 +1,375 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLifeEngine } from '../worldv2/life/useLifeEngine.js'
+import HabitatScene from './finalHabitat/HabitatScene.jsx'
+import {
+  CRYSTAL_PRESETS,
+  crystallizationState,
+  crystallizationTarget,
+  stepCrystallization,
+} from './crystalForm/crystallization.js'
+import { parseEnvironmentalLanguage } from './languageAsEnvironment/parseEnvironmentalLanguage.js'
+import { EXP05_LIFE_SEED } from './finalForm/exploreLifeAdapter.js'
+import './finalHabitat/habitat.css'
+
+const START_AGE = 0.64
+const START_ENV = { temperature: 0.38, moisture: 0.68, turbulence: 0.12 }
+const HISTORY = 56
+
+function clamp01(v) {
+  return Math.min(1, Math.max(0, Number(v) || 0))
+}
+
+function EnvRow({ id, label, value, onChange }) {
+  return (
+    <label className="exp07-env__row" htmlFor={id}>
+      <span className="exp07-env__head">
+        <span>{label}</span>
+        <span className="exp07-env__value">{value.toFixed(2)}</span>
+      </span>
+      <input
+        id={id}
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={value}
+        aria-valuetext={`${label} ${value.toFixed(2)}`}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
+  )
+}
+
+function LifeGraph({ history, state }) {
+  const w = 200
+  const h = 44
+  const points = history.map((v, i) => [
+    (i / Math.max(1, HISTORY - 1)) * w,
+    h - 6 - v * (h - 12),
+  ])
+  const d = points
+    .map(([x, y], i) => {
+      if (i === 0) return `M${x.toFixed(1)} ${y.toFixed(1)}`
+      const [px, py] = points[i - 1]
+      const cx = ((px + x) / 2).toFixed(1)
+      return `Q${px.toFixed(1)} ${py.toFixed(1)} ${cx} ${((py + y) / 2).toFixed(1)}`
+    })
+    .join(' ')
+  const last = points[points.length - 1] ?? [0, h - 6]
+  return (
+    <div className="exp07-life">
+      <div className="exp07-life__head">
+        <span>Life</span>
+        <span>{state}</span>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" role="img" aria-label={`Crystallization over the last minute, now ${state}`}>
+        <path d={`${d} L${last[0].toFixed(1)} ${h} L0 ${h} Z`} className="exp07-life__area" />
+        <path d={d} className="exp07-life__line" />
+        <circle cx={last[0]} cy={last[1]} r="2.6" className="exp07-life__dot" />
+      </svg>
+    </div>
+  )
+}
+
+/**
+ * Experiment 07 — Final Habitat
+ * The reference environment: the Final Form organism resting on a misty
+ * forest floor, crystallizing as part of its form. Language, sliders and
+ * presets all write the same shared medium.
+ */
+export default function Experiment07({ title, description }) {
+  const { life, seekToAge, setPlaying, setMoisture, setTurbulence } = useLifeEngine(EXP05_LIFE_SEED)
+  const articleRef = useRef(null)
+  const [temperature, setTemperature] = useState(START_ENV.temperature)
+  const [running, setRunning] = useState(true)
+  const [message, setMessage] = useState('')
+  const [reply, setReply] = useState(null)
+  const [layersOpen, setLayersOpen] = useState(false)
+  const [layers, setLayers] = useState({
+    crystals: true,
+    petals: true,
+    frost: true,
+    fibres: true,
+    outcrops: true,
+    veils: true,
+    splashes: true,
+    flora: true,
+    kin: true,
+    bloom: true,
+  })
+  const [readout, setReadout] = useState({ level: 0.42, rate: 0, target: 0 })
+  const [history, setHistory] = useState(() => Array(HISTORY).fill(0.42))
+  const [fullscreen, setFullscreen] = useState(false)
+
+  const moisture = life.environment?.moisture ?? 0.5
+  const turbulence = life.environment?.turbulence ?? 0
+
+  const crystalRef = useRef({ level: 0.42, rate: 0, target: 0 })
+  const envRef = useRef({ temperature, moisture, turbulence })
+  envRef.current = { temperature, moisture, turbulence }
+  const timeRef = useRef(0)
+  const runningRef = useRef(running)
+  runningRef.current = running
+
+  useEffect(() => {
+    seekToAge(START_AGE, { resume: false })
+    setPlaying(false)
+    setMoisture(START_ENV.moisture)
+    setTurbulence(START_ENV.turbulence)
+    return () => setPlaying(false)
+    // Mount-only: park the organism at the reference AGE and medium.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /* Crystallization follows the medium in real time. */
+  useEffect(() => {
+    let frame = 0
+    let previous = performance.now()
+    let lastUi = 0
+    let lastSample = 0
+    const tick = (now) => {
+      const dt = runningRef.current ? Math.min(0.05, (now - previous) / 1000) : 0
+      previous = now
+      const state = crystalRef.current
+      const env = envRef.current
+      const target = crystallizationTarget(env)
+      const prev = state.level
+      state.level = stepCrystallization(prev, target, { turbulence: env.turbulence, dt })
+      state.target = target
+      state.rate = dt > 0 ? (state.level - prev) / dt : 0
+      if (now - lastUi > 150) {
+        lastUi = now
+        setReadout({ level: state.level, rate: state.rate, target })
+      }
+      if (runningRef.current && now - lastSample > 600) {
+        lastSample = now
+        setHistory((h) => h.slice(1).concat(state.level))
+      }
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [])
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.code !== 'Space') return
+      const tag = event.target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || event.target?.isContentEditable) return
+      event.preventDefault()
+      setRunning((v) => !v)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    const onChange = () => setFullscreen(document.fullscreenElement === articleRef.current)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+
+  useEffect(() => {
+    if (!reply) return undefined
+    const id = window.setTimeout(() => setReply(null), 6500)
+    return () => window.clearTimeout(id)
+  }, [reply])
+
+  const applyEnv = useCallback(
+    ({ temperature: t, moisture: m, turbulence: u }) => {
+      if (Number.isFinite(t)) setTemperature(clamp01(t))
+      if (Number.isFinite(m)) setMoisture(clamp01(m))
+      if (Number.isFinite(u)) setTurbulence(clamp01(u))
+    },
+    [setMoisture, setTurbulence],
+  )
+
+  const handleSend = useCallback(
+    (event) => {
+      event.preventDefault()
+      const text = message.trim()
+      if (!text) {
+        setReply({ tone: 'quiet', text: 'Type something for the organism to sense, like “a cold, wet night”.' })
+        return
+      }
+      const parsed = parseEnvironmentalLanguage(text)
+      const imp = parsed.impulses ?? {}
+      if (parsed.applied) {
+        applyEnv({
+          temperature: temperature + (imp.temperature ?? 0),
+          moisture: moisture + (imp.moisture ?? 0),
+          turbulence: turbulence + (imp.disturbance ?? 0),
+        })
+      }
+      setReply({ tone: parsed.applied ? 'applied' : 'quiet', text: parsed.explanation })
+      setMessage('')
+    },
+    [message, temperature, moisture, turbulence, applyEnv],
+  )
+
+  const toggleFullscreen = useCallback(() => {
+    const el = articleRef.current
+    if (!el) return
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+    else el.requestFullscreen?.().catch(() => {})
+  }, [])
+
+  const stateLabel = crystallizationState(readout.level, readout.rate, turbulence)
+  const sceneLayers = useMemo(() => layers, [layers])
+
+  return (
+    <article ref={articleRef} className="playground-experiment playground-experiment--exp05 playground-experiment--exp07">
+      <div className="exp07-immerse">
+        <HabitatScene
+          life={life}
+          crystalRef={crystalRef}
+          envRef={envRef}
+          timeRef={timeRef}
+          runningRef={runningRef}
+          temperature={temperature}
+          moisture={moisture}
+          turbulence={turbulence}
+          running={running}
+          layers={sceneLayers}
+          crystalLevel={Math.round(readout.level * 20) / 20}
+          className="exp07-viewport"
+        />
+        <div className="exp07-vignette" aria-hidden="true" />
+
+        <header className="exp07-intro">
+          <p className="exp07-intro__eyebrow">Experiment 07</p>
+          <h1 className="exp07-intro__title">{title}</h1>
+          <p className="exp07-intro__desc">{description}</p>
+        </header>
+
+        <aside className="exp07-panel" aria-label="Final Habitat controls">
+          <LifeGraph history={history} state={stateLabel} />
+
+          <section className="exp07-env" aria-labelledby="exp07-env-label">
+            <p id="exp07-env-label" className="exp07-panel__label">Environment</p>
+            <EnvRow id="exp07-temperature" label="Temperature" value={temperature} onChange={setTemperature} />
+            <EnvRow id="exp07-moisture" label="Moisture" value={moisture} onChange={setMoisture} />
+            <EnvRow id="exp07-turbulence" label="Turbulence" value={turbulence} onChange={setTurbulence} />
+            <div className="exp07-presets" role="group" aria-label="Environment presets">
+              {CRYSTAL_PRESETS.map((p) => (
+                <button key={p.id} type="button" onClick={() => applyEnv(p)}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="exp07-crystal" aria-live="polite">
+            <p className="exp07-panel__label">Crystallization</p>
+            <div className="exp07-crystal__row">
+              <span className="exp07-crystal__value">{readout.level.toFixed(2)}</span>
+              <span className="exp07-crystal__target">→ {readout.target.toFixed(2)}</span>
+            </div>
+            <div className="exp07-crystal__meter" aria-hidden="true">
+              <span style={{ width: `${readout.level * 100}%` }} />
+              <em style={{ left: `${readout.target * 100}%` }} />
+            </div>
+          </section>
+
+          <button
+            type="button"
+            className="exp07-panel__more"
+            aria-expanded={layersOpen}
+            onClick={() => setLayersOpen((v) => !v)}
+          >
+            {layersOpen ? 'Hide layers' : 'Layers'}
+          </button>
+          {layersOpen ? (
+            <div className="exp07-layers" role="group" aria-label="Layers">
+              {[
+                ['crystals', 'Crystal lattice'],
+                ['petals', 'Petals (Final Form)'],
+                ['frost', 'Membrane frost'],
+                ['fibres', 'Nucleus fibres'],
+                ['outcrops', 'Crystal outcrops'],
+                ['veils', 'Terrain veils'],
+                ['splashes', 'Splash crowns'],
+                ['flora', 'Residue'],
+                ['kin', 'Kin (other lives)'],
+                ['bloom', 'Bloom'],
+              ].map(([key, label]) => (
+                <label key={key} className="exp07-layers__item">
+                  <input
+                    type="checkbox"
+                    checked={layers[key]}
+                    onChange={() => setLayers((c) => ({ ...c, [key]: !c[key] }))}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          ) : null}
+        </aside>
+
+        <form className="exp07-say" onSubmit={handleSend}>
+          {reply ? (
+            <p className={`exp07-say__reply is-${reply.tone}`} role="status">
+              {reply.text}
+            </p>
+          ) : null}
+          <div className="exp07-say__field">
+            <svg className="exp07-say__icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" />
+            </svg>
+            <label htmlFor="exp07-say-input" className="exp07-sr">Tell the organism something about its environment</label>
+            <input
+              id="exp07-say-input"
+              type="text"
+              autoComplete="off"
+              placeholder="Tell it something…"
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+            />
+            <button type="submit" aria-label="Send">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 12L20 4l-6 16-2.5-6.5L4 12z" />
+              </svg>
+            </button>
+          </div>
+        </form>
+
+        <p className="exp07-keys" aria-hidden="true">
+          <span>WASD · Explore</span>
+          <span>Q / E · Elevation</span>
+          <span>Scroll · Zoom</span>
+          <span>Drag · Orbit</span>
+          <span>Right-drag · Look</span>
+        </p>
+
+        <div className="exp07-foot">
+          <label className="exp07-age" htmlFor="exp07-age">
+            <span>AGE</span>
+            <b>{life.age.toFixed(2)}</b>
+            <span>/ Growth</span>
+            <input
+              id="exp07-age"
+              type="range"
+              min={0}
+              max={0.99}
+              step={0.005}
+              value={life.age}
+              aria-valuetext={`Age ${life.age.toFixed(2)}`}
+              onChange={(event) => seekToAge(Number(event.target.value), { resume: false })}
+            />
+          </label>
+          <div className="exp07-foot__right">
+            <button type="button" className="exp07-realtime" aria-pressed={running} onClick={() => setRunning((v) => !v)}>
+              <span aria-hidden="true">{running ? '❙❙' : '▶'}</span>
+              Real time
+            </button>
+            <button type="button" className="exp07-fullscreen" aria-label={fullscreen ? 'Exit full screen' : 'Full screen'} onClick={toggleFullscreen}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </article>
+  )
+}

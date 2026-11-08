@@ -66,7 +66,9 @@ export function assertHorizontalSeabed(geometry, basinRadius) {
       `Seabed not horizontal in XZ (size ${sx.toFixed(1)}×${sy.toFixed(1)}×${sz.toFixed(1)})`,
     )
   }
-  if (sy > span * 0.35) {
+  /* Meso relief stacks three ridge families, so the extreme slider corner
+     (deep basin, tall ridges) is taller than a single family allowed. */
+  if (sy > span * 0.5) {
     throw new Error(
       `Seabed Y extent too large for a basin (${sy.toFixed(1)} vs span ${span.toFixed(1)})`,
     )

@@ -48,7 +48,10 @@ test('radiusNorm is distance / basinRadius', () => {
 
 test('macro dominates meso, meso dominates micro', () => {
   const s = layerStd(D)
-  assert.ok(s.macro > s.meso * 4, `macro ${s.macro} vs meso ${s.meso}`)
+  /* Meso carries three overlapping families (ridges, crossing ridges, ranges
+     and dune swells), so it is a larger share of the relief than a single
+     ridge family; the basin still leads. */
+  assert.ok(s.macro > s.meso * 2.5, `macro ${s.macro} vs meso ${s.meso}`)
   assert.ok(s.meso > s.micro * 4, `meso ${s.meso} vs micro ${s.micro}`)
 })
 

@@ -7,6 +7,7 @@ import {
   WORLD_FINAL_DEFAULTS,
 } from './config.js'
 import WorldFinalScene from './WorldFinalScene.jsx'
+import { ORGANISM_DEFAULT_AGE } from './organism/organismPlacement.js'
 import './worldFinal.css'
 
 const fixed = (digits) => (v) => Number(v).toFixed(digits)
@@ -65,10 +66,29 @@ const ATMOSPHERE_SLIDERS = [
   { key: 'fogDistance', label: 'Fog distance', min: 0, max: 400, step: 5, format: (v) => `${Math.round(v)} u` },
   { key: 'valleyHaze', label: 'Valley haze', min: 0, max: 1, step: 0.01, format: fixed(2) },
   { key: 'lightFiltering', label: 'Light filtering', min: 0, max: 1, step: 0.01, format: fixed(2) },
+  { key: 'lightShafts', label: 'Light shafts', min: 0, max: 2, step: 0.01, format: fixed(2) },
+  { key: 'caustics', label: 'Caustics', min: 0, max: 2, step: 0.01, format: fixed(2) },
+]
+
+const LIVING_WATER_SLIDERS = [
+  {
+    key: 'particleDensity',
+    label: 'Particle density',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    format: (v) => `${Math.round(v * 100)}%`,
+  },
+  { key: 'currentStrength', label: 'Current strength', min: 0, max: 3, step: 0.01, format: fixed(2) },
+  { key: 'currentSpeed', label: 'Current speed', min: 0, max: 3, step: 0.01, format: fixed(2) },
 ]
 
 const SEDIMENT_SLIDERS = [
   { key: 'sedimentGrain', label: 'Sediment grain', min: 0, max: 2, step: 0.01, format: fixed(2) },
+  { key: 'sedimentSparkle', label: 'Sediment sparkle', min: 0, max: 2, step: 0.01, format: fixed(2) },
+  { key: 'basinIridescence', label: 'Iridescence', min: 0, max: 2, step: 0.01, format: fixed(2) },
+  { key: 'formationDensity', label: 'Residual forms', min: 0, max: 2, step: 0.01, format: fixed(2) },
+  { key: 'sprayDensity', label: 'Seabed sprays', min: 0, max: 2, step: 0.01, format: fixed(2) },
 ]
 
 const SPEED_SLIDER = {
@@ -94,7 +114,14 @@ const ADVANCED_SLIDERS = [
 const CAMERA_MODES = [
   { id: 'drift', label: 'Drift' },
   { id: 'explore', label: 'Explore fixed' },
+  { id: 'hero', label: 'Hero View' },
+  { id: 'observe', label: 'Observe organism' },
   { id: 'overview', label: 'Overview' },
+]
+
+const ORGANISM_SLIDERS = [
+  { key: 'organismScale', label: 'Organism scale', min: 3, max: 8, step: 0.1, format: fixed(1) },
+  { key: 'organismFloat', label: 'Float strength', min: 0, max: 2, step: 0.01, format: fixed(2) },
 ]
 
 const MATERIAL_MODES = [
@@ -156,9 +183,33 @@ export default function WorldFinalPage({ header }) {
   const [showHelpers, setShowHelpers] = useState(false)
   const [fogEnabled, setFogEnabled] = useState(true)
   const [materialMode, setMaterialMode] = useState('shaded')
+  const [particleDebug, setParticleDebug] = useState(false)
   const [debugSample, setDebugSample] = useState(null)
+  const [organismVisible, setOrganismVisible] = useState(true)
+  const [organismAge, setOrganismAge] = useState(ORGANISM_DEFAULT_AGE)
+  const [organismSeek, setOrganismSeek] = useState(0)
+  const [organismPlaying, setOrganismPlaying] = useState(false)
 
   const cfg = useMemo(() => normalizeWorldFinalConfig(terrain), [terrain])
+
+  const handleOrganismSeek = useCallback((age) => {
+    setOrganismAge(age)
+    setOrganismSeek((n) => n + 1)
+  }, [])
+
+  const handleOrganismEnded = useCallback(() => setOrganismPlaying(false), [])
+
+  const organism = useMemo(
+    () => ({
+      visible: organismVisible,
+      age: organismAge,
+      seekEpoch: organismSeek,
+      playing: organismPlaying,
+      onAgeReport: setOrganismAge,
+      onEnded: handleOrganismEnded,
+    }),
+    [organismVisible, organismAge, organismSeek, organismPlaying, handleOrganismEnded],
+  )
 
   const setParam = useCallback((key, value) => {
     setTerrain((current) =>
@@ -210,12 +261,14 @@ export default function WorldFinalPage({ header }) {
               showHelpers={showHelpers}
               fogEnabled={fogEnabled}
               materialMode={materialMode}
+              particleDebug={particleDebug}
+              organism={organism}
               onDebugSample={handleDebugSample}
               onRequestDrift={handleRequestDrift}
             />
 
             <header className="exp05-intro">
-              <p className="exp05-intro__eyebrow">World Final · M2B</p>
+              <p className="exp05-intro__eyebrow">World Final · M3E</p>
               <h1 className="exp05-intro__title">Seabed Basin</h1>
               <p className="exp05-intro__desc">
                 A broad, asymmetric basin organised by long sediment ridges,
@@ -272,6 +325,84 @@ export default function WorldFinalPage({ header }) {
               <div className="world-final-page__group">
                 <p className="world-final-page__group-label">Sediment</p>
                 {SEDIMENT_SLIDERS.map((slider) => (
+                  <Slider
+                    key={slider.key}
+                    slider={slider}
+                    value={cfg[slider.key]}
+                    onChange={setParam}
+                  />
+                ))}
+              </div>
+
+              <p className="exp05-panel__label">Living Water</p>
+              <div className="world-final-page__group">
+                {LIVING_WATER_SLIDERS.map((slider) => (
+                  <Slider
+                    key={slider.key}
+                    slider={slider}
+                    value={cfg[slider.key]}
+                    onChange={setParam}
+                  />
+                ))}
+                {/* Temporary (M2C validation): compare normal vs diagnostic particles. */}
+                <label className="world-final-page__check">
+                  <input
+                    type="checkbox"
+                    aria-label="Particle diagnostic"
+                    checked={particleDebug}
+                    onChange={(event) => setParticleDebug(event.target.checked)}
+                  />
+                  Particle diagnostic (opaque · distance bands)
+                </label>
+              </div>
+
+              <p className="exp05-panel__label">Organism</p>
+              <div className="world-final-page__group">
+                <label className="world-final-page__check">
+                  <input
+                    type="checkbox"
+                    checked={organismVisible}
+                    onChange={(event) => setOrganismVisible(event.target.checked)}
+                  />
+                  Show organism
+                </label>
+                <label className="world-final-page__slider">
+                  <span>
+                    AGE
+                    <em>{organismAge.toFixed(3)}</em>
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.001}
+                    value={organismAge}
+                    aria-label="Organism age"
+                    onChange={(event) => handleOrganismSeek(Number(event.target.value))}
+                  />
+                </label>
+                <div className="world-final-page__mode-row" role="group" aria-label="Organism life">
+                  <button
+                    type="button"
+                    className={
+                      organismPlaying ? 'world-final-page__mode is-active' : 'world-final-page__mode'
+                    }
+                    onClick={() => setOrganismPlaying((p) => !p)}
+                  >
+                    {organismPlaying ? 'Pause life' : 'Play life'}
+                  </button>
+                  <button
+                    type="button"
+                    className="world-final-page__mode"
+                    onClick={() => {
+                      setOrganismPlaying(false)
+                      handleOrganismSeek(ORGANISM_DEFAULT_AGE)
+                    }}
+                  >
+                    Mature pose
+                  </button>
+                </div>
+                {ORGANISM_SLIDERS.map((slider) => (
                   <Slider
                     key={slider.key}
                     slider={slider}

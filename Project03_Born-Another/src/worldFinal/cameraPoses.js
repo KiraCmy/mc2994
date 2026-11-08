@@ -9,9 +9,11 @@ import {
   WORLD_FINAL_CAMERA_FOV,
   WORLD_FINAL_CAMERA_START_R,
 } from './config.js'
+import { KEY_DIRECTION } from './atmosphere.js'
 import { basinFrame, heightAt } from './heightField.js'
+import { organismAnchor } from './organism/organismPlacement.js'
 
-export const CAMERA_MODES = Object.freeze(['drift', 'explore', 'overview'])
+export const CAMERA_MODES = Object.freeze(['drift', 'explore', 'hero', 'observe', 'overview'])
 
 const _cam = new THREE.PerspectiveCamera()
 const _euler = new THREE.Euler(0, 0, 0, 'YXZ')
@@ -71,6 +73,32 @@ export function explorePose(config) {
   return poseFrom(position, target, 'explore')
 }
 
+/** The organism's resting anchor (cached per config with the poses). */
+export function organismAnchorFor(config) {
+  return organismAnchor(config, poseForMode('explore', config))
+}
+
+/** Observe-angle offset from the Explore bearing: side light + valley behind. */
+const OBSERVE_BEARING = 0.5
+
+/**
+ * Observe organism: a little above the organism at ~3.4 body radii, from
+ * the Explore side, so the valley and far rim sit behind it.
+ */
+export function observePose(config) {
+  const cfg = normalizeWorldFinalConfig(config)
+  const anchor = organismAnchorFor(cfg)
+  const explore = poseForMode('explore', cfg)
+  const back = Math.atan2(explore.position.z - anchor.z, explore.position.x - anchor.x)
+  const bearing = back + OBSERVE_BEARING
+  const dist = anchor.radius * 3.4
+  const x = anchor.x + Math.cos(bearing) * dist
+  const z = anchor.z + Math.sin(bearing) * dist
+  const y = Math.max(anchor.y + anchor.radius * 0.25, heightAt(x, z, cfg) + cfg.hoverHeight)
+  const target = new THREE.Vector3(anchor.x, anchor.y, anchor.z)
+  return poseFrom(new THREE.Vector3(x, y, z), target, 'observe')
+}
+
 /** Projection used to fit the overview; matches the scene camera. */
 export const OVERVIEW_FIT = Object.freeze({ fov: WORLD_FINAL_CAMERA_FOV, aspect: 16 / 9, ndc: 0.86 })
 
@@ -119,7 +147,63 @@ export function overviewPose(config) {
   return poseFrom(at(hi), target, 'overview')
 }
 
-const POSE_BUILDERS = { drift: driftPose, explore: explorePose, overview: overviewPose }
+/** Hero View lens (narrower than the default: compresses the far rim behind the subject). */
+export const HERO_FOV = 40
+/** Camera bearing from the key light's bearing: looking ~35° off the sun,
+ *  which sits just outside the upper-left frame and back-lights the organism. */
+const HERO_LIGHT_ANGLE = (145 * Math.PI) / 180
+/** Organism just right of centre: clear of the intro text (left) and the panel (right). */
+const HERO_NDC = Object.freeze({ x: 0.12, y: 0.04 })
+const HERO_ASPECT = 16 / 9
+
+/**
+ * Hero View: one composed shot of the organism, about a quarter of the
+ * frame high. Low over the near slope
+ * (foreground seabed in the lower frame), looking slightly down across the
+ * basin so ridges and the far rim — not empty water — sit behind the
+ * organism and fade through the haze.
+ */
+export function heroPose(config) {
+  const cfg = normalizeWorldFinalConfig(config)
+  const anchor = organismAnchorFor(cfg)
+  const lightBearing = Math.atan2(KEY_DIRECTION.z, KEY_DIRECTION.x)
+  /* Of the two bearings, take the one that puts the sun on the left of frame:
+     looking along f = -(cos b, sin b), screen-right is (-f.z, f.x). */
+  const bearing = [lightBearing + HERO_LIGHT_ANGLE, lightBearing - HERO_LIGHT_ANGLE].find((b) => {
+    const fx = -Math.cos(b)
+    const fz = -Math.sin(b)
+    return KEY_DIRECTION.x * -fz + KEY_DIRECTION.z * fx < 0
+  })
+
+  const dist = anchor.radius * 8.5
+  const x = anchor.x + Math.cos(bearing) * dist
+  const z = anchor.z + Math.sin(bearing) * dist
+  const ground = heightAt(x, z, cfg)
+  /* Low: near seabed fills the lower frame, ridges overlap behind the subject. */
+  const y = Math.max(anchor.y + dist * Math.tan((3 * Math.PI) / 180), ground + cfg.hoverHeight + 2)
+  const position = new THREE.Vector3(x, y, z)
+
+  /* Aim off the organism so it sits at HERO_NDC (first-order, small angles). */
+  const centre = new THREE.Vector3(anchor.x, anchor.y, anchor.z)
+  const forward = centre.clone().sub(position).normalize()
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize()
+  const up = new THREE.Vector3().crossVectors(right, forward)
+  const tanHalf = Math.tan(((HERO_FOV / 2) * Math.PI) / 180)
+  const range = centre.distanceTo(position)
+  const target = centre
+    .clone()
+    .addScaledVector(right, -HERO_NDC.x * tanHalf * HERO_ASPECT * range)
+    .addScaledVector(up, -HERO_NDC.y * tanHalf * range)
+  return { ...poseFrom(position, target, 'hero'), fov: HERO_FOV }
+}
+
+const POSE_BUILDERS = {
+  drift: driftPose,
+  explore: explorePose,
+  observe: observePose,
+  hero: heroPose,
+  overview: overviewPose,
+}
 const poseCache = new WeakMap()
 
 /**

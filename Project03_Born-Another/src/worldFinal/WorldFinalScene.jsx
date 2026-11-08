@@ -1,11 +1,11 @@
 /**
  * World Final — seabed + camera controller in one transparent Canvas.
  *
- * Background integration mirrors Playground Experiment 04: the canvas is
- * created with alpha and cleared to transparent black, scene.background is
- * null, and the page's .playground-page--exp05 CSS gradient (behind header
- * and canvas alike) is the visible atmosphere. Terrain hazes toward that
- * gradient's horizon color, then fades to alpha (seabedMaterial.js).
+ * The visible water is WaterBackdrop (M3C), drawn first in this canvas:
+ * a direction-dependent lavender volume with a sun glow, plus additive light
+ * shafts. Terrain hazes toward the same water color, then fades to alpha
+ * over it (seabedMaterial.js). The canvas keeps alpha; the page CSS behind
+ * it only shows before the first frame.
  */
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useThree } from '@react-three/fiber'
@@ -15,7 +15,13 @@ import { resolveRenderDpr, STUDIES_MAX_PIXELS } from '../renderBudget.js'
 import { normalizeWorldFinalConfig, WORLD_FINAL_CAMERA_FOV } from './config.js'
 import DebugHelpers from './DebugHelpers.jsx'
 import DriftCamera from './DriftCamera.jsx'
+import SeabedFormations from './SeabedFormations.jsx'
+import SeabedSprays from './SeabedSprays.jsx'
 import SeabedTerrain from './SeabedTerrain.jsx'
+import SuspendedParticles from './SuspendedParticles.jsx'
+import WaterBackdrop from './WaterBackdrop.jsx'
+import { WaterCurrent } from './WaterCurrent.jsx'
+import WorldOrganism from './organism/WorldOrganism.jsx'
 import { poseForMode } from './cameraPoses.js'
 
 function useWorldFinalDpr(maxPixels = STUDIES_MAX_PIXELS) {
@@ -74,6 +80,9 @@ export default function WorldFinalScene({
   showHelpers = false,
   fogEnabled = true,
   materialMode = 'shaded',
+  particleDebug = false,
+  /** WorldOrganism props: visible, age, seekEpoch, playing, onAgeReport, onEnded. */
+  organism = null,
   onDebugSample = null,
   onRequestDrift = null,
 }) {
@@ -90,6 +99,12 @@ export default function WorldFinalScene({
      plain FogExp2 would erase the basin. The shaded seabed offsets its haze
      by camera altitude instead (seabedMaterial.js). */
   const effectiveFog = fogEnabled && cameraMode !== 'overview'
+  /* Organism → seabed shadow channel: mutated per frame, never React state. */
+  const [organismPresence] = useState(() => ({
+    position: new THREE.Vector3(),
+    radius: 1,
+    visible: false,
+  }))
 
   return (
     <WebGLCanvas
@@ -118,8 +133,8 @@ export default function WorldFinalScene({
       <directionalLight position={[-70, 50, -60]} intensity={0.3} color="#d4e0f0" />
       <ambientLight intensity={0.26} color="#e8e2ec" />
 
-      <SeabedTerrain config={cfg} materialMode={materialMode} hazeEnabled={fogEnabled} />
-      <DebugHelpers config={cfg} visible={showHelpers} />
+      {/* Mounted first so its frame callback moves the camera before the
+          organism and particles read it. */}
       <DriftCamera
         config={cfg}
         resetEpoch={resetEpoch}
@@ -127,6 +142,27 @@ export default function WorldFinalScene({
         onDebugSample={onDebugSample}
         onRequestDrift={onRequestDrift}
       />
+      <WaterBackdrop lightShafts={cfg.lightShafts} />
+      <SeabedTerrain
+        config={cfg}
+        materialMode={materialMode}
+        hazeEnabled={fogEnabled}
+        organismPresence={organismPresence}
+      />
+      {materialMode === 'shaded' && <SeabedFormations config={cfg} hazeEnabled={fogEnabled} />}
+      {materialMode === 'shaded' && cfg.sprayDensity > 0 && (
+        <SeabedSprays config={cfg} hazeEnabled={fogEnabled} />
+      )}
+      <WaterCurrent config={cfg}>
+        <WorldOrganism
+          config={cfg}
+          hazeEnabled={fogEnabled}
+          presence={organismPresence}
+          {...organism}
+        />
+        <SuspendedParticles config={cfg} hazeEnabled={fogEnabled} debug={particleDebug} />
+      </WaterCurrent>
+      <DebugHelpers config={cfg} visible={showHelpers} />
     </WebGLCanvas>
   )
 }

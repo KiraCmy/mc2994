@@ -36,7 +36,13 @@ const GEOMETRY_KEYS = [
   'gridRes',
 ]
 
-export default function SeabedTerrain({ config, materialMode = 'shaded', hazeEnabled = true }) {
+export default function SeabedTerrain({
+  config,
+  materialMode = 'shaded',
+  hazeEnabled = true,
+  /** Shared { position, radius, visible } written by WorldOrganism each frame. */
+  organismPresence = null,
+}) {
   const cfg = useMemo(() => normalizeWorldFinalConfig(config), [config])
   const geometryKey = GEOMETRY_KEYS.map((k) => cfg[k]).join('|')
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -59,6 +65,13 @@ export default function SeabedTerrain({ config, materialMode = 'shaded', hazeEna
     const u = seabedMaterial.uniforms
     u.uHazeOffset.value = hazeOffsetForCamera(camera.position.y, cfg)
     u.uTime.value = clock.elapsedTime
+    const body = organismPresence
+    if (body?.visible) {
+      u.uOrganism.value.set(body.position.x, body.position.y, body.position.z, body.radius)
+      u.uOrganismShade.value = 1
+    } else {
+      u.uOrganismShade.value = 0
+    }
   })
 
   const edgeUniform = useMemo(() => ({ value: new THREE.Vector2() }), [])

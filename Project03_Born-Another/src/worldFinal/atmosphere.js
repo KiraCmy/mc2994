@@ -7,8 +7,8 @@
  *   - EXP04_MEMBRANE: linear-space constants of the Pearlescent Membrane V2
  *     shader (exp05PearlescentMembraneV2.js), so the seabed shares the
  *     organism's pearl, fold, and pastel vocabulary.
- * The haze color is the CSS stack composited at the horizon, so terrain
- * dissolves into exactly what the page shows behind it.
+ * M3C: the visible water is WATER below (drawn by WaterBackdrop); the haze
+ * color is its horizon tone. EXP04_CSS is kept as the palette's origin.
  */
 import * as THREE from 'three'
 import { normalizeWorldFinalConfig } from './config.js'
@@ -34,17 +34,33 @@ export const EXP04_MEMBRANE = Object.freeze({
 })
 
 /**
+ * World Final water volume (linear sRGB), drawn by WaterBackdrop.
+ * A cool gray close to the Playground Experiment 04 page, with only a faint
+ * blue lift. The sun glow (and the light shafts that use it) stays warm.
+ * See waterVolume.js for how direction maps to these.
+ */
+export const WATER = Object.freeze({
+  /** Looking straight down into the basin. */
+  deep: [0.34, 0.35, 0.39],
+  horizon: [0.52, 0.54, 0.58],
+  /** Toward the surface. */
+  zenith: [0.64, 0.65, 0.69],
+  sun: [0.98, 0.86, 0.93],
+})
+
+/**
  * Bloom coverage where the horizon sits on screen (between bloom centre and
  * the falloff stops), and position between the gradient's centre and mid stop.
  */
 const HORIZON_BLOOM_COVERAGE = 0.7
 const HORIZON_GRADIENT_T = 0.45
 
-/** Light directions (toward the light). The key is high and to the side of
- *  the default approach bearing: it rakes across the sediment ridges and
+/** Light directions (toward the light). The key (also the sun seen through
+ *  the water, ~27° up) is to the side of the default approach bearing: low
+ *  enough to rake light and shadow across the dunes, and
  *  still reaches the far basin wall, which faces the camera. The cool fill
  *  comes from the opposite side so shaded flanks read blue, not black. */
-export const KEY_DIRECTION = Object.freeze(new THREE.Vector3(0.656, 0.616, -0.436).normalize())
+export const KEY_DIRECTION = Object.freeze(new THREE.Vector3(0.656, 0.4, -0.436).normalize())
 export const FILL_DIRECTION = Object.freeze(new THREE.Vector3(-0.6, 0.6, 0.4).normalize())
 
 /** sRGB 0–255 composite of the Exp04 background at the horizon. */
@@ -82,7 +98,9 @@ export function atmosphereParams(config) {
   const lavender = bloom(0)
   const cyan = bloom(1)
   const pink = bloom(2)
-  const haze = cssColor(exp04HorizonRgb())
+  /* Base haze = horizon water; the seabed shader hazes toward the full
+     direction-dependent water color (waterVolume.js). */
+  const haze = linearColor(WATER.horizon)
   const M = EXP04_MEMBRANE
 
   /* Lights stay near-neutral: they multiply an already pearl-mauve albedo,

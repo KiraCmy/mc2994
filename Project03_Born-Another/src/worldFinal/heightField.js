@@ -5,7 +5,10 @@
  *          Broad, off-centre, elongated bowl with a lobed rim of uneven
  *          height, a gentle tilt, and highlands rising past the rim.
  *   Meso   (ridgeHeight · ridgeSpacing)
- *          Smooth, elongated sediment ridges with rounded crests.
+ *          Three overlapping families, so neither the near ground nor the far
+ *          view reads as a flat plane: the primary elongated ridges, a second
+ *          ridge family crossing them (layered silhouettes in the distance),
+ *          and shorter dune swells that roll through the foreground.
  *   Micro  (surfaceDetail)
  *          Fine irregularity, an order of magnitude below the meso scale.
  *
@@ -107,25 +110,46 @@ function createSampler(cfg) {
     return { h: depth * (bowl + highland) * rimVar + tilt + swell, rn }
   }
 
-  function meso(x, z, rn) {
-    if (ridgeH <= 1e-6) return 0
-    /* Warp keeps ridge lines sinuous rather than straight or gridded. */
-    const ws = spacing * 2.2
-    const wx = x + valueNoise2(seed, x / ws, z / ws, 211) * spacing * 0.45
-    const wz = z + valueNoise2(seed, x / ws + 7.1, z / ws - 3.3, 223) * spacing * 0.45
+  /** One elongated ridge family. `dir` is its long-axis angle. */
+  function ridgeFamily(x, z, dir, wave, channel) {
+    const ws = wave * 2.2
+    const wx = x + valueNoise2(seed, x / ws, z / ws, channel) * wave * 0.45
+    const wz = z + valueNoise2(seed, x / ws + 7.1, z / ws - 3.3, channel + 12) * wave * 0.45
+    const c = Math.cos(dir)
+    const s = Math.sin(dir)
     /* Long axis along the ridge direction: 3.2 : 1 elongation. */
-    const along = wx * frame.ridgeCos + wz * frame.ridgeSin
-    const across = -wx * frame.ridgeSin + wz * frame.ridgeCos
-    const n = fbm2(seed, along / (spacing * 3.2), across / spacing, {
+    const n = fbm2(seed, (wx * c + wz * s) / (wave * 3.2), (-wx * s + wz * c) / wave, {
       octaves: 2,
       gain: 0.42,
-      channel: 241,
+      channel: channel + 30,
     })
-    const crest = softRidge(n * 1.7, 0.32) - 0.55
+    return softRidge(n * 1.7, 0.32) - 0.55
+  }
+
+  function meso(x, z, rn) {
+    if (ridgeH <= 1e-6) return 0
+    const ridgeDir = Math.atan2(frame.ridgeSin, frame.ridgeCos)
     /* Softer in the nursery floor, fullest on the basin slopes. */
     const mask =
       (0.45 + 0.55 * smoothstep(0.06, 0.5, rn)) * (1 - 0.45 * smoothstep(1.05, 1.5, rn))
-    return ridgeH * 1.5 * crest * mask
+
+    /* Primary ridges, plus a family crossing them ~60° off: where the two
+       overlap, the far view stacks into separate silhouettes. */
+    const primary = ridgeFamily(x, z, ridgeDir, spacing, 211)
+    const crossing = ridgeFamily(x, z, ridgeDir + 1.05, spacing * 1.6, 311)
+
+    /* Broad ranges: zero-mean rolls several ridges wide. At the low viewing
+       angle their crests break the horizon into separate hazy silhouettes. */
+    const ranges =
+      fbm2(seed, x / (spacing * 2.4), z / (spacing * 2.4), { octaves: 2, gain: 0.5, channel: 409 }) *
+      (0.6 + 0.4 * mask)
+    /* Dune swells: zero-mean rolls a few times shorter than the ridges, so
+       the foreground keeps flowing instead of settling into flat shelves. */
+    const dunes =
+      fbm2(seed, x / (spacing * 0.6), z / (spacing * 0.6), { octaves: 2, gain: 0.5, channel: 353 }) *
+      (0.55 + 0.45 * mask)
+
+    return ridgeH * (1.5 * primary * mask + 0.85 * crossing * mask + 2 * ranges + 0.8 * dunes)
   }
 
   function micro(x, z) {

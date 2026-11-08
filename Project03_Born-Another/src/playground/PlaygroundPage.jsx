@@ -6,6 +6,8 @@ import Experiment02 from './Experiment02.jsx'
 import Experiment03 from './Experiment03.jsx'
 import Experiment04 from './Experiment04.jsx'
 import Experiment05 from './Experiment05.jsx'
+import Experiment06 from './Experiment06.jsx'
+import Experiment07 from './Experiment07.jsx'
 import {
   DEFAULT_PLAYGROUND_EXPERIMENT_ID,
   getPlaygroundExperiment,
@@ -20,6 +22,8 @@ const EXPERIMENT_VIEWS = {
   '03': Experiment04,
   '04': Experiment05,
   '05': Experiment03,
+  '06': Experiment06,
+  '07': Experiment07,
 }
 
 export default function PlaygroundPage({ header }) {
@@ -30,15 +34,19 @@ export default function PlaygroundPage({ header }) {
   const View = EXPERIMENT_VIEWS[experiment.id] ?? Experiment01
 
   const isFinalForm = experiment.id === '04'
+  const isCrystalForm = experiment.id === '06'
+  const isHabitat = experiment.id === '07'
   const isAgentBehaviors = experiment.id === '05'
   /* Final Form + Agent Behaviors reuse Exp05 page atmosphere. */
-  const useExp05Atmosphere = isFinalForm || isAgentBehaviors
+  const useExp05Atmosphere = isFinalForm || isAgentBehaviors || isCrystalForm || isHabitat
 
   return (
     <div
       className={`playground-page${
         useExp05Atmosphere ? ' playground-page--exp05' : ''
-      }${isAgentBehaviors ? ' playground-page--exp03' : ''}`}
+      }${isAgentBehaviors ? ' playground-page--exp03' : ''}${
+        isHabitat ? ' playground-page--exp07' : ''
+      }`}
     >
       <SiteHud
         className="playground-page__hud"

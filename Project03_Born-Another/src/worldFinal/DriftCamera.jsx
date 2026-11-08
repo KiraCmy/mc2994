@@ -6,6 +6,8 @@
  *              lower / raise, drag look. Height follows heightAt + hover +
  *              the Q/E elevation offset; soft rim boundary.
  *   explore  — fixed low-angle preset, re-applied every frame.
+ *   hero     — composed shot of the organism (own 40° lens), re-applied every frame.
+ *   observe  — fixed preset framed on the organism, re-applied every frame.
  *   overview — fixed high oblique preset, re-applied every frame.
  *
  * Mouse wheel zooms (field of view) in every mode.
@@ -120,10 +122,12 @@ export default function DriftCamera({
     dragging.current = false
   }, [camera, cameraMode, resetEpoch])
 
-  /* Preset buttons and Reset camera also reset zoom. */
+  /* Preset buttons and Reset camera also reset zoom (to the preset's own
+     lens, if it has one). Input-driven switches to drift keep the zoom. */
   useLayoutEffect(() => {
-    fovTarget.current = WORLD_FINAL_CAMERA_FOV
-    camera.fov = WORLD_FINAL_CAMERA_FOV
+    const fov = poseForMode(modeRef.current, cfgRef.current).fov ?? WORLD_FINAL_CAMERA_FOV
+    fovTarget.current = fov
+    camera.fov = fov
     camera.updateProjectionMatrix()
   }, [camera, resetEpoch])
 
@@ -133,14 +137,14 @@ export default function DriftCamera({
 
     /*
      * Movement or look input in a fixed preset switches to drift.
-     * From Explore the current view is kept; Overview is too high to walk
+     * From Explore / Hero / Observe the current view is kept; Overview is too high to walk
      * from, so it drops to the drift spawn instead.
      */
     const enterDrift = () => {
       if (modeRef.current === 'drift') return true
       const request = requestDriftRef.current
       if (!request) return false
-      keepPoseRef.current = modeRef.current === 'explore'
+      keepPoseRef.current = modeRef.current !== 'overview'
       modeRef.current = 'drift'
       request()
       return true

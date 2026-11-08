@@ -9,14 +9,18 @@
  *
  * Light: soft key / fill / hemisphere; the key is filtered through the
  * water — slow, very low-frequency light pools and dimmer, cooler light on
- * the deep floor. No caustics, rays, or volumetrics.
+ * the deep floor. M3C adds wind ripples, drifting caustic filaments, a satin
+ * sheen on lit shoulders, sun-backlit dune edges and sparse glitter; M3D a
+ * glassy thin-film glaze that mirrors the water with a soft rainbow shift.
  *
- * Haze tints toward the Exp04 horizon color, then fades to alpha so the
- * page background takes over (no seam). Terrain itself is opaque in look.
+ * Haze tints toward the water color in the view direction (waterVolume.js),
+ * then fades to alpha over the identical WaterBackdrop (no seam). Terrain
+ * itself is opaque in look.
  */
 import * as THREE from 'three'
 import { atmosphereParams, FILL_DIRECTION, KEY_DIRECTION } from './atmosphere.js'
 import { edgeFadeRadii } from './terrainFade.js'
+import { WATER_GLSL } from './waterVolume.js'
 
 const vertexShader = /* glsl */ `
 attribute vec2 aTerrain;
@@ -63,6 +67,13 @@ uniform float uHazeStart;
 uniform float uHazeOffset;
 uniform float uValleyHaze;
 uniform vec2 uEdgeFade;
+uniform vec4 uOrganism;
+uniform float uOrganismShade;
+uniform float uCaustics;
+uniform float uSparkle;
+uniform float uIridescence;
+
+${WATER_GLSL}
 
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
@@ -121,6 +132,29 @@ vec3 sedimentRelief(vec2 p, float footprint) {
   return acc;
 }
 
+/* Caustic web: two drifting ridged-noise layers; their product leaves thin
+   bright filaments. Fades to its mean once the filaments go sub-pixel. */
+float caustics(vec2 p, float t, float footprint) {
+  const float WAVELENGTH = 7.0;
+  vec2 q = p / WAVELENGTH;
+  float a = 1.0 - abs(noised(q + vec2(0.11, 0.07) * t).x);
+  float b = 1.0 - abs(noised(ROT * q * 1.37 - vec2(0.08, -0.12) * t + 5.2).x);
+  return mix(0.09, pow(a * b, 7.0), octaveFade(footprint, WAVELENGTH * 0.5));
+}
+
+/* Sparse glitter: one possible flake per cell, lit only when its random
+   facet turns toward the half vector. Fades before it can alias. */
+float glitter(vec2 p, vec3 H, float cellSize, float footprint) {
+  vec2 cell = floor(p / cellSize);
+  vec2 f = fract(p / cellSize) - 0.5;
+  vec2 jitter = vec2(hash12(cell + 1.7), hash12(cell + 9.2)) - 0.5;
+  float flake = step(0.88, hash12(cell));
+  vec3 facet = normalize(vec3(hash12(cell + 7.1) - 0.5, 0.55, hash12(cell + 3.3) - 0.5));
+  float dotMask = 1.0 - smoothstep(0.06, 0.2, length(f - jitter * 0.5));
+  return flake * dotMask * pow(max(dot(facet, H), 0.0), 70.0)
+    * octaveFade(footprint, cellSize * 0.6);
+}
+
 void main() {
   vec2 p = vWorldPos.xz;
   float footprint = max(length(fwidth(p)), 1e-3);
@@ -134,6 +168,15 @@ void main() {
   /* --- Material fields ------------------------------------------------- */
   vec3 relief = sedimentRelief(p, footprint);
   vec3 N = normalize(Ng - vec3(relief.y, 0.0, relief.z) * uGrain);
+  /* Wind ripples: long, softly meandering lines that catch the key light. */
+  const float RIPPLE = 2.4;
+  vec2 rippleDir = vec2(0.8, 0.6);
+  float rippleWarp = noised(p / 9.0 + 2.0).x * 3.2 + noised(ROT * p / 3.7 - 6.0).x * 1.1;
+  float ripplePhase = dot(p, rippleDir) * (6.2832 / RIPPLE) + rippleWarp;
+  float ripplePatch = smoothstep(-0.4, 0.6, noised(ROT * p / 21.0 + 9.0).x);
+  vec2 rippleSlope = rippleDir * cos(ripplePhase) * 0.12 * (0.25 + 0.75 * ripplePatch)
+    * octaveFade(footprint, RIPPLE);
+  N = normalize(N - vec3(rippleSlope.x, 0.0, rippleSlope.y) * uGrain);
   float hollow = clamp(-relief.x * 1.6, 0.0, 1.0) * uGrain;
 
   float patchBroad = noised(p / 150.0 + 3.7).x * 0.65 + noised(ROT * p / 71.0 - 8.2).x * 0.35;
@@ -161,28 +204,50 @@ void main() {
   /* --- Light through a dense medium ------------------------------------ */
   vec2 drift = vec2(0.009, 0.006) * uTime;
   float pools = 0.5 + 0.5 * (
-    noised(p / 260.0 + drift).x * 0.6 +
-    noised(ROT * p / 170.0 - drift * 1.4 + 4.1).x * 0.4
+    noised(p / 220.0 + drift).x * 0.4 +
+    noised(ROT * p / 80.0 - drift * 1.4 + 4.1).x * 0.38 +
+    noised(p / 36.0 + drift * 2.2 + 9.0).x * 0.22
   );
-  float filtered = mix(1.0, mix(0.84, 1.12, pools), uFiltering);
+  /* Light that has passed through moving water: the bright patches run warm,
+     the gaps run cool, and a patch fits inside one view instead of one wash. */
+  float filtered = mix(1.0, mix(0.55, 1.5, pools), uFiltering);
   float deepFloor = 1.0 - smoothstep(0.0, 0.85, basin);
-  float depthAtten = 1.0 - deepFloor * 0.1 * uFiltering;
+  float depthAtten = 1.0 - deepFloor * 0.12 * uFiltering;
   vec3 keyColor = mix(uKeyColor, uFillColor, deepFloor * 0.22 * uFiltering);
+  keyColor = mix(keyColor, mix(uFillColor, uKeyColor * vec3(1.08, 0.97, 0.92), pools), 0.45 * uFiltering);
 
   /* Macro shape is lit by the mesh normal so basin and ridges keep their
      definition; the fine relief only modulates it around that value. */
-  float keyWrap = clamp((dot(Ng, uKeyDir) + 0.22) / 1.22, 0.0, 1.0);
+  float keyWrap = clamp((dot(Ng, uKeyDir) + 0.1) / 1.1, 0.0, 1.0);
   keyWrap = keyWrap * keyWrap * (3.0 - 2.0 * keyWrap);
   keyWrap = clamp(keyWrap + (dot(N, uKeyDir) - dot(Ng, uKeyDir)) * 0.55, 0.0, 1.0);
   float fillWrap = clamp((dot(N, uFillDir) + 0.5) / 1.5, 0.0, 1.0);
   vec3 hemi = mix(uGround, uSky, Ng.y * 0.5 + 0.5);
   float cavity = mix(1.0, 0.8, trough) * (1.0 - hollow * 0.12);
 
+  /* Organism presence (M3B): a soft key shadow along the light, widening
+     with distance, plus contact darkening of the ambient right beneath. */
+  vec3 toBody = uOrganism.xyz - vWorldPos;
+  float bodyR = max(uOrganism.w, 1e-3);
+  float along = dot(toBody, uKeyDir);
+  float offRay = length(toBody - uKeyDir * along);
+  float penumbra = bodyR * (1.2 + max(along, 0.0) * 0.035);
+  float bodyShadow = step(0.0, along) * (1.0 - smoothstep(bodyR * 0.25, penumbra, offRay));
+  float gap = max(toBody.y - bodyR, 0.0);
+  float bodyContact = (1.0 - smoothstep(bodyR * 0.4, bodyR * 2.4 + gap * 0.6, length(toBody.xz)))
+    * exp(-gap / (bodyR * 3.0));
+  keyWrap *= 1.0 - bodyShadow * 0.38 * uOrganismShade;
+  cavity *= 1.0 - bodyContact * 0.16 * uOrganismShade;
+
   vec3 light = hemi * 0.5 * cavity
-    + keyColor * keyWrap * 0.96 * uLight * filtered * depthAtten
-    + uFillColor * fillWrap * 0.2 * uLight;
-  light *= mix(0.9, 1.06, crest);
+    + keyColor * keyWrap * 1.2 * uLight * filtered * depthAtten
+    + uFillColor * fillWrap * 0.32 * uLight;
+  light *= mix(0.88, 1.08, crest);
   vec3 col = albedo * light;
+
+  /* Caustic filaments on sunlit sediment, dimmer on the deep floor. */
+  float caustic = caustics(p, uTime, footprint) * keyWrap * filtered * (1.0 - deepFloor * 0.4);
+  col += albedo * keyColor * caustic * 1.2 * uCaustics * uLight;
 
   /* Broad, low sediment glint tinted cool / warm by patch — no mirror spec. */
   vec3 H = normalize(uKeyDir + V);
@@ -195,14 +260,39 @@ void main() {
      ground), tinted by the water, not a pearl film. */
   float grazing = pow(1.0 - max(dot(Ng, V), 0.0), 3.0);
   col += mix(uSky, mix(uGlintCool, uGlintWarm, 0.5), 0.25) * grazing * 0.08 * (0.4 + 0.6 * uLight);
+  /* Satin sheen along lit dune shoulders (macro normal: broad, silky). */
+  vec3 Hg = normalize(uKeyDir + V);
+  float sheen = pow(max(dot(Ng, Hg), 0.0), 14.0) * (0.35 + 0.65 * crest);
+  col += uKeyColor * sheen * 0.16 * uLight * filtered;
+  /* Dune edges glow when seen against the sun (forward scatter in silt). */
+  float towardSun = pow(max(dot(-V, wfSunDir), 0.0), 2.0);
+  col += wfWater(wfSunDir) * grazing * towardSun * 0.3 * uLight;
+  /* Glassy iridescent glaze (M3D): sediment wears a thin film that mirrors
+     the bright water at grazing angles, its tint drifting through a soft
+     rainbow across dune patches; strongest on shoulders and crests. */
+  float glazeFres = pow(1.0 - max(dot(N, V), 0.0), 3.5);
+  float glazeMask = mix(0.4, 1.0, crest) * (0.55 + 0.45 * ripplePatch) * uIridescence;
+  /* Bands follow the dune relief (ridge cue + fine relief), not broad patches. */
+  float filmPhase = glazeFres * 1.1 + vTerrain.y * 1.6 + relief.x * 1.4 + patchBroad * 0.3 + uTime * 0.006;
+  vec3 film = mix(vec3(1.0), 0.5 + 0.5 * cos(6.2832 * (filmPhase + vec3(0.0, 0.33, 0.67))), 0.6);
+  col += wfWater(reflect(-V, N)) * film * glazeFres * 0.32 * glazeMask;
+  float glazeSpec = pow(max(dot(N, H), 0.0), 56.0) * keyWrap * filtered;
+  col += uKeyColor * film * glazeSpec * 0.45 * glazeMask * uLight;
+  /* Glitter: fine flakes up close, a sparser coarse layer further out. */
+  float sparkle = glitter(p, H, 0.45, footprint) + glitter(ROT * p + 31.0, H, 1.7, footprint) * 0.8;
+  col += vec3(1.0, 0.95, 1.0) * sparkle * keyWrap * uSparkle * uLight * 1.1;
 
   /* Middle ground: at a few hundred units the mesh-normal shading of ridges
      gets too subtle, so crests and troughs get a gentle tonal accent there. */
   float midBand = smoothstep(60.0, 220.0, vViewDepth) * (1.0 - smoothstep(520.0, 900.0, vViewDepth));
   col *= 1.0 + midBand * (crest * 0.08 - trough * 0.09);
+  /* Foreground (M3B): near sediment sits a little deeper and shows more of
+     the key relief, so value — not only haze — separates near from far. */
+  float nearField = 1.0 - smoothstep(15.0, 240.0, vViewDepth);
+  col *= mix(1.0, 0.9 + 0.22 * keyWrap * filtered, nearField);
 
-  /* Highlights roll off just under the atmosphere: never overexposed. */
-  vec3 ceiling = uHaze;
+  /* Highlights roll off a little above the horizon water: bright, never clipped. */
+  vec3 ceiling = uHaze * 1.2;
   col = col / (1.0 + max(col - ceiling, vec3(0.0)) * 1.5);
 
   /* --- Atmosphere ------------------------------------------------------ */
@@ -213,7 +303,8 @@ void main() {
   float d = max(vViewDepth - uHazeStart - uHazeOffset, 0.0);
   float k = uHazeDensity * d;
   float haze = uHazeOn * (1.0 - exp(-(0.6 * k + k * k)));
-  col = mix(col, uHaze, haze * 0.88);
+  /* Same direction → color as the backdrop, so terrain melts into it. */
+  col = mix(col, wfWater(-V), haze * 0.88);
   float alpha = 1.0 - smoothstep(0.42, 0.98, haze);
   alpha *= 1.0 - smoothstep(uEdgeFade.x, uEdgeFade.y, length(vWorldPos.xz));
 
@@ -253,6 +344,12 @@ export function createSeabedMaterial() {
     uHazeOffset: { value: 0 },
     uValleyHaze: { value: 0 },
     uEdgeFade: { value: new THREE.Vector2() },
+    /** Organism centre (xyz) + membrane radius (w), written per frame. */
+    uOrganism: { value: new THREE.Vector4(0, -1e5, 0, 1) },
+    uOrganismShade: { value: 0 },
+    uCaustics: { value: 1 },
+    uSparkle: { value: 1 },
+    uIridescence: { value: 1 },
   }
   for (const name of Object.keys(COLOR_UNIFORMS)) {
     uniforms[name] = { value: new THREE.Color() }
@@ -282,6 +379,9 @@ export function updateSeabedMaterial(material, config, { hazeEnabled = true } = 
   u.uHazeDensity.value = p.hazeDensity
   u.uHazeStart.value = p.hazeStart
   u.uValleyHaze.value = p.valleyHaze
+  u.uCaustics.value = config.caustics
+  u.uSparkle.value = config.sedimentSparkle
+  u.uIridescence.value = config.basinIridescence
   u.uEdgeFade.value.set(...edgeFadeRadii(config.basinRadius))
 }
 

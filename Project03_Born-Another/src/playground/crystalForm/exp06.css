@@ -1,0 +1,89 @@
+
+/* ------------------------------------------------------------------
+ * Exp06 Crystal Form Lab — crystallization readout under the intro.
+ * Reuses the Exp05 atmosphere tokens (--exp05-ink / -soft / -faint / -line).
+ * ------------------------------------------------------------------ */
+.exp06-readout {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 1.4rem;
+}
+
+.exp06-readout__label {
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--exp05-ink-soft);
+}
+
+.exp06-readout__big {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+}
+
+.exp06-readout__value {
+  font-size: clamp(2rem, 3.4vw, 2.9rem);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--exp05-ink);
+}
+
+.exp06-readout__state {
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--exp05-line);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--exp05-ink);
+}
+
+.exp06-meter {
+  position: relative;
+  width: min(18rem, 36vw);
+  height: 1px;
+  background: var(--exp05-line);
+}
+
+.exp06-meter__fill {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  height: 3px;
+  background: var(--exp05-ink);
+  transition: width 120ms linear;
+}
+
+.exp06-meter__target {
+  position: absolute;
+  top: -5px;
+  width: 1px;
+  height: 11px;
+  background: var(--exp05-ink-soft);
+}
+
+.exp06-meter__key {
+  display: flex;
+  justify-content: space-between;
+  width: min(18rem, 36vw);
+  font-size: 0.54rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--exp05-ink-faint);
+}
+
+.playground-experiment--exp06 .exp05-lab__hint {
+  display: block;
+  margin-top: 0.15rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exp06-meter__fill {
+    transition: none;
+  }
+}

@@ -1,8 +1,20 @@
 /*
- * World Final — panel extras only. The page background is inherited
- * unchanged from .playground-page--exp05 (Playground Experiment 04) and
- * shows through the transparent canvas; do not override it here.
+ * World Final — panel extras + page background. The water itself is drawn
+ * in the canvas (WaterBackdrop.jsx); this lavender fallback only matches it
+ * (atmosphere.js WATER, in sRGB) until the first frame.
  */
+
+.world-final-page.playground-page--exp05 {
+  background: #c5c9d1;
+}
+
+.world-final-page.playground-page--exp05::before {
+  background: linear-gradient(180deg, #d5d8de 0%, #c5c9d1 46%, #b7bcc6 100%);
+}
+
+.world-final-page.playground-page--exp05::after {
+  background: none;
+}
 
 .world-final-page__slider {
   display: grid;

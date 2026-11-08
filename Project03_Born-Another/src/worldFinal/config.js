@@ -72,9 +72,37 @@ export const WORLD_FINAL_DEFAULTS = Object.freeze({
   sedimentGrain: 0.8,
   /** Light filtered through the water: drifting pools + dimmer deep floor. */
   lightFiltering: 0.6,
+  /* Water light (M3C) — shading only. */
+  /** Sun shafts fanning through the water. */
+  lightShafts: 1,
+  /** Drifting caustic filaments on sunlit sediment. */
+  caustics: 1,
+  /** Glitter flakes in the sediment. */
+  sedimentSparkle: 1,
+  /* Glass seabed (M3D). */
+  /** Thin-film rainbow glaze on the basin and the seabed sprays. */
+  basinIridescence: 1,
+  /** Glassy splash crowns on the seabed (fraction of the base count, 0–2); off by default since M3E. */
+  sprayDensity: 0,
+  /** Abstract glass formations: ribbons, crumpled films, crystals, pebbles (M3E, 0–2). */
+  formationDensity: 1,
+
+  /* Living water (M2C) — shared current + suspended particles. */
+  /** Fraction of the particle budget drawn (0 = none). */
+  particleDensity: 0.55,
+  /** Current magnitude: mean drift and eddy amplitude. */
+  currentStrength: 1,
+  /** How fast the current flows and evolves. */
+  currentSpeed: 0.7,
   /** Extra luminous haze pooled on the deep basin floor. */
   valleyHaze: 0.4,
-  terrainColor: '#a29dae',
+  terrainColor: '#a497bf',
+
+  /* Organism (M3A) — one Final Form organism placed in the basin. */
+  /** World scale of the organism body (1 = Playground Population size). */
+  organismScale: 5,
+  /** How strongly the shared current moves the organism (0 = still). */
+  organismFloat: 1,
 })
 
 export function normalizeWorldFinalConfig(partial = {}) {
@@ -102,7 +130,18 @@ export function normalizeWorldFinalConfig(partial = {}) {
     valleyHaze: clamp01(base.valleyHaze),
     sedimentGrain: clamp(base.sedimentGrain, 0, 2),
     lightFiltering: clamp01(base.lightFiltering),
+    lightShafts: clamp(base.lightShafts, 0, 2),
+    caustics: clamp(base.caustics, 0, 2),
+    sedimentSparkle: clamp(base.sedimentSparkle, 0, 2),
+    basinIridescence: clamp(base.basinIridescence, 0, 2),
+    sprayDensity: clamp(base.sprayDensity, 0, 2),
+    formationDensity: clamp(base.formationDensity, 0, 2),
+    particleDensity: clamp01(base.particleDensity),
+    currentStrength: clamp(base.currentStrength, 0, 3),
+    currentSpeed: clamp(base.currentSpeed, 0, 3),
     terrainColor: String(base.terrainColor || WORLD_FINAL_DEFAULTS.terrainColor),
+    organismScale: clamp(base.organismScale, 3, 8),
+    organismFloat: clamp(base.organismFloat, 0, 2),
   }
 }
 
