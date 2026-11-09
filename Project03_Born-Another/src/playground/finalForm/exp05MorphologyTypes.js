@@ -3,6 +3,7 @@
  * - World: seeded World radiusAt
  * - Segmented: Dickinsonia-inspired radial quilted oval (Exp05 study)
  * - Spiral: Exp04 spiral field + seed orientation
+ * - Trilobite: flattened shield, axial lobe, serial pleural segments
  * Explore-framed via ORGANISM_BIRTH_RADIUS. Life Engine / World V2 / Exp04 sources untouched.
  */
 import * as THREE from 'three'
@@ -14,6 +15,7 @@ export const EXP05_MORPHOLOGY_TYPES = {
   WORLD: 'world',
   SEGMENTED: 'segmented',
   SPIRAL: 'spiral',
+  TRILOBITE: 'trilobite',
 }
 
 export const EXP05_MORPHOLOGY_TYPE_OPTIONS = [
@@ -262,6 +264,49 @@ function createDickinsoniaQuiltRadiusAt(seed) {
 }
 
 /**
+ * Segmented trilobite — a flattened shield with a raised axial lobe and
+ * serial pleural segments. Star-convex, so it can ride the same radial
+ * surface as the Dickinsonia quilt and the spiral.
+ */
+function createTrilobiteRadiusAt(seed) {
+  const random = mulberry32(normalizeSeed(seed) ^ 0x7a1b03c5)
+  const yaw = (random() - 0.5) * 0.35
+  const pitch = (random() - 0.5) * 0.08
+  const roll = (random() - 0.5) * 0.1
+  const length = lerp(2.35, 2.62, random())
+  const width = lerp(1.42, 1.62, random())
+  const thickness = lerp(0.38, 0.5, random())
+  const segments = 9 + Math.floor(random() * 3)
+  const furrowAmp = lerp(0.045, 0.07, random())
+  const axial = lerp(0.09, 0.14, random())
+  const spine = lerp(0.04, 0.075, random())
+
+  return (direction) => {
+    const body = rotateBodyFrame(direction, yaw, pitch, roll)
+    const across = body.x
+    const up = body.y
+    const along = body.z
+    const head = 1 + 0.16 * Math.max(0, along)
+    const base = ellipsoidRadius(across, up, along, width * head, thickness, length)
+    const seg = Math.cos(along * segments * Math.PI)
+    const env = Math.max(0, 1 - along * along * 0.85)
+    const furrow = -furrowAmp * Math.max(0, seg) * env * (0.35 + 0.65 * Math.min(1, Math.abs(across) * 1.4))
+    const lobe =
+      axial *
+      Math.exp(-across * across * 9) *
+      Math.max(0, up) *
+      (0.55 + 0.45 * env)
+    const margin = Math.exp(-((Math.abs(across) - 0.78) ** 2) * 28)
+    const pleural = spine * margin * Math.max(0, -seg) * env * (0.4 + 0.6 * Math.max(0, up))
+    const genal =
+      0.05 *
+      Math.exp(-((along + 0.15) ** 2) * 18) *
+      Math.exp(-((Math.abs(across) - 0.85) ** 2) * 22)
+    return Math.max(0.3, base * (1 + furrow + lobe + pleural + genal))
+  }
+}
+
+/**
  * Explore-framed radiusAt for Exp05 morphology type.
  */
 export function createExp05MorphologyRadiusAt(
@@ -278,6 +323,9 @@ export function createExp05MorphologyRadiusAt(
     return wrapExploreRadius(
       createOrientedLabRadiusAt(EXP05_MORPHOLOGY_TYPES.SPIRAL, normalized),
     )
+  }
+  if (type === EXP05_MORPHOLOGY_TYPES.TRILOBITE) {
+    return wrapExploreRadius(createTrilobiteRadiusAt(normalized))
   }
 
   return wrapExploreRadius(createWorldRawRadiusAt(normalized))

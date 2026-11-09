@@ -16,13 +16,13 @@ import {
  * translucent iridescent veil layers over the near + mid dunes, sediment
  * glints, and glass splash crowns rising from the sand.
  */
-export default function HabitatTerrain({ timeRef, envRef, pixelScale = 1, layers }) {
+export default function HabitatTerrain({ timeRef, envRef, toneRef = null, pixelScale = 1, layers }) {
   const res = useMemo(() => {
     const ground = buildGroundGeometry()
     const groundMat = createGroundMaterial()
     const veils = [0, 1].map((layer) => ({
       geometry: buildVeilGeometry(layer),
-      material: createVeilMaterial(layer),
+      material: createVeilMaterial(layer, { fade: 0.45 }),
     }))
     const glints = buildGlints()
     const crowns = planSplashes()
@@ -58,6 +58,24 @@ export default function HabitatTerrain({ timeRef, envRef, pixelScale = 1, layers
     res.glints.material.uniforms.uTime.value = time
     /* Light keeps moving even when the life clock is paused. */
     res.groundMat.userData.uniforms.uTime.value = state.clock.elapsedTime
+    /* Sand, caustics and veils answer the environment tone. */
+    const tone = toneRef?.current
+    if (tone) {
+      const film = tone.film ?? 0
+      res.groundMat.color.copy(tone.ground)
+      res.groundMat.userData.uniforms.uCaustic.value = tone.caustic
+      res.groundMat.userData.uniforms.uFilm.value = film
+      res.groundMat.iridescence = 0.08 + film * 1.05
+      res.groundMat.roughness = 0.8 - film * 0.32
+      const range = res.groundMat.iridescenceThicknessRange
+      range[0] = 140
+      range[1] = 260 + film * 860
+      for (const v of res.veils ?? []) {
+        v.material.userData.uniforms.uVeilFade.value = tone.veilFade
+        v.material.userData.uniforms.uFilm.value = film
+        v.material.iridescence = 0.25 + film * 0.75
+      }
+    }
     updateSplashes(res.crowns, res.splashes, time, envRef?.current?.turbulence ?? 0)
   })
 

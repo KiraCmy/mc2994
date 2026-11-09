@@ -7,7 +7,7 @@ import { createOutcropResources, createResidueResources } from './habitatGrowthB
  * chips and frost-flower feet) and abstract residue in the organism's own
  * materials. Deliberately quiet so the body stays the focus.
  */
-export default function HabitatGrowth({ crystalRef, layers }) {
+export default function HabitatGrowth({ crystalRef, toneRef = null, layers }) {
   const res = useMemo(() => ({ outcrops: createOutcropResources(), residue: createResidueResources() }), [])
 
   useEffect(
@@ -21,8 +21,10 @@ export default function HabitatGrowth({ crystalRef, layers }) {
   useFrame(() => {
     /* The whole habitat answers the same medium: outcrops brighten as it freezes. */
     const level = crystalRef?.current?.level ?? 0
-    res.outcrops.crystalMat.emissiveIntensity = 0.05 + level * 0.1
+    res.outcrops.crystalMat.emissiveIntensity = 0.02 + level * 0.05
     res.outcrops.beadMat.emissiveIntensity = 0.05 + level * 0.1
+    /* Crystals take the water's tone: icy when cold, blushing when warm. */
+    if (toneRef?.current) res.outcrops.crystalMat.color.copy(toneRef.current.crystal)
   })
 
   const showOutcrops = layers?.outcrops !== false

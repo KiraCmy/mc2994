@@ -183,3 +183,152 @@ export function orientAlong(target, axis, spin = 0) {
   if (spin) target.premultiply(_spin.setFromAxisAngle(axis, spin))
   return target
 }
+
+/**
+ * Selenite blade: a thin tablet with a pointed, slightly skewed head (gypsum /
+ * selenite habit). Long axis +Y (0 → PRISM_HEIGHT), wide in X, thin in Z.
+ */
+export function createPlateCrystalGeometry() {
+  const h = PRISM_HEIGHT
+  const shape = new THREE.Shape()
+  shape.moveTo(-0.5, 0)
+  shape.lineTo(0.5, 0)
+  shape.lineTo(0.56, h * 0.8)
+  shape.lineTo(0.38, h)
+  shape.lineTo(-0.46, h * 0.93)
+  shape.lineTo(-0.56, h * 0.62)
+  shape.closePath()
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.12,
+    bevelEnabled: true,
+    bevelThickness: 0.035,
+    bevelSize: 0.05,
+    bevelSegments: 1,
+    steps: 1,
+  })
+  geo.translate(0, 0, -0.06)
+  const flat = geo.toNonIndexed()
+  geo.dispose()
+  flat.computeVertexNormals()
+  return flat
+}
+
+/**
+ * Calcite rhomb: a sheared, chunky rhombohedron (the mineral of trilobite
+ * shields). Sits on y = 0, about 0.9 tall, faces flat-shaded.
+ */
+export function createRhombCrystalGeometry() {
+  const box = new THREE.BoxGeometry(1, 0.9, 1)
+  box.translate(0, 0.45, 0)
+  const pos = box.attributes.position
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i)
+    pos.setX(i, pos.getX(i) + y * 0.38)
+    pos.setZ(i, pos.getZ(i) + y * 0.22)
+  }
+  box.rotateY(Math.PI / 4)
+  const flat = box.toNonIndexed()
+  box.dispose()
+  flat.computeVertexNormals()
+  return flat
+}
+
+/** Flat scale-flake (frost of the quilted body). */
+export function createFlakeGeometry() {
+  const geo = new THREE.IcosahedronGeometry(1, 1)
+  geo.scale(1, 0.22, 0.8)
+  geo.computeVertexNormals()
+  return geo
+}
+
+/** Small cleaved grain (frost of the shielded body). */
+export function createGrainGeometry() {
+  const geo = new THREE.BoxGeometry(1.1, 0.8, 0.9)
+  geo.rotateY(0.6)
+  geo.rotateX(0.3)
+  const flat = geo.toNonIndexed()
+  geo.dispose()
+  flat.computeVertexNormals()
+  return flat
+}
+
+/**
+ * Each species grows its own mineral, inside one palette:
+ *  - spiral (ammonite line): clear lilac quartz points, pearl frost;
+ *  - segmented (quilted oval): satin selenite blades, milky flake frost;
+ *  - trilobite: pale apricot calcite rhombs with strong fire, cleaved grains.
+ * len / width scale the grown crystal (length beyond the embed / girth).
+ */
+export const CRYSTAL_STYLES = Object.freeze({
+  quartz: Object.freeze({
+    habit: 'prism',
+    frost: 'pearl',
+    len: 1,
+    width: 1,
+    crystal: { color: '#f3f0ff', attenuationColor: '#e4d6ff', attenuationDistance: 1.5, iridescence: 1, dispersion: 0.35 },
+    frostMat: { color: '#ece0fa', transmission: 0.75, thickness: 0.3, roughness: 0.08, iridescence: 1, sheen: 0.3 },
+  }),
+  selenite: Object.freeze({
+    habit: 'plate',
+    frost: 'flake',
+    len: 1.05,
+    width: 2.1,
+    crystal: {
+      color: '#fbf7f0',
+      attenuationColor: '#eee2d0',
+      attenuationDistance: 2.6,
+      roughness: 0.32,
+      transmission: 0.5,
+      iridescence: 0.25,
+      dispersion: 0.04,
+      ior: 1.52,
+      sheen: 1,
+      sheenColor: '#fff2dc',
+      emissive: '#fff4e4',
+    },
+    frostMat: { color: '#f6efe6', transmission: 0.25, thickness: 0.2, roughness: 0.38, iridescence: 0.2, sheen: 0.9, sheenColor: '#fff1dc' },
+  }),
+  calcite: Object.freeze({
+    habit: 'rhomb',
+    frost: 'grain',
+    len: 1.45,
+    width: 1.55,
+    crystal: {
+      color: '#fff7ee',
+      attenuationColor: '#f0cdb0',
+      attenuationDistance: 1.5,
+      roughness: 0.04,
+      dispersion: 0.85,
+      ior: 1.66,
+      iridescence: 0.5,
+      emissive: '#ffe6cf',
+    },
+    frostMat: { color: '#efe3d6', transmission: 0.6, thickness: 0.25, roughness: 0.12, iridescence: 0.5, sheen: 0.2 },
+  }),
+})
+
+/** The mineral a morphology grows. */
+export function crystalStyleFor(morphologyType) {
+  if (morphologyType === 'segmented') return CRYSTAL_STYLES.selenite
+  if (morphologyType === 'trilobite') return CRYSTAL_STYLES.calcite
+  return CRYSTAL_STYLES.quartz
+}
+
+export function createHabitGeometry(habit) {
+  if (habit === 'plate') return createPlateCrystalGeometry()
+  if (habit === 'rhomb') return createRhombCrystalGeometry()
+  return createPrismCrystalGeometry()
+}
+
+export function createFrostGeometry(frost) {
+  if (frost === 'flake') return createFlakeGeometry()
+  if (frost === 'grain') return createGrainGeometry()
+  return createBeadGeometry()
+}
+
+/** Plain-JSON style params → material overrides (colours to THREE.Color). */
+export function styleMaterialParams(params) {
+  const out = {}
+  for (const [k, v] of Object.entries(params)) out[k] = typeof v === 'string' && v.startsWith('#') ? new THREE.Color(v) : v
+  return out
+}

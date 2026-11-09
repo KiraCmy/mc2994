@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLifeEngine } from '../worldv2/life/useLifeEngine.js'
 import HabitatScene from './finalHabitat/HabitatScene.jsx'
+import FossilReveal from './finalHabitat/FossilReveal.jsx'
+import { fossilForBody, fossilForSpecies } from './finalHabitat/habitatFossil.js'
+import { HERO_HOME, INITIAL_SPECIES, pickHome, speciesFor } from './finalHabitat/worldOpening.js'
+import { freshRemainsPoints } from './finalHabitat/Remains.jsx'
+import ArchiveDrawer from './finalHabitat/ArchiveDrawer.jsx'
+import { createSpecimen, loadArchive, removeSpecimen, saveSpecimen } from './finalHabitat/archive.js'
 import {
   CRYSTAL_PRESETS,
   crystallizationState,
@@ -9,11 +15,26 @@ import {
 } from './crystalForm/crystallization.js'
 import { parseEnvironmentalLanguage } from './languageAsEnvironment/parseEnvironmentalLanguage.js'
 import { EXP05_LIFE_SEED } from './finalForm/exploreLifeAdapter.js'
+import { kinCrystalLevel } from './finalHabitat/habitatKin.js'
 import './finalHabitat/habitat.css'
 
 const START_AGE = 0.64
 const START_ENV = { temperature: 0.38, moisture: 0.68, turbulence: 0.12 }
 const HISTORY = 56
+/** Real-time ageing of the hero: START_AGE → end of life in ~2.5 minutes. */
+const HERO_AGE_RATE = (1 - START_AGE) / 150
+/** World Final opens held, then grows through the rest of its life in ~50s. */
+const OPENING_HOLD_MS = 2200
+const OPENING_GROW_RATE = (1 - START_AGE) / 50
+/** World Final: the hero is met mid-life and ends ~2.5 min after arrival. */
+const WORLD_START_AGE = 0.42
+const WORLD_AGE_RATE = (1 - WORLD_START_AGE) / 150
+/** An unwitnessed hero rests as a husk this long, then a new life begins. */
+const UNWITNESSED_REBIRTH_MS = 8000
+/** A new life starts young. */
+const REBORN_AGE = 0.2
+/** Seconds after death until the remains are identified. */
+const REVEAL_AFTER = 6.5
 
 function clamp01(v) {
   return Math.min(1, Math.max(0, Number(v) || 0))
@@ -77,11 +98,48 @@ function LifeGraph({ history, state }) {
  * forest floor, crystallizing as part of its form. Language, sliders and
  * presets all write the same shared medium.
  */
-export default function Experiment07({ title, description }) {
-  const { life, seekToAge, setPlaying, setMoisture, setTurbulence } = useLifeEngine(EXP05_LIFE_SEED)
+function createWorld() {
+  return {
+    phase: 'descent',
+    focusId: null,
+    hoverId: null,
+    bodies: new Map(),
+    kinInfo: new Map(),
+    kinControl: null,
+    dimming: { id: null, dusk: 0 },
+    opening: { t: 0, skip: false, skipping: null, haze: 1, depth: 1 },
+  }
+}
+
+export default function Experiment07({ title, description, autoGrow = false, opening = false }) {
+  const { life, seekToAge, setPlaying, setMoisture, setTurbulence, changeSeed } = useLifeEngine(EXP05_LIFE_SEED)
+  const vignetteRef = useRef(null)
+  const [revealed, setRevealed] = useState(false)
+  const [lingering, setLingering] = useState(false)
+  const dead = Boolean(life.dead)
   const articleRef = useRef(null)
   const [temperature, setTemperature] = useState(START_ENV.temperature)
-  const [running, setRunning] = useState(true)
+  const [running, setRunning] = useState(opening || !autoGrow)
+  /* World Final opening experience: descent → discovery → encounter → focus.
+     Per-frame state lives in worldRef; React hears phase / focus / hover. */
+  const worldRef = useRef(null)
+  if (opening && !worldRef.current) worldRef.current = createWorld()
+  if (worldRef.current && !worldRef.current.anchors) worldRef.current.anchors = new Map([['hero', HERO_HOME]])
+  const [phase, setPhase] = useState(opening ? 'descent' : 'lab')
+  const [focusId, setFocusId] = useState(null)
+  const [hovering, setHovering] = useState(false)
+  const [kinView, setKinView] = useState(null)
+  /* World Final lineage of the hero slot: each new life is born somewhere
+     new, possibly as another species. */
+  const [heroLine, setHeroLine] = useState({ generation: 0, home: HERO_HOME, species: INITIAL_SPECIES.hero })
+  /* The viewer's archive of kept remains (this browser). */
+  const [archive, setArchive] = useState(() => loadArchive())
+  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [savedKey, setSavedKey] = useState(null)
+  const focusKin = Boolean(focusId && focusId !== 'hero')
+  const focusKinRef = useRef(focusKin)
+  focusKinRef.current = focusKin
+  const runTouchedRef = useRef(false)
   const [message, setMessage] = useState('')
   const [reply, setReply] = useState(null)
   const [layersOpen, setLayersOpen] = useState(false)
@@ -110,9 +168,21 @@ export default function Experiment07({ title, description }) {
   const timeRef = useRef(0)
   const runningRef = useRef(running)
   runningRef.current = running
+  const ageRateRef = useRef(HERO_AGE_RATE)
+  ageRateRef.current = opening ? WORLD_AGE_RATE : autoGrow ? OPENING_GROW_RATE : HERO_AGE_RATE
+
+  /* World Final: hold the opening pose, then grow without a slider drag.
+     A click on Real time (or Space) before then keeps the user's choice. */
+  useEffect(() => {
+    if (!autoGrow || opening) return undefined
+    const id = window.setTimeout(() => {
+      if (!runTouchedRef.current) setRunning(true)
+    }, OPENING_HOLD_MS)
+    return () => window.clearTimeout(id)
+  }, [autoGrow, opening])
 
   useEffect(() => {
-    seekToAge(START_AGE, { resume: false })
+    seekToAge(opening ? WORLD_START_AGE : START_AGE, { resume: false })
     setPlaying(false)
     setMoisture(START_ENV.moisture)
     setTurbulence(START_ENV.turbulence)
@@ -141,7 +211,7 @@ export default function Experiment07({ title, description }) {
         lastUi = now
         setReadout({ level: state.level, rate: state.rate, target })
       }
-      if (runningRef.current && now - lastSample > 600) {
+      if (runningRef.current && now - lastSample > 600 && !focusKinRef.current) {
         lastSample = now
         setHistory((h) => h.slice(1).concat(state.level))
       }
@@ -151,12 +221,195 @@ export default function Experiment07({ title, description }) {
     return () => cancelAnimationFrame(frame)
   }, [])
 
+  /* The hero lives in real time: AGE advances while Real time is on, and the
+     life ends (withers → husk) when it reaches 1. Synced to the engine at a
+     low rate (each sync replays the life deterministically). */
+  const heroAgeRef = useRef(opening ? WORLD_START_AGE : START_AGE)
+  const deadRef = useRef(dead)
+  deadRef.current = dead
+  useEffect(() => {
+    const age = life.age
+    /* Follow a slider jump. Ignore the tiny step a replay quantizes backwards,
+       or the clock stalls on the same hundredth. */
+    if (Math.abs(age - heroAgeRef.current) > 0.02 || age > heroAgeRef.current) {
+      heroAgeRef.current = age
+    }
+  }, [life.age])
+  useEffect(() => {
+    let frame = 0
+    let previous = performance.now()
+    let lastSeek = 0
+    let sought = heroAgeRef.current
+    const tick = (now) => {
+      const dt = Math.min(0.1, (now - previous) / 1000)
+      previous = now
+      /* (World Final: the hero's clock starts once we have arrived.) */
+      if (runningRef.current && !deadRef.current && worldRef.current?.phase !== 'descent') {
+        heroAgeRef.current = Math.min(1, heroAgeRef.current + dt * ageRateRef.current)
+        const next = heroAgeRef.current
+        if ((next - sought >= 0.004 && now - lastSeek > 700) || (next >= 1 && sought < 1)) {
+          sought = next
+          lastSeek = now
+          seekToAge(next, { resume: false })
+        }
+      } else {
+        sought = heroAgeRef.current
+      }
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [seekToAge])
+
+  /* The life being witnessed: the hero in the lab; the focused one in World Final. */
+  const witnessDead = opening ? (focusId === 'hero' ? dead : Boolean(kinView?.ended)) : dead
+
+  /* Death → after the habitat fades, identify the remains. */
+  useEffect(() => {
+    if (opening && focusKin) return undefined
+    if (!dead || (opening && focusId !== 'hero')) {
+      setRevealed(false)
+      setLingering(false)
+      return undefined
+    }
+    const id = window.setTimeout(() => setRevealed(true), REVEAL_AFTER * 1000)
+    return () => window.clearTimeout(id)
+  }, [dead, opening, focusId, focusKin])
+
+  /* A focused kin's end: reveal once the world has dimmed around it. */
+  useEffect(() => {
+    if (!opening || !focusKin) return
+    if (!kinView?.ended) {
+      setRevealed(false)
+      setLingering(false)
+    } else if (kinView.deathT >= REVEAL_AFTER) {
+      setRevealed(true)
+    }
+  }, [opening, focusKin, kinView])
+
+  const bornAnotherHero = useCallback(() => {
+    const seed = 1000 + Math.floor(Math.random() * 98000)
+    const w = worldRef.current
+    if (w) {
+      /* What is left settles on the seabed; a new life is born elsewhere. */
+      w.capture?.('hero')
+      setHeroLine((line) => {
+        const generation = line.generation + 1
+        const occupied = [...(w.anchors?.entries() ?? [])].filter(([id]) => id !== 'hero').map(([, a]) => a)
+        occupied.push(...freshRemainsPoints(worldRef), line.home)
+        const home = pickHome('hero', generation, seed, occupied)
+        w.anchors?.set('hero', home)
+        return { generation, home, species: speciesFor('hero', generation, seed) }
+      })
+    }
+    changeSeed(seed)
+    seekToAge(REBORN_AGE, { resume: false })
+    setMoisture(moisture)
+    setTurbulence(turbulence)
+    heroAgeRef.current = REBORN_AGE
+  }, [changeSeed, seekToAge, setMoisture, setTurbulence, moisture, turbulence])
+
+  const bornAnother = useCallback(() => {
+    if (opening && focusKin) {
+      /* Its remains settle on the seabed; a new life is born elsewhere. */
+      worldRef.current?.settle?.(focusId)
+    } else {
+      bornAnotherHero()
+    }
+    setRevealed(false)
+    setLingering(false)
+  }, [opening, focusKin, focusId, bornAnotherHero])
+
+  /* World Final: a hero that dies unwitnessed rests as a husk, then is born again. */
+  useEffect(() => {
+    if (!opening || !dead || focusId === 'hero') return undefined
+    const id = window.setTimeout(bornAnotherHero, UNWITNESSED_REBIRTH_MS)
+    return () => window.clearTimeout(id)
+  }, [opening, dead, focusId, bornAnotherHero])
+
+  /* World Final interactions (called from inside the canvas). */
+  const selectLife = useCallback((id) => {
+    const w = worldRef.current
+    if (!w || w.phase === 'descent' || w.focusId === id) return
+    w.focusId = id
+    setFocusId(id)
+    setRevealed(false)
+    setLingering(false)
+  }, [])
+  const exitFocus = useCallback(() => {
+    const w = worldRef.current
+    if (!w || !w.focusId) return
+    w.focusId = null
+    setFocusId(null)
+    setRevealed(false)
+    setLingering(false)
+  }, [])
+  if (worldRef.current) {
+    const w = worldRef.current
+    w.select = selectLife
+    w.exitFocus = exitFocus
+    w.onPhase = setPhase
+    w.setHover = (id) => {
+      if (w.phase === 'descent') return
+      w.hoverId = id
+      setHovering(true)
+    }
+    w.clearHover = (id) => {
+      if (w.hoverId !== id) return
+      w.hoverId = null
+      setHovering(false)
+    }
+  }
+
+  /* Back on the hero: its graph is the medium's crystallization again. */
+  useEffect(() => {
+    if (focusId === 'hero') setHistory(Array(HISTORY).fill(crystalRef.current.level))
+  }, [focusId])
+
+  /* Focused kin: read its life from the habitat a few times a second. */
+  useEffect(() => {
+    if (!opening || !focusKin) {
+      setKinView(null)
+      return undefined
+    }
+    let lastSample = 0
+    const read = () => {
+      const info = worldRef.current?.kinInfo.get(focusId)
+      if (!info) return
+      setKinView({ age: info.age, level: info.level, ended: info.ended, deathT: info.deathT, stage: info.stage })
+      const now = performance.now()
+      if (now - lastSample > 600) {
+        lastSample = now
+        setHistory((h) => h.slice(1).concat(info.level))
+      }
+    }
+    const first = worldRef.current?.kinInfo.get(focusId)
+    if (first) setHistory(Array(HISTORY).fill(first.level))
+    read()
+    const id = window.setInterval(read, 250)
+    return () => window.clearInterval(id)
+  }, [opening, focusKin, focusId])
+
+  /* Esc: skip the descent, or return from observing to free exploration. */
+  useEffect(() => {
+    if (!opening) return undefined
+    const onKey = (event) => {
+      if (event.key !== 'Escape') return
+      const w = worldRef.current
+      if (w?.phase === 'descent') w.opening.skip = true
+      else exitFocus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [opening, exitFocus])
+
   useEffect(() => {
     const onKey = (event) => {
       if (event.code !== 'Space') return
       const tag = event.target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || event.target?.isContentEditable) return
       event.preventDefault()
+      runTouchedRef.current = true
       setRunning((v) => !v)
     }
     window.addEventListener('keydown', onKey)
@@ -214,11 +467,43 @@ export default function Experiment07({ title, description }) {
     else el.requestFullscreen?.().catch(() => {})
   }, [])
 
-  const stateLabel = crystallizationState(readout.level, readout.rate, turbulence)
+  /* The remains being identified, and keeping them in the archive. */
+  const revealSpecies = opening ? worldRef.current?.bodies.get(focusId || 'hero')?.species : null
+  const revealFossil = opening ? fossilForSpecies(revealSpecies) : fossilForBody('hero')
+  useEffect(() => {
+    if (!revealed) setSavedKey(null)
+  }, [revealed])
+  const saveToArchive = () => {
+    const kin = focusKin ? worldRef.current?.kinInfo.get(focusId) : null
+    const specimen = createSpecimen({
+      fossil: revealFossil,
+      species: revealSpecies,
+      seed: kin ? kin.seed : life.seed,
+      generation: kin ? kin.generation : heroLine.generation,
+      environment: { temperature, moisture, turbulence },
+      crystallization: kin ? kin.level : 1,
+    })
+    const { list } = saveSpecimen(specimen)
+    setArchive(list.length ? list : [specimen, ...archive])
+    setSavedKey(specimen.key)
+  }
+
+  /* The panel reads the life being observed (World Final: the focused one). */
+  const view =
+    focusKin && kinView
+      ? { level: kinView.level, target: kinCrystalLevel(readout.target, kinView.age), age: kinView.age }
+      : { level: readout.level, target: readout.target, age: life.age }
+  const stateLabel = focusKin && kinView?.ended ? 'Ending' : crystallizationState(view.level, readout.rate, turbulence)
+  const worldClass = opening
+    ? ` is-world is-${phase}${focusId ? ' is-focused' : ''}${hovering ? ' is-hovering' : ''}`
+    : ''
   const sceneLayers = useMemo(() => layers, [layers])
 
   return (
-    <article ref={articleRef} className="playground-experiment playground-experiment--exp05 playground-experiment--exp07">
+    <article
+      ref={articleRef}
+      className={`playground-experiment playground-experiment--exp05 playground-experiment--exp07${witnessDead ? ' is-ending' : ''}${revealed && !lingering ? ' is-revealed' : ''}${worldClass}`}
+    >
       <div className="exp07-immerse">
         <HabitatScene
           life={life}
@@ -232,12 +517,62 @@ export default function Experiment07({ title, description }) {
           running={running}
           layers={sceneLayers}
           crystalLevel={Math.round(readout.level * 20) / 20}
+          overlayRef={vignetteRef}
+          world={opening ? worldRef : null}
+          heroHome={heroLine.home}
+          heroSpecies={heroLine.species}
           className="exp07-viewport"
         />
-        <div className="exp07-vignette" aria-hidden="true" />
+        <div ref={vignetteRef} className="exp07-vignette" aria-hidden="true" />
+        <div className="exp07-dusk" aria-hidden="true" />
+        {revealed && !lingering ? (
+          <FossilReveal
+            fossil={revealFossil}
+            onBornAnother={bornAnother}
+            onLinger={() => setLingering(true)}
+            onSave={saveToArchive}
+            saved={Boolean(savedKey)}
+            onOpenArchive={() => setArchiveOpen(true)}
+          />
+        ) : null}
+        {opening && phase !== 'descent' && !(revealed && !lingering) ? (
+          <button type="button" className="exp07-archive-toggle" aria-expanded={archiveOpen} onClick={() => setArchiveOpen((v) => !v)}>
+            Archive{archive.length ? ` · ${archive.length}` : ''}
+          </button>
+        ) : null}
+        {archiveOpen ? (
+          <ArchiveDrawer
+            entries={archive}
+            onClose={() => setArchiveOpen(false)}
+            onRemove={(key) => setArchive(removeSpecimen(key))}
+          />
+        ) : null}
+        {witnessDead && lingering ? (
+          <button type="button" className="exp07-reborn" onClick={bornAnother}>
+            Born another
+          </button>
+        ) : null}
+
+        {opening && phase === 'descent' ? (
+          <button
+            type="button"
+            className="exp07-skip"
+            onClick={() => {
+              if (worldRef.current) worldRef.current.opening.skip = true
+            }}
+          >
+            Skip descent
+          </button>
+        ) : null}
+        {opening ? <div className="exp07-brackets" aria-hidden="true"><i /><i /><i /><i /></div> : null}
+        {opening && focusId && !witnessDead ? (
+          <button type="button" className="exp07-unfocus" onClick={exitFocus}>
+            Esc · Return to the water
+          </button>
+        ) : null}
 
         <header className="exp07-intro">
-          <p className="exp07-intro__eyebrow">Experiment 07</p>
+          <p className="exp07-intro__eyebrow">{opening ? 'World Final' : title}</p>
           <h1 className="exp07-intro__title">{title}</h1>
           <p className="exp07-intro__desc">{description}</p>
         </header>
@@ -262,12 +597,12 @@ export default function Experiment07({ title, description }) {
           <section className="exp07-crystal" aria-live="polite">
             <p className="exp07-panel__label">Crystallization</p>
             <div className="exp07-crystal__row">
-              <span className="exp07-crystal__value">{readout.level.toFixed(2)}</span>
-              <span className="exp07-crystal__target">→ {readout.target.toFixed(2)}</span>
+              <span className="exp07-crystal__value">{view.level.toFixed(2)}</span>
+              <span className="exp07-crystal__target">→ {view.target.toFixed(2)}</span>
             </div>
             <div className="exp07-crystal__meter" aria-hidden="true">
-              <span style={{ width: `${readout.level * 100}%` }} />
-              <em style={{ left: `${readout.target * 100}%` }} />
+              <span style={{ width: `${view.level * 100}%` }} />
+              <em style={{ left: `${view.target * 100}%` }} />
             </div>
           </section>
 
@@ -344,21 +679,23 @@ export default function Experiment07({ title, description }) {
         <div className="exp07-foot">
           <label className="exp07-age" htmlFor="exp07-age">
             <span>AGE</span>
-            <b>{life.age.toFixed(2)}</b>
+            <b>{view.age.toFixed(2)}</b>
             <span>/ Growth</span>
             <input
               id="exp07-age"
               type="range"
               min={0}
-              max={0.99}
+              max={1}
               step={0.005}
-              value={life.age}
-              aria-valuetext={`Age ${life.age.toFixed(2)}`}
+              value={view.age}
+              disabled={focusKin}
+              title={focusKin ? 'Observing is not control: this life keeps its own time' : undefined}
+              aria-valuetext={`Age ${view.age.toFixed(2)}`}
               onChange={(event) => seekToAge(Number(event.target.value), { resume: false })}
             />
           </label>
           <div className="exp07-foot__right">
-            <button type="button" className="exp07-realtime" aria-pressed={running} onClick={() => setRunning((v) => !v)}>
+            <button type="button" className="exp07-realtime" aria-pressed={running} onClick={() => { runTouchedRef.current = true; setRunning((v) => !v) }}>
               <span aria-hidden="true">{running ? '❙❙' : '▶'}</span>
               Real time
             </button>

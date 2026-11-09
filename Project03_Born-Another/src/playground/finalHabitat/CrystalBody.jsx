@@ -11,11 +11,17 @@ import { normalizeExp05Temperature } from '../finalForm/exp05EnvironmentCoupling
 import { crystalGrowth, rimeAmount, smoothstep } from '../crystalForm/crystallization.js'
 import { habitatHeight, habitatRng } from './habitatField.js'
 import { nucleusFragment, nucleusVertex, patchMembrane } from './habitatShaders.js'
+import { KIN_TINTS } from './habitatKin.js'
+import { ammoniteRadius, coilAmount, deathPhases, witherAmount } from './habitatFossil.js'
+import { glowFragment, glowVertex } from './worldShaders.js'
+import { noticeRadius, pickResponse, responseCooldown, responseEnvelope, RESPONSE_SECONDS } from './worldOpening.js'
 import {
   createCrystalMaterial,
-  createBeadGeometry,
   createBeadMaterial,
-  createPrismCrystalGeometry,
+  createFrostGeometry,
+  createHabitGeometry,
+  crystalStyleFor,
+  styleMaterialParams,
   orientAlong,
   PRISM_HEIGHT,
 } from './crystalShapes.js'
@@ -40,9 +46,16 @@ import {
 const BODY_DETAIL = 28
 const FIBRES = 420
 const FIBRE_SEGMENTS = 6
-const BEAD_MAX = 1800
+const BEAD_MAX = 650
+/** Stone-lilac the husk clouds toward. */
+const HUSK_TINT = new THREE.Color('#d6cfda')
+/** Nucleus colours (alive) and the fossil grey they fade to in the husk. */
+const NUCLEUS_ALIVE = { uGold: new THREE.Color('#ffd2ad'), uPink: new THREE.Color('#f5b3cf'), uBlue: new THREE.Color('#cfe0ff') }
+const NUCLEUS_FOSSIL = new THREE.Color('#bdb4bf')
 const RESEAT_INTERVAL = 0.6
 const NUCLEUS_SCALE = 0.76
+
+const GLOW_WHITE = new THREE.Color('#ffffff')
 
 /* ---------- small 3D value noise (JS) for the frost / vein field ---------- */
 function hash3(x, y, z, s) {
@@ -255,16 +268,37 @@ export default function CrystalBody({
   envRef,
   temperature = 0.5,
   morphologyType = EXP05_DEFAULT_MORPHOLOGY_TYPE,
+  /** Morphology amplitude — must match the petals' (they share the surface). */
+  lobeAmplitude = 1,
+  /** Hero size (World Final: the same size law as the kin). */
+  bodyScale = 1,
   groundY = 0,
   layers,
   timeRef,
   /** Kin: live placement { x, z, lift, spin, phase, pulse, scale, snap } (hero: none). */
   placeRef = null,
   coreLight = true,
+  /** Palette shift for this individual (KIN_TINTS entry). */
+  tint = KIN_TINTS[0],
+  /** Hero: publishes { x, y, z, r } each frame and reads `contacts` back. */
+  bodyRef = null,
+  /** { t }: seconds since this life ended (−1 while alive). */
+  deathRef = null,
+  /** Hero: wander around this [x, z] instead of the clearing (World Final). */
+  home = null,
+  /** World Final: shared registry / hover / focus / dimming (see HabitatScene). */
+  world = null,
+  /** Id of this life in `world` ('hero' or a kin id). */
+  selfId = 'hero',
+  /** Notice the viewer nearby and respond (World Final). */
+  responsive = false,
+  /** Faint light signal visible through the haze (World Final). */
+  glow = false,
   children = null,
 }) {
   const seed = life?.seed
   const morphType = normalizeExp05MorphologyType(morphologyType)
+  const crystalStyle = crystalStyleFor(morphType)
   const tempValue = normalizeExp05Temperature(temperature)
 
   const evaluator = useMemo(
@@ -291,9 +325,17 @@ export default function CrystalBody({
       uTent: { value: 0 },
       uRime: { value: 0 },
       uCore: { value: new THREE.Color('#ffd2c0') },
-      uCoreGlow: { value: 0.07 },
+      uCoreGlow: { value: 0.13 },
       uFilm: { value: 0.24 },
       uFacet: { value: 0 },
+      uRim: { value: 0.32 },
+      uRimColor: { value: new THREE.Color('#e2f4ff') },
+      uContactDir: { value: [new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 1)] },
+      uContactAmt: { value: [0, 0, 0] },
+      uContactDepth: { value: 0 },
+      uBodyCentre: { value: new THREE.Vector3() },
+      uDrift: { value: new THREE.Vector3() },
+      uCoil: { value: 0 },
     }),
     [],
   )
@@ -317,6 +359,8 @@ export default function CrystalBody({
     membraneGeo.setAttribute('aFrost', new THREE.BufferAttribute(plan.frost, 1))
     membraneGeo.setAttribute('aFacetOffset', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
     membraneGeo.setAttribute('aFacetNormal', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
+    membraneGeo.setAttribute('aCoilOffset', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
+    membraneGeo.setAttribute('aCoilNormal', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
 
     const nucleusGeo = new THREE.BufferGeometry()
     nucleusGeo.setIndex(new THREE.BufferAttribute(base.index, 1))
@@ -350,8 +394,8 @@ export default function CrystalBody({
       iridescence: 0.75,
       iridescenceIOR: 1.35,
       iridescenceThicknessRange: [100, 1000],
-      attenuationColor: new THREE.Color('#f6d2e2'),
-      attenuationDistance: 3,
+      attenuationColor: new THREE.Color('#f1aecd'),
+      attenuationDistance: 2.2,
       specularIntensity: 0.7,
       clearcoat: 0.3,
       clearcoatRoughness: 0.12,
@@ -366,7 +410,7 @@ export default function CrystalBody({
       vertexShader: nucleusVertex,
       fragmentShader: nucleusFragment,
     })
-    const fibreMat = new THREE.LineBasicMaterial({ vertexColors: true, fog: false })
+    const fibreMat = new THREE.LineBasicMaterial({ vertexColors: true, fog: false, transparent: true })
 
     return {
       membraneGeo,
@@ -375,21 +419,22 @@ export default function CrystalBody({
       membraneMat,
       nucleusMat,
       fibreMat,
-      crystalGeo: createPrismCrystalGeometry(),
-      beadGeo: createBeadGeometry(),
+      /* Each species grows its own mineral (habit, frost, material). */
+      crystalGeo: createHabitGeometry(crystalStyle.habit),
+      beadGeo: createFrostGeometry(crystalStyle.frost),
       crystalMat: createCrystalMaterial({
-        color: '#f3f0ff',
-        attenuationColor: new THREE.Color('#e4d6ff'),
-        attenuationDistance: 1.5,
-        iridescence: 1,
         emissive: new THREE.Color('#efe6ff'),
         emissiveIntensity: 0.03,
         envMapIntensity: 2,
         clearcoatRoughness: 0.06,
+        ...styleMaterialParams(crystalStyle.crystal),
       }),
-      frostMat: createBeadMaterial(),
+      frostMat: createBeadMaterial({
+        emissiveIntensity: 0,
+        ...styleMaterialParams(crystalStyle.frostMat),
+      }),
     }
-  }, [base, plan, uniforms, nucleusUniforms])
+  }, [base, plan, uniforms, nucleusUniforms, crystalStyle])
 
   useEffect(
     () => () => {
@@ -398,10 +443,72 @@ export default function CrystalBody({
     [resources],
   )
 
+  const tintAttenuation = useMemo(() => new THREE.Color(tint.attenuation), [tint])
+  const coreLightRef = useRef(null)
+  const glowRef = useRef(null)
+  const pickRef = useRef(null)
+  const respRef = useRef({ t0: -100, kind: 'still', strength: 0, pendingAt: -1, cooldownUntil: 0, hover: 0, radius: 1.4, dist: undefined })
+  const glowMaterial = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uColor: { value: new THREE.Color(tint.core).lerp(GLOW_WHITE, 0.2) },
+          uAlpha: { value: 0 },
+        },
+        vertexShader: glowVertex,
+        fragmentShader: glowFragment,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+      }),
+    [tint],
+  )
+  useEffect(() => () => glowMaterial.dispose(), [glowMaterial])
+  const pickMaterial = useMemo(() => new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }), [])
+  useEffect(() => () => pickMaterial.dispose(), [pickMaterial])
+  const huskLightRef = useRef(null)
+
+  /* Individual palette shift (same material family, small hue moves). */
+  useEffect(() => {
+    resources.membraneMat.attenuationColor.set(tint.attenuation)
+    resources.membraneMat.sheenColor.set(tint.sheen)
+    uniforms.uCore.value.set(tint.core)
+  }, [resources, tint, uniforms])
+
   const groupRef = useRef(null)
   const crystalsRef = useRef(null)
   const frostRef = useRef(null)
-  const seatRef = useRef({ data: null, key: null, life: null, resources: null, at: -1 })
+  const seatRef = useRef({ data: null, key: null, life: null, resources: null, at: -1, facetAmt: 0, coil: 0 })
+
+  /* Remains: a frozen copy of this body as it is now (husk skin + crystals,
+     world transform). The habitat lays it on the seabed when the life ends. */
+  const snapshot = () => {
+    const data = seatRef.current.data
+    const group = groupRef.current
+    const crystals = crystalsRef.current
+    if (!data || !group) return null
+    const { facetAmt, coil } = seatRef.current
+    const n = data.pos.length
+    const pos = new Float32Array(n)
+    for (let i = 0; i < n; i++) pos[i] = data.pos[i] + data.facet[i] * facetAmt + data.coil[i] * coil
+    const geometry = new THREE.BufferGeometry()
+    geometry.setIndex(new THREE.BufferAttribute(base.index.slice(), 1))
+    geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    geometry.computeVertexNormals()
+    geometry.computeBoundingBox()
+    group.updateMatrixWorld()
+    return {
+      geometry,
+      crystalGeometry: resources.crystalGeo.clone(),
+      crystalMatrices: crystals ? crystals.instanceMatrix.array.slice(0, crystals.count * 16) : new Float32Array(0),
+      crystalCount: crystals ? crystals.count : 0,
+      matrix: group.matrixWorld.clone(),
+      species: morphType,
+      style: crystalStyle,
+      tint,
+    }
+  }
   const scratch = useMemo(
     () => ({
       m: new THREE.Matrix4(),
@@ -413,6 +520,12 @@ export default function CrystalBody({
       b: new THREE.Vector3(),
       a: new THREE.Vector3(),
       ref: new THREE.Vector3(),
+      inv: new THREE.Quaternion(),
+      vel: new THREE.Vector3(),
+      drift: new THREE.Vector3(),
+      lastPos: new THREE.Vector3(),
+      lean: new THREE.Vector2(),
+      centre: new THREE.Vector3(),
     }),
     [],
   )
@@ -423,7 +536,7 @@ export default function CrystalBody({
   }, [resources])
 
   function seat() {
-    const seated = evaluator.evaluateMany(base.dirList, life, { finiteDifferenceNormal: false })
+    const seated = evaluator.evaluateMany(base.dirList, life, { finiteDifferenceNormal: false, lobeAmplitude })
     const pos = resources.membraneGeo.attributes.position.array
     let cx = 0, cy = 0, cz = 0
     for (let i = 0; i < base.count; i++) {
@@ -448,6 +561,11 @@ export default function CrystalBody({
       nuc[j + 2] = cz + dz * pinch
     }
     unit /= base.count
+    let rmax = 0
+    for (let i = 0; i < base.count; i++) {
+      const j = i * 3
+      rmax = Math.max(rmax, Math.hypot(pos[j] - cx, pos[j + 1] - cy, pos[j + 2] - cz))
+    }
     resources.membraneGeo.attributes.position.needsUpdate = true
     resources.membraneGeo.computeVertexNormals()
     resources.membraneGeo.computeBoundingSphere()
@@ -491,6 +609,42 @@ export default function CrystalBody({
     resources.membraneGeo.attributes.aFacetOffset.needsUpdate = true
     facetGeo.dispose()
 
+    /* End of life: the crystallized husk coils into a ribbed planispiral
+       (ammonite) shell — the Exp03 Spiral rule wound flat. Only computed in
+       the last stretch of life (cheap otherwise). Keeps a trace of the facets. */
+    const coilOffset = resources.membraneGeo.attributes.aCoilOffset.array
+    /* Only the spiral closes into an ammonite. Dickinsonia and the trilobite
+       crystallize in the silhouette they already have. */
+    const wantsCoil = morphType === 'spiral' && (life?.dead || (life?.age ?? 0) >= 0.88)
+    if (wantsCoil) {
+      const coilPos = new Float32Array(base.count * 3)
+      for (let i = 0; i < base.count; i++) {
+        const j = i * 3
+        const dx = base.dirs[j], dy = base.dirs[j + 1], dz = base.dirs[j + 2]
+        const r = unit * ammoniteRadius(dx, dy, dz)
+        const tx = cx + dx * r + facetOffset[j] * 0.35
+        const ty = cy + dy * r + facetOffset[j + 1] * 0.35
+        const tz = cz + dz * r + facetOffset[j + 2] * 0.35
+        coilOffset[j] = tx - (pos[j] + facetOffset[j])
+        coilOffset[j + 1] = ty - (pos[j + 1] + facetOffset[j + 1])
+        coilOffset[j + 2] = tz - (pos[j + 2] + facetOffset[j + 2])
+        coilPos[j] = tx
+        coilPos[j + 1] = ty
+        coilPos[j + 2] = tz
+      }
+      const coilGeo = new THREE.BufferGeometry()
+      coilGeo.setIndex(resources.membraneGeo.index)
+      coilGeo.setAttribute('position', new THREE.BufferAttribute(coilPos, 3))
+      coilGeo.computeVertexNormals()
+      resources.membraneGeo.attributes.aCoilNormal.array.set(coilGeo.attributes.normal.array)
+      coilGeo.dispose()
+    } else {
+      coilOffset.fill(0)
+      resources.membraneGeo.attributes.aCoilNormal.array.set(resources.membraneGeo.attributes.normal.array)
+    }
+    resources.membraneGeo.attributes.aCoilOffset.needsUpdate = true
+    resources.membraneGeo.attributes.aCoilNormal.needsUpdate = true
+
     /* Fibres */
     const fp = resources.fibreGeo.attributes.position.array
     plan.fibres.forEach((f, i) => {
@@ -523,9 +677,12 @@ export default function CrystalBody({
       pos,
       normal: resources.membraneGeo.attributes.normal.array,
       facet: facetOffset,
+      coil: coilOffset,
+      hasCoil: wantsCoil,
       center: [cx, cy, cz],
       unit,
       minY,
+      rmax,
     }
   }
 
@@ -539,7 +696,7 @@ export default function CrystalBody({
     const time = timeRef?.current ?? now
 
     const seatState = seatRef.current
-    const key = `${evaluator.seed}|${morphType}|${tempValue}|${plan.crystals.length}`
+    const key = `${evaluator.seed}|${morphType}|${tempValue}|${plan.crystals.length}|${lobeAmplitude}`
     const stale = seatState.key !== key || seatState.life !== life
     const rebuilt = seatState.resources !== resources
     if (!seatState.data || rebuilt || (stale && (seatState.key !== key || now - seatState.at > RESEAT_INTERVAL))) {
@@ -551,13 +708,19 @@ export default function CrystalBody({
     }
     const data = seatState.data
     const S = data.unit
+    /* End of life: wither (last stretch of AGE), then coil, sink and rest. */
+    const age = life.age ?? 0
+    const deathT = life.dead ? Math.max(0, deathRef?.current?.t ?? 0) : -1
+    const wither = life.dead ? 1 : witherAmount(age)
+    const phases = deathPhases(deathT)
+    const coil = data.hasCoil ? coilAmount(age, deathT) : 0
     /* Placement: the hero floats at the clearing; kin follow their sim seat. */
     const place = placeRef?.current
-    const k = place ? Math.max(0.0001, place.scale) : 1
+    const k = place ? Math.max(0.0001, place.scale) : bodyScale
     const phase = place?.phase ?? 0
     let gy = groundY
     if (place) {
-      if (place.snap) {
+      if (place.snap || place.direct) {
         group.position.x = place.x
         group.position.z = place.z
       } else {
@@ -570,39 +733,216 @@ export default function CrystalBody({
       group.visible = k > 0.01
       group.rotation.y = place.spin
     } else {
-      /* Hero: a slow, small wandering loop around the clearing. */
-      group.position.x = Math.sin(time * 0.07) * 0.7
-      group.position.z = Math.sin(time * 0.05 + 1.1) * 0.5
+      /* Hero: a slow, small wandering loop around its home, turning lazily. */
+      const hx = home ? home[0] : 0
+      const hz = home ? home[1] : 0
+      group.position.x = hx + Math.sin(time * 0.07) * (home ? 1.4 : 0.7)
+      group.position.z = hz + Math.sin(time * 0.05 + 1.1) * (home ? 1.0 : 0.5)
+      group.rotation.y = Math.sin(time * 0.031) * 0.7
+      if (home) gy = habitatHeight(group.position.x, group.position.z)
     }
-    /* Float well above the sand: slow bob, a gentle sway. */
-    const pulse = place?.pulse ?? 0.5
-    const hover = gy + (-data.minY + 1.7 * S + Math.sin(time * pulse + phase) * 0.16 * S) * k + (place?.lift ?? 0)
-    if (place?.snap || !group.userData.placed) {
+
+    /* Encounter: a viewer nearby is noticed — after a small, uneven delay a
+       delicate response (contract / expand / shimmer / stillness), then a
+       cooldown. Measured against last frame's centre. */
+    const resp = respRef.current
+    const nowReal = now
+    if (responsive && !life.dead) {
+      const dist = state.camera.position.distanceTo(scratch.centre)
+      resp.dist = dist
+      const near = dist < noticeRadius(resp.radius || 1.4)
+      if (near && nowReal > resp.cooldownUntil && resp.pendingAt < 0 && nowReal - resp.t0 > RESPONSE_SECONDS) {
+        resp.pendingAt = nowReal + 0.2 + Math.random() * 1.1
+      }
+      if (resp.pendingAt >= 0 && nowReal >= resp.pendingAt) {
+        resp.pendingAt = -1
+        if (Math.random() < 0.85) {
+          resp.t0 = nowReal
+          resp.kind = pickResponse(Math.random())
+          resp.strength = 0.6 + Math.random() * 0.4
+        }
+        resp.cooldownUntil = nowReal + RESPONSE_SECONDS + responseCooldown(Math.random())
+      }
+    }
+    const re = responsive ? responseEnvelope(nowReal - resp.t0) * resp.strength : 0
+    const still = resp.kind === 'still' ? re : 0
+    /* Hover: a slight brightening only. */
+    const hoverTarget = world?.current?.hoverId === selfId ? 1 : 0
+    resp.hover += (hoverTarget - resp.hover) * Math.min(1, delta * 5)
+    /* Suspended in water: slow, deep buoyant bob. */
+    const pulse = place?.pulse ?? 0.3
+    const hover = gy + (-data.minY + (1.7 - 1.15 * phases.sink) * S + Math.sin(time * pulse + phase) * 0.22 * S * (1 - 0.8 * wither) * (1 - 0.85 * still) + 0.12 * S * still) * k + (place?.lift ?? 0)
+    if (place?.snap || place?.direct || !group.userData.placed) {
       group.position.y = hover
       group.userData.placed = true
       if (place) place.snap = false
     } else {
       group.position.y += (hover - group.position.y) * Math.min(1, delta * 3)
     }
-    group.rotation.z = Math.sin(time * 0.37 + phase) * 0.04
-    group.rotation.x = Math.sin(time * 0.29 + 1.3 + phase) * 0.03
+    /* Velocity (world): kin from physics, hero from its own motion. */
+    const dtc = Math.max(1e-3, Math.min(0.1, delta))
+    if (place?.vel) scratch.vel.set(place.vel[0], place.vel[1], place.vel[2])
+    else if (group.userData.hasLast) scratch.vel.copy(group.position).sub(scratch.lastPos).divideScalar(dtc)
+    scratch.lastPos.copy(group.position)
+    group.userData.hasLast = true
+    /* Lean into the motion like a drifting jellyfish, sway with the swell. */
+    const leanK = 1 - Math.exp(-dtc * 1.5)
+    scratch.lean.x += (THREE.MathUtils.clamp(scratch.vel.z * 0.22, -0.22, 0.22) - scratch.lean.x) * leanK
+    scratch.lean.y += (THREE.MathUtils.clamp(-scratch.vel.x * 0.22, -0.22, 0.22) - scratch.lean.y) * leanK
+    group.rotation.z = Math.sin(time * 0.23 + phase) * 0.05 + scratch.lean.y
+    group.rotation.x = Math.sin(time * 0.19 + 1.3 + phase) * 0.04 + scratch.lean.x
+    /* Drag: the membrane trails its motion (local units, eased so it lags). */
+    scratch.inv.copy(group.quaternion).invert()
+    const want = scratch.p.copy(scratch.vel).applyQuaternion(scratch.inv).multiplyScalar(0.09 / k)
+    if (want.length() > 0.16 * S) want.setLength(0.16 * S)
+    scratch.drift.lerp(want, 1 - Math.exp(-dtc * 2))
+    uniforms.uDrift.value.copy(scratch.drift)
 
-    const level = crystalRef.current?.level ?? 0
+    /* Collision body (centre height above the sand, radius; local units). */
+    const bodyRadius = 0.4 * S + 0.6 * data.rmax
+    const centreLocal = -data.minY + 1.7 * S + data.center[1]
+    if (place) place.body = { centre: centreLocal, radius: bodyRadius }
+    scratch.centre.set(data.center[0], data.center[1], data.center[2]).multiplyScalar(k).add(group.position)
+    resp.radius = bodyRadius * k
+    if (bodyRef?.current) {
+      const hb = bodyRef.current
+      hb.x = scratch.centre.x
+      hb.y = scratch.centre.y
+      hb.z = scratch.centre.z
+      hb.r = bodyRadius * k
+    }
+    /* World Final registry: where each life is, for focus / brackets / dimming. */
+    if (world?.current) {
+      let entry = world.current.bodies.get(selfId)
+      if (!entry) {
+        entry = { x: 0, y: 0, z: 0, r: 1, dead: false, age: 0 }
+        world.current.bodies.set(selfId, entry)
+      }
+      entry.x = scratch.centre.x
+      entry.y = scratch.centre.y
+      entry.z = scratch.centre.z
+      entry.r = bodyRadius * k
+      entry.dead = Boolean(life.dead)
+      entry.age = age
+      entry.species = morphType
+      entry.snapshot = snapshot
+    }
+    /* Response shape: contraction / expansion of the membrane (subtle). */
+    const sign = resp.kind === 'contract' ? -1 : resp.kind === 'expand' ? 1 : 0
+    const sq = sign * re
+    /* When another life's end dims the world, this one fades with it. */
+    const dim = world?.current?.dimming
+    const fade = !place && dim && dim.id && dim.id !== selfId ? 1 - dim.dusk : 1
+    /* A new life (new seed) grows in from nothing where it is born. */
+    if (resp.seed === undefined) resp.seed = life.seed
+    if (resp.seed !== life.seed) {
+      resp.seed = life.seed
+      resp.bornAt = now
+    }
+    const birth = resp.bornAt === undefined ? 1 : smoothstep(0, 4.5, now - resp.bornAt)
+    if (!place) {
+      const kb = k * fade * Math.max(0.0001, birth)
+      group.scale.set(kb * (1 + 0.07 * sq), kb * (1 - 0.035 * sq), kb * (1 + 0.07 * sq))
+      group.visible = fade > 0.01 && birth > 0.005
+    } else if (sq) {
+      group.scale.set(k * (1 + 0.07 * sq), k * (1 - 0.035 * sq), k * (1 + 0.07 * sq))
+    }
+    if (pickRef.current) {
+      pickRef.current.position.set(data.center[0], data.center[1], data.center[2])
+      pickRef.current.scale.setScalar(bodyRadius * 1.08)
+    }
+    /* Contact dents: neighbours press the membrane in where they touch. */
+    const contacts = place?.contacts ?? bodyRef?.current?.contacts ?? []
+    scratch.inv.copy(group.quaternion).invert()
+    for (let ci = 0; ci < 3; ci++) {
+      const c = contacts[ci]
+      uniforms.uContactAmt.value[ci] = c ? c.amount : 0
+      if (c) uniforms.uContactDir.value[ci].set(c.dir[0], c.dir[1], c.dir[2]).applyQuaternion(scratch.inv).normalize()
+    }
+    uniforms.uContactDepth.value = 0.24 * S
+    uniforms.uBodyCentre.value.set(data.center[0], data.center[1], data.center[2])
+
+    /* A withering body crystallizes completely, whatever the medium. */
+    const level = Math.max(crystalRef.current?.level ?? 0, wither)
     const moisture = envRef.current?.moisture ?? 0.5
     const turbulence = envRef.current?.turbulence ?? 0
     const rime = rimeAmount(level, moisture)
 
     uniforms.uTime.value = time
-    uniforms.uBreath.value = 0.035 * S * (1 - 0.85 * level) * (1 + turbulence * 1.5)
+    uniforms.uBreath.value = 0.035 * S * (1 - 0.85 * level) * (1 + turbulence * 1.5) * (1 - wither)
+    uniforms.uCoil.value = coil
+    /* The husk: clouded, stony crystal; the warm core and the film go out. */
+    const mm = resources.membraneMat
+    mm.transmission = 1 - 0.45 * wither
+    mm.roughness = 0.05 + 0.27 * wither
+    mm.iridescence = 0.75 - 0.45 * wither
+    mm.sheen = 0.25 * (1 - 0.6 * wither)
+    mm.attenuationColor.copy(tintAttenuation).lerp(HUSK_TINT, wither)
+    const shimmer = resp.kind === 'shimmer' ? re : 0
+    uniforms.uCoreGlow.value = 0.13 * (1 - wither) + 0.12 * shimmer
+    uniforms.uFilm.value = 0.24 - 0.18 * wither + 0.32 * shimmer + 0.06 * resp.hover
+    uniforms.uRim.value = 0.32 + 0.16 * wither + 0.22 * shimmer + 0.18 * resp.hover
+    mm.iridescence += 0.3 * shimmer
+    if (sq) uniforms.uBreath.value *= 1 + 2 * Math.abs(sq)
+    /* Light signal: breathes slowly, stronger from afar (it is how a life is
+       first sensed), quiet up close, gone with the life. */
+    if (glowRef.current) {
+      const gm = glowRef.current
+      const dist = resp.dist ?? state.camera.position.distanceTo(scratch.centre)
+      const breath = 0.62 + 0.38 * Math.sin(now * (0.9 + pulse) + phase * 2.1)
+      const far = 0.35 + 0.65 * smoothstep(5, 24, dist)
+      const fadeFar = 1 - smoothstep(80, 150, dist)
+      gm.material.uniforms.uAlpha.value =
+        (0.34 * breath * far * fadeFar + 0.18 * resp.hover + 0.24 * shimmer + 0.45 * (1 - birth)) * (1 - wither) * fade
+      gm.position.set(data.center[0], data.center[1], data.center[2])
+      gm.scale.setScalar(bodyRadius * 6)
+      gm.quaternion.copy(group.quaternion).invert().multiply(state.camera.quaternion)
+    }
+    resources.fibreMat.opacity = 1 - wither
+    if (coreLightRef.current) coreLightRef.current.intensity = 0.9 * (1 - wither)
+    if (huskLightRef.current) huskLightRef.current.intensity = 2.6 * phases.dusk
+    for (const key of Object.keys(NUCLEUS_ALIVE)) nucleusUniforms[key].value.copy(NUCLEUS_ALIVE[key]).lerp(NUCLEUS_FOSSIL, wither * 0.85)
     const tentLift = 0.17 * S * smoothstep(0.12, 0.8, level)
     uniforms.uTent.value = tentLift
     uniforms.uRime.value = layers?.frost === false ? 0 : rime
-    const facetAmt = smoothstep(0.22, 0.95, level)
+    const facetAmt = smoothstep(0.12, 0.92, level)
+    seatState.facetAmt = facetAmt
+    seatState.coil = coil
     uniforms.uFacet.value = facetAmt
     nucleusUniforms.uTime.value = time
     nucleusUniforms.uLevel.value = level
 
     const { m, q, p, s, n, t, b, a, ref } = scratch
+    /* Growths ride the membrane: the same drag and contact dents the shader
+       applies to the skin, so crystals and frost never float off it. */
+    const cx0 = data.center[0], cy0 = data.center[1], cz0 = data.center[2]
+    const drift = uniforms.uDrift.value
+    const driftLen = drift.length()
+    const dentDepth = uniforms.uContactDepth.value
+    const dentAmt = uniforms.uContactAmt.value
+    const dentDir = uniforms.uContactDir.value
+    const ride = (v) => {
+      let fx = v.x - cx0, fy = v.y - cy0, fz = v.z - cz0
+      const fl = Math.hypot(fx, fy, fz) || 1
+      fx /= fl; fy /= fl; fz /= fl
+      if (driftLen > 1e-5) {
+        const lead = (fx * drift.x + fy * drift.y + fz * drift.z) / driftLen
+        const k2 = 0.75 * smoothstep(0, 1, -lead) + 0.2 * smoothstep(0, 1, lead)
+        v.x -= drift.x * k2; v.y -= drift.y * k2; v.z -= drift.z * k2
+      }
+      for (let ci = 0; ci < 3; ci++) {
+        const amt = dentAmt[ci]
+        if (!amt) continue
+        const d = dentDir[ci]
+        const cd = fx * d.x + fy * d.y + fz * d.z
+        const press = smoothstep(0.5, 1, cd)
+        const swell = smoothstep(0.1, 0.5, cd) * (1 - smoothstep(0.5, 0.78, cd))
+        const off = amt * dentDepth * (0.3 * swell - press)
+        v.x += fx * off; v.y += fy * off; v.z += fz * off
+      }
+      return v
+    }
+
     const frame = (vertex) => {
       const j = vertex * 3
       n.set(data.normal[j], data.normal[j + 1], data.normal[j + 2]).normalize()
@@ -619,17 +959,18 @@ export default function CrystalBody({
       const g = crystalGrowth(level, c.th, 0.3)
       const depth = c.embed * S
       p.set(
-        data.pos[j] + data.facet[j] * facetAmt,
-        data.pos[j + 1] + data.facet[j + 1] * facetAmt,
-        data.pos[j + 2] + data.facet[j + 2] * facetAmt,
+        data.pos[j] + data.facet[j] * facetAmt + data.coil[j] * coil,
+        data.pos[j + 1] + data.facet[j + 1] * facetAmt + data.coil[j + 1] * coil,
+        data.pos[j + 2] + data.facet[j + 2] * facetAmt + data.coil[j + 2] * coil,
       )
-        .addScaledVector(n, -depth)
+      ride(p)
+      p.addScaledVector(n, -depth)
         .addScaledVector(t, c.offT * S)
         .addScaledVector(b, c.offB * S)
       a.copy(n).addScaledVector(t, c.tiltT).addScaledVector(b, c.tiltB).normalize()
       orientAlong(q, a, c.spin)
-      const len = depth * 0.97 + c.protrude * S * g
-      const w = (c.embed + c.protrude) * S * c.wr * (0.6 + 0.4 * g)
+      const len = depth * 0.97 + c.protrude * S * g * crystalStyle.len
+      const w = (c.embed + c.protrude) * S * c.wr * (0.6 + 0.4 * g) * crystalStyle.width
       s.set(w, len / PRISM_HEIGHT, w)
       m.compose(p, q, s)
       crystals.setMatrixAt(i, m)
@@ -645,11 +986,12 @@ export default function CrystalBody({
       const size = f.size * S * g
       orientAlong(q, n, 0)
       p.set(
-        data.pos[j] + data.facet[j] * facetAmt,
-        data.pos[j + 1] + data.facet[j + 1] * facetAmt,
-        data.pos[j + 2] + data.facet[j + 2] * facetAmt,
+        data.pos[j] + data.facet[j] * facetAmt + data.coil[j] * coil,
+        data.pos[j + 1] + data.facet[j + 1] * facetAmt + data.coil[j + 1] * coil,
+        data.pos[j + 2] + data.facet[j + 2] * facetAmt + data.coil[j + 2] * coil,
       )
-        .addScaledVector(t, f.offT * S)
+      ride(p)
+      p.addScaledVector(t, f.offT * S)
         .addScaledVector(b, f.offB * S)
         .addScaledVector(n, plan.tent[f.vertex] * tentLift + f.lift * S * g - size * 0.2)
       s.set(size, size, size)
@@ -686,7 +1028,32 @@ export default function CrystalBody({
         dispose={null}
       />
       {/* Warm core light: tints the sand under the body (hero only). */}
-      {coreLight ? <pointLight position={[0, 0, 0]} color="#ffd2c0" intensity={0.9} distance={4.5} decay={1.6} /> : null}
+      {coreLight ? <pointLight ref={coreLightRef} position={[0, 0, 0]} color="#ffd2c0" intensity={0.9} distance={4.5} decay={1.6} /> : null}
+      {/* After death: a cool light stays on the husk while the habitat dims. */}
+      {coreLight ? <pointLight ref={huskLightRef} position={[0.6, 3.2, 2.4]} color="#e6ebff" intensity={0} distance={14} decay={1.2} /> : null}
+      {glow ? (
+        <mesh ref={glowRef} material={glowMaterial} renderOrder={8} frustumCulled={false}>
+          <planeGeometry args={[1, 1]} />
+        </mesh>
+      ) : null}
+      {world ? (
+        <mesh
+          ref={pickRef}
+          material={pickMaterial}
+          onPointerOver={(e) => {
+            e.stopPropagation()
+            world.current?.setHover?.(selfId)
+          }}
+          onPointerOut={() => world.current?.clearHover?.(selfId)}
+          onClick={(e) => {
+            if (e.delta > 6) return
+            e.stopPropagation()
+            world.current?.select?.(selfId)
+          }}
+        >
+          <sphereGeometry args={[1, 16, 12]} />
+        </mesh>
+      ) : null}
       {/* Final Form petals ride the same surface (same evaluator, same group). */}
       {children}
     </group>

@@ -63,6 +63,18 @@ export const nucleusFragment = /* glsl */ `
 export function patchMembrane(material, uniforms) {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms)
+    /* Optional edge light (silhouette against the habitat). */
+    shader.uniforms.uRim ??= { value: 0 }
+    shader.uniforms.uRimColor ??= { value: new THREE.Color('#e2f4ff') }
+    /* Optional contact dents (up to three neighbours). */
+    shader.uniforms.uContactDir ??= { value: [new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 1)] }
+    shader.uniforms.uContactAmt ??= { value: [0, 0, 0] }
+    shader.uniforms.uContactDepth ??= { value: 0 }
+    shader.uniforms.uBodyCentre ??= { value: new THREE.Vector3() }
+    /* Optional drag: the membrane trails behind its motion through water. */
+    shader.uniforms.uDrift ??= { value: new THREE.Vector3() }
+    /* Optional end-of-life coil (husk shape). */
+    shader.uniforms.uCoil ??= { value: 0 }
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -71,24 +83,48 @@ export function patchMembrane(material, uniforms) {
         attribute float aFrost;
         attribute vec3 aFacetOffset;
         attribute vec3 aFacetNormal;
+        attribute vec3 aCoilOffset;
+        attribute vec3 aCoilNormal;
+        uniform float uCoil;
         uniform float uTime;
         uniform float uBreath;
         uniform float uTent;
         uniform float uFacet;
+        uniform vec3 uContactDir[3];
+        uniform float uContactAmt[3];
+        uniform float uContactDepth;
+        uniform vec3 uBodyCentre;
+        uniform vec3 uDrift;
         varying float vFrost;
         varying vec3 vLocal;`,
       )
       .replace(
         '#include <beginnormal_vertex>',
         `#include <beginnormal_vertex>
-        objectNormal = normalize(mix(objectNormal, aFacetNormal, uFacet));`,
+        objectNormal = normalize(mix(objectNormal, aFacetNormal, uFacet));
+        if (uCoil > 0.0) objectNormal = normalize(mix(objectNormal, aCoilNormal, uCoil));`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
-        transformed += aFacetOffset * uFacet;
+        transformed += aFacetOffset * uFacet + aCoilOffset * uCoil;
         float wob = sin(position.x * 2.3 + uTime * 0.55) * sin(position.y * 1.9 - uTime * 0.42) * sin(position.z * 2.1 + uTime * 0.37);
         transformed += objectNormal * (wob * uBreath + aTent * uTent);
+        /* Soft contact: flatten where a neighbour presses, a slight swell
+           around the pressed patch (volume moves aside, like jelly). */
+        vec3 fromCentre = normalize(position - uBodyCentre);
+        /* Water drag: the trailing side lags behind, the leading side eases flat. */
+        float driftLen = length(uDrift);
+        if (driftLen > 1e-5) {
+          float lead = dot(fromCentre, uDrift / driftLen);
+          transformed -= uDrift * (0.75 * smoothstep(0.0, 1.0, -lead) + 0.2 * smoothstep(0.0, 1.0, lead));
+        }
+        for (int ci = 0; ci < 3; ci++) {
+          float cd = dot(fromCentre, uContactDir[ci]);
+          float press = smoothstep(0.5, 1.0, cd);
+          float swell = smoothstep(0.1, 0.5, cd) * (1.0 - smoothstep(0.5, 0.78, cd));
+          transformed += fromCentre * uContactAmt[ci] * uContactDepth * (0.3 * swell - press);
+        }
         vFrost = aFrost;
         vLocal = position;`,
       )
@@ -100,6 +136,8 @@ export function patchMembrane(material, uniforms) {
         uniform vec3 uCore;
         uniform float uCoreGlow;
         uniform float uFilm;
+        uniform float uRim;
+        uniform vec3 uRimColor;
         uniform float uTime;
         varying float vFrost;
         varying vec3 vLocal;
@@ -126,10 +164,11 @@ export function patchMembrane(material, uniforms) {
         float filmFlow = 0.25 * sin(vLocal.x * 3.1 + vLocal.y * 2.3 + uTime * 0.12) + 0.15 * sin(vLocal.z * 5.2 - vLocal.x * 1.7 - uTime * 0.08);
         vec3 filmHue = 0.5 + 0.5 * cos(6.28318 * (vec3(0.0, 0.33, 0.67) + filmFacing * 2.2 + filmFlow * 1.6));
         filmHue = mix(vec3(1.0), filmHue, 0.82);
-        totalEmissiveRadiance += filmHue * uFilm * smoothstep(0.05, 0.7, filmFacing) * (1.0 - 0.6 * frostMask);`,
+        totalEmissiveRadiance += filmHue * uFilm * smoothstep(0.05, 0.7, filmFacing) * (1.0 - 0.6 * frostMask);
+        totalEmissiveRadiance += uRimColor * pow(filmFacing, 3.0) * uRim;`,
       )
   }
-  material.customProgramCacheKey = () => 'exp07-membrane-v4'
+  material.customProgramCacheKey = () => 'exp07-membrane-v8'
 }
 
 export const skyVertex = /* glsl */ `
@@ -201,6 +240,76 @@ export const moteVertex = /* glsl */ `
     gl_Position = projectionMatrix * mv;
     vSoft = smoothstep(1.5, 6.0, dist);
     vAlpha = (0.25 + 0.5 * (0.5 + 0.5 * sin(uTime * 0.7 + aPhase))) * (1.0 - smoothstep(14.0, 26.0, dist));
+  }
+`
+
+export const bubbleVertex = /* glsl */ `
+  attribute vec4 aSeed;
+  uniform float uTime;
+  uniform float uScale;
+  uniform float uTurb;
+  varying float vAlpha;
+  void main() {
+    float speed = aSeed.x * (1.0 + uTurb * 1.2);
+    float rise = aSeed.w;
+    float h = mod(uTime * speed + aSeed.z, rise);
+    vec3 p = position;
+    p.y += h;
+    float wob = uTime * (1.3 + aSeed.x) + aSeed.z;
+    p.x += sin(wob) * 0.12 * (1.0 + h * 0.08) + h * uTurb * 0.35;
+    p.z += cos(wob * 0.8) * 0.12;
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    float dist = -mv.z;
+    gl_PointSize = aSeed.y * uScale * (20.0 / dist) * (0.8 + 0.4 * h / rise);
+    gl_Position = projectionMatrix * mv;
+    vAlpha = smoothstep(0.0, 0.6, h) * (1.0 - smoothstep(rise * 0.75, rise, h)) * (1.0 - smoothstep(18.0, 34.0, dist));
+  }
+`
+
+export const bubbleFragment = /* glsl */ `
+  varying float vAlpha;
+  void main() {
+    vec2 q = gl_PointCoord - 0.5;
+    float d = length(q);
+    if (d > 0.5) discard;
+    float ring = smoothstep(0.5, 0.42, d) * smoothstep(0.26, 0.44, d);
+    float glint = smoothstep(0.12, 0.0, length(q - vec2(-0.14, -0.16)));
+    float body = smoothstep(0.5, 0.0, d) * 0.06;
+    float a = (ring * 0.55 + glint * 0.8 + body) * vAlpha;
+    gl_FragColor = vec4(vec3(0.95, 0.97, 1.0), a * 0.6);
+  }
+`
+
+/** Sand lifted by a storm: still at calm, streaming and rising as turbulence grows. */
+export const dustVertex = /* glsl */ `
+  attribute float aSize;
+  attribute float aPhase;
+  uniform float uTime;
+  uniform float uScale;
+  uniform float uStorm;
+  varying float vAlpha;
+  void main() {
+    vec3 p = position;
+    float lift = fract(uTime * (0.15 + uStorm * 0.55) + aPhase);
+    p.y += lift * (0.35 + uStorm * 4.2);
+    p.x += uTime * (0.4 + uStorm * 5.5) + sin(uTime * 1.4 + aPhase * 6.0) * uStorm * 0.8;
+    p.z += cos(uTime * 0.7 + aPhase * 4.0) * uStorm * 0.6;
+    p.x = mod(p.x + 20.0, 40.0) - 20.0;
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    float dist = -mv.z;
+    gl_PointSize = aSize * uScale * (1.0 + uStorm * 1.4) * (16.0 / dist);
+    gl_Position = projectionMatrix * mv;
+    float body = smoothstep(0.0, 0.12, lift) * (1.0 - smoothstep(0.62, 1.0, lift));
+    vAlpha = uStorm * body * (1.0 - smoothstep(10.0, 28.0, dist));
+  }
+`
+
+export const dustFragment = /* glsl */ `
+  varying float vAlpha;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    float a = smoothstep(0.5, 0.05, d) * vAlpha;
+    gl_FragColor = vec4(vec3(0.78, 0.71, 0.6), a * 0.85);
   }
 `
 

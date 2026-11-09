@@ -115,17 +115,18 @@ export function createOutcropResources() {
   const layout = buildOutcrops()
   const crystalGeo = createPrismCrystalGeometry({ taper: 0.1 })
   const crystalMat = createCrystalMaterial({
-    color: '#fff9fc',
+    /* Cool grey-lilac: the ground crystals step back from the warm body. */
+    color: '#e4e3f0',
     roughness: 0.02,
     thickness: 1.6,
-    attenuationColor: new THREE.Color('#f6dfee'),
+    attenuationColor: new THREE.Color('#d6d5ea'),
     attenuationDistance: 2.6,
     dispersion: 0.6,
     iridescence: 1,
     iridescenceThicknessRange: [120, 900],
     emissive: new THREE.Color('#fff0f6'),
-    emissiveIntensity: 0.06,
-    envMapIntensity: 3.2,
+    emissiveIntensity: 0.025,
+    envMapIntensity: 2.2,
   })
   const crystals = instanced(crystalGeo, crystalMat, layout.crystals, (c) => {
     orientAlong(_q, c.axis, c.spin)
@@ -138,7 +139,7 @@ export function createOutcropResources() {
 
   /* Milky phantom inside each large crystal: seen refracted, gives depth. */
   const phantomMat = new THREE.MeshStandardMaterial({
-    color: '#f2e6f4',
+    color: '#d9d6e6',
     roughness: 0.55,
     metalness: 0,
     emissive: new THREE.Color('#fff0f6'),

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createPopulation, STAGE } from '../finalForm/populationSim.js'
-import { ageKin, KIN_LIFESPAN, KIN_MAX_RADIUS, KIN_MIN_RADIUS, kinCrystalLevel, kinPlacement, kinScale, kinTempo, liftForAge, relaxKin } from './habitatKin.js'
+import { ageKin, KIN_LIFESPAN, KIN_MAX_RADIUS, KIN_MIN_RADIUS, kinCrystalLevel, kinPlacement, kinScale, kinTempo, kinTint, KIN_TINTS, liftForAge, stepKinPhysics } from './habitatKin.js'
 
 test('kin never sit inside the hero and stay in the habitat', () => {
   const pop = createPopulation({ count: 6, seed: 1 })
@@ -54,20 +54,47 @@ test('kin dissolve to nothing at the end of life', () => {
   assert.ok(kinScale(0.6) > kinScale(0.1))
 })
 
-test('relaxed kin never overlap each other or the hero', () => {
-  const items = [
-    { x: 1, z: 3.5, lift: 2.3, scale: 0.7 },
-    { x: 1.3, z: 3.6, lift: 2.6, scale: 0.6 },
-    { x: 0.5, z: 0.5, lift: 0, scale: 0.8 },
-  ]
-  relaxKin(items, { iterations: 30 })
-  const c = (it) => [it.x, it.lift + 2 * it.scale, it.z]
-  for (let i = 0; i < items.length; i++) {
-    const [x, y, z] = c(items[i])
-    assert.ok(Math.hypot(x, y - 2.1, z) >= 1.6 * items[i].scale + 1.7 - 1e-3)
-    for (let j = i + 1; j < items.length; j++) {
-      const [x2, y2, z2] = c(items[j])
-      assert.ok(Math.hypot(x2 - x, y2 - y, z2 - z) >= 1.6 * (items[i].scale + items[j].scale) - 0.05)
-    }
+function body(id, x, vx) {
+  return { id, x, y: 3, z: 0, vx, vy: 0, vz: 0, r: 1, tx: x, ty: 3, tz: 0, floor: 0 }
+}
+
+test('bodies that meet bounce apart gently and never pass through', () => {
+  const a = body('a', -3, 1.8)
+  const b = body('b', 3, -1.8)
+  a.tx = 3; b.tx = -3 /* their targets cross: they must meet */
+  const dents = new Map()
+  let minGap = Infinity
+  let maxDent = 0
+  let bounced = false
+  for (let k = 0; k < 240; k++) {
+    const c = stepKinPhysics([a, b], null, dents, 1 / 60)
+    minGap = Math.min(minGap, Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z))
+    maxDent = Math.max(maxDent, c.get('a')?.[0]?.amount ?? 0)
+    if (a.vx < -0.05 && b.vx > 0.05) bounced = true
   }
+  assert.ok(minGap >= 2 * 0.96 - 1e-3, `gap ${minGap}`)
+  assert.ok(bounced, 'they should push back off each other')
+  assert.ok(maxDent > 0.2, 'contact presses a dent into the membrane')
+})
+
+test('the hero is an obstacle and dents recover after parting', () => {
+  const a = body('a', -2.2, 1.5)
+  const hero = { id: 'hero', x: 0, y: 3, z: 0, r: 1.2 }
+  const dents = new Map()
+  for (let k = 0; k < 90; k++) stepKinPhysics([a], hero, dents, 1 / 60)
+  assert.ok(Math.hypot(a.x, a.y - 3, a.z) >= 2.2 * 0.96 - 1e-3)
+  a.tx = -8
+  let last = 1
+  for (let k = 0; k < 600; k++) last = stepKinPhysics([a], hero, dents, 1 / 60).get('a')?.[0]?.amount ?? 0
+  assert.ok(last < 0.02)
+})
+
+test('kin get their own tint from the palette, never the hero rose', () => {
+  const seen = new Set()
+  for (const seed of [52711, 9043, 31337, 70219, 15485]) {
+    const t = kinTint(seed, 0)
+    assert.ok(KIN_TINTS.includes(t) && t.id !== 'rose')
+    seen.add(t.id)
+  }
+  assert.ok(seen.size >= 2)
 })

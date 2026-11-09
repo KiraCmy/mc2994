@@ -81,12 +81,14 @@ export function buildGroundGeometry({ rings = 300, segments = 420 } = {}) {
  * Update material.userData.uniforms.uTime each frame.
  */
 export function createGroundMaterial({ caustic = 0.3, grain = 0.18 } = {}) {
-  const uniforms = { uTime: { value: 0 }, uCaustic: { value: caustic }, uGrain: { value: grain } }
+  const uniforms = { uTime: { value: 0 }, uCaustic: { value: caustic }, uGrain: { value: grain }, uFilm: { value: 0 } }
   const material = new THREE.MeshPhysicalMaterial({
     vertexColors: true,
+    /* Multiplies the sand colours down a step: the body reads against it. */
+    color: '#bdbacb',
     metalness: 0,
     roughness: 0.72,
-    sheen: 0.45,
+    sheen: 0.32,
     sheenColor: new THREE.Color('#e9dcf2'),
     sheenRoughness: 0.4,
     iridescence: 0.35,
@@ -112,6 +114,7 @@ export function createGroundMaterial({ caustic = 0.3, grain = 0.18 } = {}) {
         uniform float uTime;
         uniform float uCaustic;
         uniform float uGrain;
+        uniform float uFilm;
         float habHash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
         float habNoise(vec2 p) {
           vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -149,10 +152,14 @@ export function createGroundMaterial({ caustic = 0.3, grain = 0.18 } = {}) {
         float cFade = 1.0 - smoothstep(25.0, 60.0, habDist);
         float under = 0.5 + 0.9 * exp(-dot(vHabWorld.xz, vHabWorld.xz) / 40.0);
         float cau = habCaustic(vHabWorld.xz * 0.45, uTime * 0.35 + 23.0) * 0.75 + habCaustic(vHabWorld.xz * 0.78 + 3.7, uTime * 0.27 + 11.0) * 0.45;
-        totalEmissiveRadiance += vec3(1.0, 0.95, 1.0) * min(cau, 1.6) * uCaustic * under * cFade * smoothstep(0.55, 0.95, vHabUp);`,
+        totalEmissiveRadiance += vec3(1.0, 0.95, 1.0) * min(cau, 1.6) * uCaustic * under * cFade * smoothstep(0.55, 0.95, vHabUp);
+        float filmFacing = pow(1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0), 1.6);
+        float filmBand = vHabWorld.x * 0.22 + vHabWorld.z * 0.16 + filmFacing * 3.4 + uTime * 0.04;
+        vec3 filmHue = 0.55 + 0.45 * cos(6.28318 * (vec3(0.0, 0.33, 0.67) + filmBand));
+        totalEmissiveRadiance += filmHue * uFilm * filmFacing * 0.7;`,
       )
   }
-  material.customProgramCacheKey = () => 'exp07-ground-caustic-v1'
+  material.customProgramCacheKey = () => 'exp07-ground-caustic-v2'
   return material
 }
 
@@ -174,7 +181,8 @@ export function buildVeilGeometry(layer = 0, { rings = 220, segments = 360 } = {
  * Translucent iridescent membrane sheet. Masked by aVeil; grazing angles get
  * more opaque and glow at the folds (the reference's bright veil edges).
  */
-export function createVeilMaterial(layer = 0) {
+export function createVeilMaterial(layer = 0, { fade = 1 } = {}) {
+  const uniforms = { uVeilFade: { value: fade }, uFilm: { value: 0 } }
   const material = new THREE.MeshPhysicalMaterial({
     color: layer ? '#efe8fb' : '#f6eefc',
     metalness: 0,
@@ -192,7 +200,9 @@ export function createVeilMaterial(layer = 0) {
     sheenColor: new THREE.Color('#ffd9ee'),
     envMapIntensity: 1.8,
   })
+  material.userData.uniforms = uniforms
   material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms)
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aVeil;\nvarying float vVeil;\nvarying float vSlope;')
       .replace(
@@ -200,7 +210,7 @@ export function createVeilMaterial(layer = 0) {
         '#include <begin_vertex>\nvVeil = aVeil;\nvSlope = 1.0 - abs(normalize(mat3(modelMatrix) * objectNormal).y);',
       )
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vVeil;\nvarying float vSlope;')
+      .replace('#include <common>', '#include <common>\nvarying float vVeil;\nvarying float vSlope;\nuniform float uVeilFade;\nuniform float uFilm;')
       .replace(
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
@@ -208,11 +218,16 @@ export function createVeilMaterial(layer = 0) {
         /* Light lives in the folds (steep parts) and along the sheet's edge. */
         float veilFold = smoothstep(0.06, 0.45, vSlope) * veilMask;
         float veilEdge = smoothstep(0.08, 0.28, vVeil) * (1.0 - smoothstep(0.28, 0.55, vVeil));
-        totalEmissiveRadiance += vec3(1.0, 0.93, 0.98) * (veilFold * 0.35 + veilEdge * 0.45);
-        diffuseColor.a = clamp(veilMask * 0.05 + veilFold * 0.45 + veilEdge * 0.4, 0.0, 0.8);`,
+        totalEmissiveRadiance += vec3(1.0, 0.93, 0.98) * (veilFold * 0.35 + veilEdge * 0.45) * uVeilFade;
+        float filmFacing = pow(1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0), 1.4);
+        float filmBand = vVeil * 5.0 + filmFacing * 3.2 + vSlope * 2.0;
+        vec3 filmHue = 0.5 + 0.5 * cos(6.28318 * (vec3(0.0, 0.33, 0.67) + filmBand));
+        totalEmissiveRadiance += filmHue * uFilm * filmFacing * veilMask * 0.85;
+        diffuseColor.a = clamp(veilMask * 0.05 + veilFold * 0.45 + veilEdge * 0.4, 0.0, 0.8) * uVeilFade;
+        diffuseColor.a = clamp(diffuseColor.a + uFilm * filmFacing * veilMask * 0.28, 0.0, 0.9);`,
       )
   }
-  material.customProgramCacheKey = () => `exp07-veil-v4-${layer}`
+  material.customProgramCacheKey = () => `exp07-veil-v6-${layer}`
   return material
 }
 

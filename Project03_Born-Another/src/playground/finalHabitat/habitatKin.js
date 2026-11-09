@@ -11,11 +11,13 @@
 import { environmentFactors, popHash01, STAGE, scaleForAge } from '../finalForm/populationSim.js'
 
 /** Sim medium → habitat ground plane. */
-export const KIN_SPREAD = 1.45
-export const KIN_MIN_RADIUS = 3.4
-export const KIN_MAX_RADIUS = 16
-/** Kin are drawn a little smaller than the hero at the same AGE. */
-export const KIN_SCALE = 0.82
+export const KIN_SPREAD = 1.95
+export const KIN_MIN_RADIUS = 4.6
+export const KIN_MAX_RADIUS = 20
+/** Pull the ring back so the kin sit behind the hero, softened by fog. */
+export const KIN_Z_OFFSET = -3.8
+/** Kin are drawn smaller than the hero at the same AGE (hero stays the focus). */
+export const KIN_SCALE = 0.62
 
 /**
  * Sim tuning for the habitat: livelier currents and seeking than the Exp04
@@ -50,7 +52,7 @@ function smoothstep(e0, e1, x) {
 export function kinCrystalLevel(globalLevel, age) {
   const a = clamp01(age)
   const g = clamp01(globalLevel)
-  return clamp01(g * (0.3 + 0.8 * smoothstep(0.15, 0.75, a)) + 0.45 * smoothstep(0.78, 0.96, a))
+  return clamp01(g * (0.25 + 0.75 * smoothstep(0.12, 0.8, a)) + 0.7 * smoothstep(0.58, 1, a))
 }
 
 /**
@@ -62,7 +64,7 @@ export function kinTempo(archetypeSeed, generation = 0) {
   const [lo, hi] = KIN_LIFESPAN
   return {
     lifespan: lo + h('life') * (hi - lo),
-    pulse: 0.3 + h('pulse') * 0.6,
+    pulse: 0.18 + h('pulse') * 0.3,
     height: h('height'),
     wander: 0.7 + h('wander') * 1.3,
     wanderRate: (0.06 + h('wrate') * 0.1) * (h('wdir') > 0.5 ? 1 : -1),
@@ -113,7 +115,7 @@ export function kinPlacement(org, anchor = null, t = 0) {
   const phase = org.phase ?? 0
   const wa = t * tempo.wanderRate + phase
   let x = (org.position[0] - ax) * KIN_SPREAD + Math.cos(wa) * tempo.wander
-  let z = (org.position[2] - az) * KIN_SPREAD * 0.8 - 1 + Math.sin(wa) * tempo.wander * 0.8
+  let z = (org.position[2] - az) * KIN_SPREAD * 0.8 + KIN_Z_OFFSET + Math.sin(wa) * tempo.wander * 0.8
   let r = Math.hypot(x, z)
   if (r < KIN_MIN_RADIUS) {
     const a = r > 1e-4 ? Math.atan2(z, x) : (org.index ?? 1) * 2.399963
@@ -133,48 +135,202 @@ export function kinPlacement(org, anchor = null, t = 0) {
   return { x, z, lift: Math.max(0, lift) }
 }
 
+
 /**
- * Keep bodies from passing through each other after wander + lift are added
- * (the sim separates them in its own space; the habitat offsets can undo it).
- * Mutates `items` ({ x, z, lift, scale }); the hero is a fixed sphere at the
- * clearing. Centre height ≈ lift + 2·scale (base hover), radius ≈ 1.6·scale.
+ * Body tints: small shifts inside the Born Another palette (membrane depth,
+ * warm core, sheen, petal tone). The hero keeps the first (rose).
  */
-export function relaxKin(items, { heroRadius = 1.7, heroY = 2.1, iterations = 4 } = {}) {
-  const centre = (it) => [it.x, it.lift + 2 * it.scale, it.z]
-  for (let iter = 0; iter < iterations; iter += 1) {
-    for (let i = 0; i < items.length; i += 1) {
-      const a = items[i]
-      const ra = 1.6 * a.scale
-      /* hero */
-      {
-        const [x, y, z] = centre(a)
-        const dy = y - heroY
-        const d = Math.hypot(x, dy, z) || 1e-6
-        const need = ra + heroRadius
-        if (d < need) {
-          const push = need - d
-          a.x += (x / d) * push
-          a.z += (z / d) * push
-          a.lift = Math.max(0, a.lift + (dy / d) * push)
-        }
-      }
-      for (let j = i + 1; j < items.length; j += 1) {
-        const b = items[j]
-        const [ax, ay, az] = centre(a)
-        const [bx, by, bz] = centre(b)
-        const dx = bx - ax, dy = by - ay, dz = bz - az
+export const KIN_TINTS = Object.freeze([
+  Object.freeze({ id: 'rose', attenuation: '#f1aecd', core: '#ffae92', sheen: '#ffd6ec', petal: '#e2aec0' }),
+  Object.freeze({ id: 'lilac', attenuation: '#dcb3ea', core: '#f9b0ae', sheen: '#ecdcff', petal: '#d5bae4' }),
+  Object.freeze({ id: 'peach', attenuation: '#f4bcb2', core: '#ffb286', sheen: '#ffe2d4', petal: '#e8bcb0' }),
+  Object.freeze({ id: 'pearl', attenuation: '#d3c8ee', core: '#ffbcaa', sheen: '#e4ecff', petal: '#cdcbe9' }),
+  Object.freeze({ id: 'mauve', attenuation: '#e5a8c6', core: '#f5a296', sheen: '#f6d2e8', petal: '#dca8c2' }),
+])
+
+/** Tint for one individual (kin never take the hero's rose). */
+export function kinTint(archetypeSeed, generation = 0) {
+  const n = KIN_TINTS.length - 1
+  return KIN_TINTS[1 + Math.min(n - 1, Math.floor(popHash01(archetypeSeed, 'tint', generation) * n))]
+}
+
+/** Soft-body collision tuning (world units / seconds). */
+export const KIN_PHYSICS = Object.freeze({
+  /** Spring toward the sim / wander target, and its damping. */
+  follow: 0.42,
+  damping: 0.9,
+  /** Repulsion starts this far out (× summed radii) — they ease off first. */
+  softZone: 1.14,
+  softStrength: 1.8,
+  /** Never closer than this (× summed radii): the dent absorbs the rest. */
+  hardLimit: 0.96,
+  /** Bounce: fraction of approach speed returned. */
+  restitution: 0.3,
+  maxSpeed: 1.6,
+  /** Dent easing: quick to press in, slow to recover (jelly). */
+  pressIn: 0.3,
+  recover: 0.05,
+})
+
+/**
+ * One physics step for the floating bodies (mutates `bodies`).
+ * bodies: [{ id, x, y, z, vx, vy, vz, r, tx, ty, tz, floor }] — y is the body
+ *   centre (world), t* the target centre, floor the lowest allowed centre y.
+ * hero: { id, x, y, z, r } fixed obstacle (or null).
+ * dents: Map key "a|b" → { amount } carried between frames.
+ * Returns contacts: Map id → [{ dir: [x, y, z] (unit, towards the other), amount }].
+ */
+export function stepKinPhysics(bodies, hero, dents, dt, P = KIN_PHYSICS) {
+  const h = Math.min(0.05, Math.max(0, dt))
+  for (const b of bodies) {
+    b.vx += ((b.tx - b.x) * P.follow - b.vx * P.damping) * h
+    b.vy += ((b.ty - b.y) * P.follow - b.vy * P.damping) * h
+    b.vz += ((b.tz - b.z) * P.follow - b.vz * P.damping) * h
+  }
+  const all = hero ? [...bodies, { ...hero, fixed: true, vx: 0, vy: 0, vz: 0 }] : bodies
+  const touching = new Map()
+  /* Soft repulsion before contact. */
+  for (let i = 0; i < bodies.length; i += 1) {
+    const a = bodies[i]
+    for (let j = 0; j < all.length; j += 1) {
+      const b = all[j]
+      if (a === b || (!b.fixed && j < i)) continue
+      const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z
+      const d = Math.hypot(dx, dy, dz) || 1e-6
+      const sum = a.r + b.r
+      const zone = sum * P.softZone
+      if (d >= zone) continue
+      const f = ((zone - d) / sum) * P.softStrength * h
+      const nx = dx / d, ny = dy / d, nz = dz / d
+      const share = b.fixed ? 1 : 0.5
+      a.vx -= nx * f * share; a.vy -= ny * f * share; a.vz -= nz * f * share
+      if (!b.fixed) { b.vx += nx * f * 0.5; b.vy += ny * f * 0.5; b.vz += nz * f * 0.5 }
+      const key = a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`
+      touching.set(key, { a, b, n: [nx, ny, nz], press: Math.min(1, (zone - d) / (sum * (P.softZone - P.hardLimit + 0.12))) })
+    }
+  }
+  for (const b of bodies) {
+    const sp = Math.hypot(b.vx, b.vy, b.vz)
+    if (sp > P.maxSpeed) { b.vx *= P.maxSpeed / sp; b.vy *= P.maxSpeed / sp; b.vz *= P.maxSpeed / sp }
+    b.x += b.vx * h
+    b.y += b.vy * h
+    b.z += b.vz * h
+  }
+  /* Hard limit + bounce (a few passes so chains settle). */
+  for (let pass = 0; pass < 3; pass += 1) {
+    for (let i = 0; i < bodies.length; i += 1) {
+      const a = bodies[i]
+      for (let j = 0; j < all.length; j += 1) {
+        const b = all[j]
+        if (a === b || (!b.fixed && j < i)) continue
+        const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z
         const d = Math.hypot(dx, dy, dz) || 1e-6
-        const need = ra + 1.6 * b.scale
+        const need = (a.r + b.r) * P.hardLimit
         if (d >= need) continue
-        const push = (need - d) * 0.5
-        a.x -= (dx / d) * push
-        a.z -= (dz / d) * push
-        a.lift = Math.max(0, a.lift - (dy / d) * push)
-        b.x += (dx / d) * push
-        b.z += (dz / d) * push
-        b.lift = Math.max(0, b.lift + (dy / d) * push)
+        const nx = dx / d, ny = dy / d, nz = dz / d
+        const pen = need - d
+        const wa = b.fixed ? 1 : 0.5
+        a.x -= nx * pen * wa; a.y -= ny * pen * wa; a.z -= nz * pen * wa
+        if (!b.fixed) { b.x += nx * pen * 0.5; b.y += ny * pen * 0.5; b.z += nz * pen * 0.5 }
+        const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny + (b.vz - a.vz) * nz
+        if (vn < 0) {
+          const imp = (-(1 + P.restitution) * vn) / (b.fixed ? 1 : 2)
+          a.vx -= nx * imp; a.vy -= ny * imp; a.vz -= nz * imp
+          if (!b.fixed) { b.vx += nx * imp; b.vy += ny * imp; b.vz += nz * imp }
+        }
       }
     }
   }
-  return items
+  for (const b of bodies) {
+    if (b.y < b.floor) {
+      b.y = b.floor
+      if (b.vy < 0) b.vy *= -0.3
+    }
+  }
+  /* Dents: ease toward the current press, recover slowly after parting. */
+  const contacts = new Map()
+  const push = (id, dir, amount) => {
+    if (!contacts.has(id)) contacts.set(id, [])
+    contacts.get(id).push({ dir, amount })
+  }
+  const keys = new Set([...dents.keys(), ...touching.keys()])
+  for (const key of keys) {
+    const t = touching.get(key)
+    const dent = dents.get(key) ?? { amount: 0, n: [0, 0, 1], ids: key.split('|') }
+    const target = t ? t.press : 0
+    dent.amount += (target - dent.amount) * (target > dent.amount ? P.pressIn : P.recover)
+    if (t) {
+      dent.n = t.n
+      dent.ids = [t.a.id, t.b.id]
+    }
+    if (dent.amount < 0.005 && !t) {
+      dents.delete(key)
+      continue
+    }
+    dents.set(key, dent)
+    const [ia, ib] = dent.ids
+    const [nx, ny, nz] = dent.n
+    push(ia, [nx, ny, nz], dent.amount)
+    push(ib, [-nx, -ny, -nz], dent.amount)
+  }
+  for (const list of contacts.values()) list.sort((p, q) => q.amount - p.amount)
+  return contacts
+}
+
+/**
+ * World Final placement: a kin lives around its own anchor in the terrain.
+ * The sim still moves it (relative to where it started, `home`), clamped to
+ * `roam`, plus its own wander loop and float height — so the three lives
+ * stay in different parts of the world but never stand still.
+ */
+export function kinPlacementAround(org, anchor, home, t = 0, roam = 5) {
+  const tempo = kinTempo(org.archetypeSeed ?? org.seed ?? 1, org.generation ?? 0)
+  const phase = org.phase ?? 0
+  let ox = (org.position[0] - (home?.[0] ?? org.position[0])) * 1.2
+  let oz = (org.position[2] - (home?.[2] ?? org.position[2])) * 1.2
+  const ol = Math.hypot(ox, oz)
+  if (ol > roam) {
+    ox *= roam / ol
+    oz *= roam / ol
+  }
+  const wa = t * tempo.wanderRate + phase
+  const x = anchor[0] + ox + Math.cos(wa) * tempo.wander
+  const z = anchor[1] + oz + Math.sin(wa) * tempo.wander * 0.8
+  const lift =
+    liftForAge(org.age) +
+    tempo.height * 1.6 +
+    Math.sin(t * (0.08 + tempo.height * 0.07) + phase * 1.7) * 0.5
+  return { x, z, lift: Math.max(0, lift) }
+}
+
+/** Display scale without the end-of-life dissolve (a held, focused life). */
+export function kinScaleHeld(age) {
+  return KIN_SCALE * scaleForAge(age)
+}
+
+/** AGE at which a focused kin is held so its end can be witnessed. */
+export const KIN_HOLD_AGE = 0.955
+
+/**
+ * How much of its species' silhouette a body shows (morphology amplitude):
+ * young lives look alike — nearly round, soft — and their segmentation or
+ * coil emerges as they mature. Quantized so the surface re-seats rarely.
+ */
+export function formEmergence(age) {
+  const t = Math.min(1, Math.max(0, (Number(age) - 0.45) / (0.9 - 0.45)))
+  const e = 0.22 + 0.78 * t * t * (3 - 2 * t)
+  return Math.round(e * 20) / 20
+}
+
+/** World Final: the two kin are met young and mid-life (sizes differ). */
+export const WORLD_KIN_AGES = Object.freeze({ o1: 0.24, o2: 0.5 })
+
+/**
+ * World Final: one size law for every life (hero and kin alike), so species
+ * read as kin of one another — young a little smaller, mature a little larger,
+ * never more than about a quarter apart.
+ */
+export function worldBodyScale(age) {
+  const t = Math.min(1, Math.max(0, (Number(age) - 0.08) / (0.65 - 0.08)))
+  return 0.92 * (0.78 + 0.22 * t * t * (3 - 2 * t))
 }

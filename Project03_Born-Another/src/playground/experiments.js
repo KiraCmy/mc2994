@@ -45,13 +45,6 @@ export const PLAYGROUND_EXPERIMENTS = [
     description:
       'The Final Form organism crystallizes in the shared medium. Cold nucleates a quartz lattice at its own growth sites, moisture feeds rime and crystal mass, warmth melts it back, and turbulence fractures it into shards.',
   },
-  {
-    id: '07',
-    label: 'Experiment 07',
-    title: 'Final Habitat',
-    description:
-      'A living form adapts, grows, crystallizes, and dissolves with its environment.',
-  },
 ]
 
 export const DEFAULT_PLAYGROUND_EXPERIMENT_ID = PLAYGROUND_EXPERIMENTS[0].id

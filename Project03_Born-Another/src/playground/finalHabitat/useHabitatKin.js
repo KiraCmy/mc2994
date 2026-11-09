@@ -18,7 +18,7 @@ import {
   stageForAge,
   stepPopulation,
 } from '../finalForm/populationSim.js'
-import { ageKin, KIN_SIM_OPTIONS } from './habitatKin.js'
+import { ageKin, KIN_HOLD_AGE, KIN_SIM_OPTIONS } from './habitatKin.js'
 
 const LIFE_AGE_EPSILON = 0.01
 const UI_INTERVAL = 0.2
@@ -53,17 +53,28 @@ function advanceLife(life, age) {
   return runLifeSteps(life, target - life.step)
 }
 
-function buildPopulation(count, environment) {
+function buildPopulation(count, environment, initialAges = null) {
   const pop = setPopulationEnvironment(createPopulation({ count, seed: 1, options: KIN_SIM_OPTIONS }), environment)
   /* AGE is driven per individual by ageKin, not by the shared sim rate. */
-  return { ...pop, organisms: pop.organisms.map((o) => ({ ...o, frozen: true })) }
+  return {
+    ...pop,
+    organisms: pop.organisms.map((o) => {
+      const age = initialAges?.[o.id]
+      return Number.isFinite(age) ? { ...o, age, stage: stageForAge(age), frozen: true } : { ...o, frozen: true }
+    }),
+  }
 }
 
-export function useHabitatKin({ count = 6, playing = true, environment = POPULATION_ENV_DEFAULTS } = {}) {
+/**
+ * `controlRef.current` (optional): { hold: Set<id>, release: Set<id> } —
+ * a held life stops just before its end (so its death can be witnessed);
+ * a released one ends now and is born again by the sim.
+ */
+export function useHabitatKin({ count = 6, playing = true, environment = POPULATION_ENV_DEFAULTS, controlRef = null, initialAges = null } = {}) {
   const optsRef = useRef(null)
   optsRef.current = { playing, environment }
   const popRef = useRef(null)
-  if (popRef.current == null) popRef.current = buildPopulation(count, environment)
+  if (popRef.current == null) popRef.current = buildPopulation(count, environment, initialAges)
 
   const livesRef = useRef(new Map())
   const initialLives = useMemo(() => {
@@ -106,8 +117,20 @@ export function useHabitatKin({ count = 6, playing = true, environment = POPULAT
         ageAccum = Math.min(POPULATION_DT, elapsed + ageAccum - steps * POPULATION_DT)
         if (steps > 0) {
           const dt = steps * POPULATION_DT
+          const control = controlRef?.current
           for (const org of pop.organisms) {
-            ageKin(org, dt, pop.environment)
+            if (control?.release?.has(org.id) || (org.ended && !control?.hold?.has(org.id))) {
+              /* End now: the sim dissolves it and a new bud is born. */
+              control?.release?.delete(org.id)
+              org.ended = false
+              org.age = 1
+            } else if (!org.ended) {
+              ageKin(org, dt, pop.environment)
+              if (control?.hold?.has(org.id) && org.age >= KIN_HOLD_AGE) {
+                org.age = KIN_HOLD_AGE
+                org.ended = true
+              }
+            }
             org.stage = stageForAge(org.age)
           }
         }

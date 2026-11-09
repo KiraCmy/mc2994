@@ -11,13 +11,24 @@ import { mapLifeToExploreVisual } from '../finalForm/exploreLifeAdapter.js'
 import { EXP05_LAB_DEFAULTS } from '../finalForm/exp05LabParams.js'
 import HabitatGrowth from './HabitatGrowth.jsx'
 import HabitatKin from './HabitatKin.jsx'
+import { formEmergence, KIN_TINTS, worldBodyScale } from './habitatKin.js'
+import { witherAmount } from './habitatFossil.js'
+import RemainsField from './Remains.jsx'
+import { DescentCamera, FocusRig, WaterSurface, WitnessClock } from './WorldOpening.jsx'
+import { descentPose, HERO_HOME, INITIAL_SPECIES } from './worldOpening.js'
 import HabitatTerrain from './HabitatTerrain.jsx'
+import CrystalSpires from './CrystalSpires.jsx'
+import { pushOutOfSpires, spireColliders } from './crystalSpires.js'
 import {
   HABITAT_FOG,
+  Bubbles,
+  Dust,
+  createToneState,
   HabitatEnvironment,
   HabitatLights,
   HabitatPost,
   HabitatSky,
+  HabitatTone,
   LightShafts,
   Motes,
 } from './HabitatAtmosphere.jsx'
@@ -27,13 +38,15 @@ const GROUND_Y = habitatHeight(0, 0)
 const UP = new THREE.Vector3(0, 1, 0)
 const LOOK_SPEED = 0.0032
 const WORLD_LIMIT = 300
+/* World Final: the explore camera walks around the crystal spires, not through. */
+const SPIRE_COLLIDERS = spireColliders()
 
 /**
  * Explore controls on top of the orbit: W/S forward/back and A/D strafe in the
  * view direction (on the ground plane), Q/E down/up, Shift to move faster.
  * Camera and orbit target move together; drag still looks, wheel zooms.
  */
-function ExploreKeys() {
+function ExploreKeys({ world = null }) {
   const camera = useThree((s) => s.camera)
   const controls = useThree((s) => s.controls)
   const keys = useRef({})
@@ -84,6 +97,8 @@ function ExploreKeys() {
     const side = new THREE.Vector3()
     const onDown = (e) => {
       if (e.button !== 2) return
+      /* No looking around while the camera is being flown (descent / focus glide). */
+      if (controls && !controls.enabled) return
       drag = { x: e.clientX, y: e.clientY, id: e.pointerId }
       el.setPointerCapture?.(e.pointerId)
     }
@@ -123,6 +138,16 @@ function ExploreKeys() {
   useFrame((_, delta) => {
     const k = keys.current
     const dt = Math.min(0.05, delta)
+    /* World Final: the descent / focus glide own the camera; moving away
+       while observing a life simply returns to free exploration. */
+    const w = world?.current
+    const anyKey = k.w || k.a || k.s || k.d || k.q || k.e
+    if (w && anyKey && w.phase === 'descent') {
+      w.opening.skip = true
+      return
+    }
+    if (w && anyKey && w.focusId) w.exitFocus?.()
+    if (controls && !controls.enabled) return
     const { fwd, right, want, vel, step } = tmp
     camera.getWorldDirection(fwd)
     fwd.y = 0
@@ -152,6 +177,14 @@ function ExploreKeys() {
       camera.position.y += lift
       if (controls?.target) controls.target.y += lift
     }
+    if (w) {
+      const [px, pz] = pushOutOfSpires([camera.position.x, camera.position.y, camera.position.z], SPIRE_COLLIDERS)
+      if (px || pz) {
+        step.set(px, 0, pz)
+        camera.position.add(step)
+        controls?.target?.add(step)
+      }
+    }
     const rr = Math.hypot(camera.position.x, camera.position.z)
     if (rr > WORLD_LIMIT) {
       const back = (rr - WORLD_LIMIT) / rr
@@ -163,7 +196,7 @@ function ExploreKeys() {
   })
   return null
 }
-const TARGET = [0, GROUND_Y + 2.2, 0]
+const TARGET = [0, GROUND_Y + 3.1, 0]
 
 function useDpr() {
   const [dpr, setDpr] = useState(() =>
@@ -180,7 +213,40 @@ function useDpr() {
   return dpr
 }
 
-/** Advances the shared habitat clock (paused when Real time is off). */
+/** Seconds since the hero's life ended (−1 while alive); runs even when paused. */
+function DeathClock({ dead, deathRef }) {
+  useFrame((_, delta) => {
+    const d = deathRef.current
+    if (!dead) d.t = -1
+    else d.t = d.t < 0 ? 0 : d.t + Math.min(0.1, delta)
+  })
+  return null
+}
+
+/** Projects the hero so the end-of-life card can lead a line out from the body. */
+function SpecimenLeader({ bodyRef, overlayRef, world = null }) {
+  const { camera, size } = useThree()
+  const point = useMemo(() => new THREE.Vector3(), [])
+  useFrame(() => {
+    const root = overlayRef?.current?.parentElement
+    /* World Final: the line leads to whichever life is being witnessed. */
+    const focusId = world?.current?.focusId
+    const body = (focusId && world.current.bodies.get(focusId)) || bodyRef?.current
+    if (!root || !body || !Number.isFinite(body.x)) return
+    point.set(body.x, body.y, body.z).project(camera)
+    const x = (point.x * 0.5 + 0.5) * size.width
+    const y = (-point.y * 0.5 + 0.5) * size.height
+    const cardW = Math.min(288, size.width * 0.86)
+    const rx = size.width * 0.034 + cardW
+    const ry = Math.max(150, size.height * 0.22) + cardW * 0.42
+    root.style.setProperty('--exp07-ax', `${x}px`)
+    root.style.setProperty('--exp07-ay', `${y}px`)
+    root.style.setProperty('--exp07-reveal-len', `${Math.hypot(rx - x, ry - y)}px`)
+    root.style.setProperty('--exp07-reveal-ang', `${Math.atan2(ry - y, rx - x)}rad`)
+  })
+  return null
+}
+
 function HabitatClock({ timeRef, runningRef, age }) {
   useEffect(() => {
     syncAgeClock(age)
@@ -214,11 +280,30 @@ export default function HabitatScene({
   running = true,
   layers,
   crystalLevel = 0,
+  /** Page overlay element whose CSS tone variables follow the water. */
+  overlayRef = null,
+  /** World Final opening experience: { current: world state } (see Experiment07). */
+  world = null,
+  /** World Final lineage: where the hero lives now and what it is. */
+  heroHome = null,
+  heroSpecies = null,
   className = 'exp07-viewport',
 }) {
   const dpr = useDpr()
+  /* The hero's collision body, shared with the kin physics (contacts back). */
+  const heroRef = useRef({ x: 0, y: 0, z: 0, r: 0, contacts: [] })
+  /* The water's tone, eased toward the environment (fog, sky, light, shafts). */
+  const toneRef = useRef(null)
+  if (toneRef.current == null) toneRef.current = createToneState()
+  const deathRef = useRef({ t: -1 })
+  /* World Final: the hero's silhouette emerges with age (body + petals agree). */
+  const heroLobe = world ? formEmergence(life?.age ?? 0) : 1
+  /* The death the world witnesses (hero in the lab; the focused life in World Final). */
+  const sceneDeathRef = useRef({ t: -1 })
+  const opening = useMemo(() => (world ? descentPose(0, GROUND_Y) : null), [world])
+  const wither = life?.dead ? 1 : witherAmount(life?.age ?? 0)
   /* Petals become crystals: the same growth sites, petals shrink as it freezes. */
-  const petalScale = (EXP05_LAB_DEFAULTS.petalScale ?? 1) * (1 - 0.7 * crystalLevel)
+  const petalScale = (EXP05_LAB_DEFAULTS.petalScale ?? 1) * (1 - 0.7 * crystalLevel) * (1 - 0.95 * Math.round(wither * 10) / 10)
   const visual = useMemo(
     () =>
       life
@@ -236,7 +321,7 @@ export default function HabitatScene({
   return (
     <WebGLCanvas
       className={className}
-      camera={{ position: [1.6, GROUND_Y + 2.9, 10.4], fov: 34, near: 0.05, far: 3000 }}
+      camera={{ position: opening ? opening.position : [1.6, GROUND_Y + 3.4, 11.5], fov: 34, near: 0.05, far: 3000 }}
       dpr={dpr}
       gl={{ antialias: false, alpha: false, powerPreference: 'high-performance' }}
       onCreated={({ gl }) => {
@@ -245,26 +330,37 @@ export default function HabitatScene({
         gl.outputColorSpace = THREE.SRGBColorSpace
       }}
     >
-      <fogExp2 attach="fog" args={[HABITAT_FOG, 0.009]} />
+      <fogExp2 attach="fog" args={[HABITAT_FOG, 0.0105]} />
       <HabitatClock timeRef={timeRef} runningRef={runningRef} age={life?.age ?? 0} />
       <HabitatEnvironment />
-      <HabitatSky />
-      <HabitatLights />
+      <DeathClock dead={Boolean(life?.dead)} deathRef={deathRef} />
+      {world ? <WitnessClock world={world} heroDeathRef={deathRef} sceneDeathRef={sceneDeathRef} /> : null}
+      <HabitatTone envRef={envRef} toneRef={toneRef} deathRef={world ? sceneDeathRef : deathRef} overlayRef={overlayRef} world={world} />
+      {world ? <WaterSurface world={world} groundY={GROUND_Y} /> : null}
+      {world ? <RemainsField world={world} /> : null}
+      {world ? <CrystalSpires /> : null}
+      <HabitatSky toneRef={toneRef} />
+      <HabitatLights toneRef={toneRef} />
       <PixelScale>
         {(scale) => (
           <>
-            <HabitatTerrain timeRef={timeRef} envRef={envRef} pixelScale={scale} layers={layers} />
-            <Motes timeRef={timeRef} envRef={envRef} pixelScale={scale} />
+            <HabitatTerrain timeRef={timeRef} envRef={envRef} toneRef={toneRef} pixelScale={scale} layers={layers} />
+            <Motes timeRef={timeRef} envRef={envRef} toneRef={toneRef} pixelScale={scale} />
+            <Dust timeRef={timeRef} toneRef={toneRef} pixelScale={scale} />
+            <Bubbles timeRef={timeRef} envRef={envRef} pixelScale={scale} />
           </>
         )}
       </PixelScale>
-      <HabitatGrowth crystalRef={crystalRef} layers={layers} />
-      <LightShafts timeRef={timeRef} />
+      <HabitatGrowth crystalRef={crystalRef} toneRef={toneRef} layers={layers} />
+      <LightShafts timeRef={timeRef} toneRef={toneRef} />
       {layers?.kin !== false ? (
         <HabitatKin
+          world={world}
           crystalRef={crystalRef}
           envRef={envRef}
           timeRef={timeRef}
+          heroRef={heroRef}
+          toneRef={toneRef}
           temperature={temperature}
           moisture={moisture}
           turbulence={turbulence}
@@ -273,7 +369,7 @@ export default function HabitatScene({
           crystalLevel={crystalLevel}
         />
       ) : null}
-      {life && !life.dead ? (
+      {life ? (
         <CrystalBody
           life={life}
           crystalRef={crystalRef}
@@ -282,6 +378,16 @@ export default function HabitatScene({
           groundY={GROUND_Y}
           layers={layers}
           timeRef={timeRef}
+          bodyRef={heroRef}
+          deathRef={deathRef}
+          home={world ? heroHome ?? HERO_HOME : null}
+          world={world}
+          selfId="hero"
+          morphologyType={world ? heroSpecies ?? INITIAL_SPECIES.hero : undefined}
+          lobeAmplitude={heroLobe}
+          bodyScale={world ? worldBodyScale(life?.age ?? 0) : 1}
+          responsive={Boolean(world)}
+          glow={Boolean(world)}
         >
           {showPetals ? (
             <ExploreLifeScatter
@@ -289,7 +395,8 @@ export default function HabitatScene({
               petalPlan={visual.petalPlan}
               morphStrength={1}
               deformationStrength={1}
-              lobeAmplitude={1}
+              lobeAmplitude={heroLobe}
+              morphologyType={world ? heroSpecies ?? INITIAL_SPECIES.hero : undefined}
               temperature={temperature}
               sculpturalStrength={0}
               surfaceSeed={visual.individuality.seed}
@@ -301,13 +408,14 @@ export default function HabitatScene({
               noiseAmount={visual.development.noiseAmount}
               decayStart={0.8}
               decayScale={1.25}
-              colorA={visual.surface.colorA}
+              colorA={KIN_TINTS[0].petal}
               colorB={visual.surface.colorB}
               rimColor={visual.surface.rimColor}
             />
           ) : null}
         </CrystalBody>
       ) : null}
+      <SpecimenLeader bodyRef={heroRef} overlayRef={overlayRef} world={world} />
       <OrbitControls
         makeDefault
         target={TARGET}
@@ -320,10 +428,12 @@ export default function HabitatScene({
         zoomSpeed={0.8}
         minDistance={1.5}
         maxDistance={40}
-        minPolarAngle={0.5}
-        maxPolarAngle={2.0}
+        minPolarAngle={world ? 1.42 : 0.5}
+        maxPolarAngle={world ? 1.85 : 2.0}
       />
-      <ExploreKeys />
+      <ExploreKeys world={world} />
+      {world ? <DescentCamera world={world} groundY={GROUND_Y} /> : null}
+      {world ? <FocusRig world={world} overlayRef={overlayRef} /> : null}
       <HabitatPost bloomStrength={layers?.bloom === false ? 0 : 0.12} />
     </WebGLCanvas>
   )
