@@ -7,6 +7,7 @@ export const MODES = [
   { id: 'playground', label: 'Playground' },
   { id: 'world-final', label: 'World Final' },
   { id: 'memory-lab', label: 'Memory Lab' },
+  { id: 'archive', label: 'Archive' },
 ]
 
 /** Technical studies share one Canvas and retain their state in App. */
@@ -53,6 +54,7 @@ export function parseAppRoute(hash = '') {
     token === 'world-final' ||
     token === 'worldfinal' ||
     token === 'memory-lab' ||
+    token === 'archive' ||
     token === 'memorylab'
   ) {
     const modeId =
@@ -79,6 +81,11 @@ export function appRouteHash(modeId, studyId) {
   if (modeId === 'worldv2') return '#world'
   if (modeId === 'world-final') return '#world-final'
   if (modeId === 'memory-lab') return '#memory-lab'
+  /* The archive keeps its own sub-path (#archive/<specimen>). */
+  if (modeId === 'archive') {
+    const current = typeof window === 'undefined' ? '' : window.location.hash
+    return /^#\/?archive(\/|$)/.test(current) ? current : '#archive'
+  }
   if (modeId === 'shader' && studyId && studyId !== 'surface') {
     return `#shader/${studyId}`
   }

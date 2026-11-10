@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import {
   buildGlints,
   buildGroundGeometry,
+  buildThroatGeometry,
   buildVeilGeometry,
   createGroundMaterial,
   createSplashResources,
@@ -19,6 +20,7 @@ import {
 export default function HabitatTerrain({ timeRef, envRef, toneRef = null, pixelScale = 1, layers }) {
   const res = useMemo(() => {
     const ground = buildGroundGeometry()
+    const throat = buildThroatGeometry()
     const groundMat = createGroundMaterial()
     const veils = [0, 1].map((layer) => ({
       geometry: buildVeilGeometry(layer),
@@ -27,12 +29,13 @@ export default function HabitatTerrain({ timeRef, envRef, toneRef = null, pixelS
     const glints = buildGlints()
     const crowns = planSplashes()
     const splashes = createSplashResources(crowns)
-    return { ground, groundMat, veils, glints, crowns, splashes }
+    return { ground, throat, groundMat, veils, glints, crowns, splashes }
   }, [])
 
   useEffect(
     () => () => {
       res.ground.dispose()
+      res.throat.dispose()
       res.groundMat.dispose()
       for (const v of res.veils) {
         v.geometry.dispose()
@@ -83,6 +86,7 @@ export default function HabitatTerrain({ timeRef, envRef, toneRef = null, pixelS
   return (
     <group>
       <mesh geometry={res.ground} material={res.groundMat} dispose={null} />
+      <mesh geometry={res.throat} material={res.groundMat} dispose={null} />
       {res.veils.map((v, i) => (
         <mesh
           key={i}

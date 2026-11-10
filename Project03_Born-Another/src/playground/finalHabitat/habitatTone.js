@@ -4,7 +4,7 @@
  * The starting environment (temperature 0.38, moisture 0.68, turbulence 0.12)
  * gives exactly the base palette; moving away from it changes the world:
  *  - cold  → icy blue water, clear and far-seeing, white light, bright caustics
- *  - warm  → rose / apricot haze, warm light, blushing sand and crystals
+ *  - warm  → peach / amber haze, golden light, sun-warmed sand and crystals
  *  - wet   → dense, soft, pale haze (short view), heavier veils
  *  - dry   → crisp grey clarity (long view), thin veils, sharp caustics
  *  - turbulence → sandy storm haze, thicker fog, dust lifted off the floor,
@@ -38,10 +38,11 @@ const COLD = {
   hemiGround: hex('#4f6386'), key: hex('#e6f2ff'), ground: hex('#a9b7ce'), crystal: hex('#dbe8f8'),
   bloomA: rgb(178, 206, 238), bloomB: rgb(150, 222, 238), floor: rgb(52, 70, 98),
 }
+/* Warm water: peach / apricot haze, amber light, sun-warmed sand. */
 const WARM = {
-  fog: hex('#c09aa6'), top: hex('#e6c7cd'), horizon: hex('#c69ca9'), bottom: hex('#9a6f80'),
-  hemiGround: hex('#8e5e72'), key: hex('#ffe2cc'), ground: hex('#d0b3bd'), crystal: hex('#f2dde6'),
-  bloomA: rgb(246, 186, 198), bloomB: rgb(244, 204, 170), floor: rgb(96, 64, 78),
+  fog: hex('#cfa488'), top: hex('#f0d3b8'), horizon: hex('#d6a98a'), bottom: hex('#a5735a'),
+  hemiGround: hex('#9a6448'), key: hex('#ffd4a3'), ground: hex('#dcbb9e'), crystal: hex('#f6e1cf'),
+  bloomA: rgb(252, 196, 164), bloomB: rgb(250, 214, 150), floor: rgb(112, 74, 52),
 }
 const WET = { fog: hex('#b4b9c8'), top: hex('#d6d9e2'), horizon: hex('#b8bdcb'), bottom: hex('#959cab'), ground: hex('#b8b4c8') }
 const DRY = { fog: hex('#959aa3'), top: hex('#c3c5ca'), horizon: hex('#9b9ea6'), bottom: hex('#737781'), ground: hex('#c3bec4'), crystal: hex('#e8e7ec') }

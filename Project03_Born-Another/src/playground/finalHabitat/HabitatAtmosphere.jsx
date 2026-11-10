@@ -5,6 +5,29 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+
+/* Guards the bloom chain against NaN / Inf / runaway HDR pixels. One bad
+   pixel (e.g. a degenerate normal on Apple GPUs) would otherwise be smeared
+   by the bloom blur into a full-screen flash. `?nan=1` paints them magenta. */
+const SanitizeShader = {
+  uniforms: { tDiffuse: { value: null }, uDebug: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uDebug;
+    varying vec2 vUv;
+    bool bad(float v) { return isnan(v) || isinf(v) || !(v == v) || abs(v) > 6.0e4; }
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      if (bad(c.r) || bad(c.g) || bad(c.b) || bad(c.a)) {
+        gl_FragColor = uDebug > 0.5 ? vec4(1.0, 0.0, 1.0, 1.0) : vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+      }
+      gl_FragColor = vec4(clamp(c.rgb, 0.0, 32.0), c.a);
+    }`,
+}
+const NAN_DEBUG = typeof window !== 'undefined' && /[?&]nan=1/.test(window.location.search)
 import { habitatHeight, habitatRng } from './habitatField.js'
 import { habitatTone, toneCssVars, TONE_BASE } from './habitatTone.js'
 import { deathPhases } from './habitatFossil.js'
@@ -407,6 +430,9 @@ export function HabitatPost({ bloomStrength = 0.22 }) {
     })
     const c = new EffectComposer(gl, target)
     c.addPass(new RenderPass(scene, camera))
+    const sanitize = new ShaderPass(SanitizeShader)
+    sanitize.uniforms.uDebug.value = NAN_DEBUG ? 1 : 0
+    c.addPass(sanitize)
     const bloom = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), bloomStrength, 0.6, 0.97)
     c.addPass(bloom)
     c.addPass(new OutputPass())

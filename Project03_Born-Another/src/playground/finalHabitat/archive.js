@@ -35,7 +35,7 @@ function write(list, storage) {
 }
 
 /** A specimen record from the life that ended (plain JSON). */
-export function createSpecimen({ fossil, species, seed, generation = 0, environment = {}, crystallization = 0, savedAt = new Date() }) {
+export function createSpecimen({ fossil, species, seed, generation = 0, environment = {}, crystallization = 0, savedAt = new Date(), story = null, image = null }) {
   const at = savedAt instanceof Date ? savedAt : new Date(savedAt)
   const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100
   return {
@@ -55,13 +55,44 @@ export function createSpecimen({ fossil, species, seed, generation = 0, environm
     },
     crystallization: r2(crystallization),
     savedAt: at.toISOString(),
+    /* The life's story (World Final): see lifeLog.summarizeLife. */
+    lived: story?.lived ?? null,
+    watched: story?.watched ?? null,
+    witnessedEnd: story?.witnessedEnd ?? null,
+    words: story?.words ?? [],
+    timeline: story?.timeline ?? [],
+    events: story?.events ?? [],
+    stages: story?.stages ?? [],
+    /* A picture of the remains, cropped from the world (data URL). */
+    image: typeof image === 'string' ? image : null,
   }
+}
+
+/** The same specimen without pictures (when storage runs out). */
+function withoutPictures(specimen, keepRemains) {
+  return { ...specimen, stages: (specimen.stages ?? []).map(({ image, ...rest }) => rest), image: keepRemains ? specimen.image : null }
 }
 
 /** Adds a specimen (newest first). Returns { list, saved }. */
 export function saveSpecimen(specimen, storage = defaultStorage()) {
-  const list = [specimen, ...loadArchive(storage).filter((e) => e.key !== specimen.key)].slice(0, ARCHIVE_LIMIT)
-  return { list, saved: write(list, storage) }
+  const rest = loadArchive(storage).filter((e) => e.key !== specimen.key)
+  /* Pictures are the heavy part: if the browser's storage is full, keep the
+     record with fewer of them rather than not at all. */
+  for (const s of [specimen, withoutPictures(specimen, true), withoutPictures(specimen, false)]) {
+    const list = [s, ...rest].slice(0, ARCHIVE_LIMIT)
+    if (write(list, storage)) return { list, saved: true }
+  }
+  return { list: [specimen, ...rest].slice(0, ARCHIVE_LIMIT), saved: false }
+}
+
+export function findSpecimen(key, storage = defaultStorage()) {
+  return loadArchive(storage).find((e) => e.key === key) ?? null
+}
+
+/** "4:12" from seconds. */
+export function formatDuration(seconds) {
+  const s = Math.max(0, Math.round(Number(seconds) || 0))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
 export function removeSpecimen(key, storage = defaultStorage()) {

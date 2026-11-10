@@ -11,6 +11,7 @@ import { normalizeExp05Temperature } from '../finalForm/exp05EnvironmentCoupling
 import { crystalGrowth, rimeAmount, smoothstep } from '../crystalForm/crystallization.js'
 import { habitatHeight, habitatRng } from './habitatField.js'
 import { nucleusFragment, nucleusVertex, patchMembrane } from './habitatShaders.js'
+import { bodyFactors, characterOf, createHistory, createMorph, CRYSTAL_MODES, shapeHeight, stepMorph, updateHistory } from './unfoldForm.js'
 import { KIN_TINTS } from './habitatKin.js'
 import { ammoniteRadius, coilAmount, deathPhases, witherAmount } from './habitatFossil.js'
 import { glowFragment, glowVertex } from './worldShaders.js'
@@ -47,12 +48,22 @@ const BODY_DETAIL = 28
 const FIBRES = 420
 const FIBRE_SEGMENTS = 6
 const BEAD_MAX = 650
+/** Below 1 so the membrane reads as a dense body: frost and crystals on the
+ *  far side must not show through it. */
+const MEMBRANE_TRANSMISSION = 0.5
 /** Stone-lilac the husk clouds toward. */
 const HUSK_TINT = new THREE.Color('#d6cfda')
 /** Nucleus colours (alive) and the fossil grey they fade to in the husk. */
 const NUCLEUS_ALIVE = { uGold: new THREE.Color('#ffd2ad'), uPink: new THREE.Color('#f5b3cf'), uBlue: new THREE.Color('#cfe0ff') }
 const NUCLEUS_FOSSIL = new THREE.Color('#bdb4bf')
 const RESEAT_INTERVAL = 0.6
+/** Reseat spacing while the medium (temperature / morph inputs) is changing. */
+const KEY_RESEAT_INTERVAL = 0.18
+/** Per-second rate the visible skin eases toward a new seat. */
+const MORPH_EASE_RATE = 3.2
+/* Shared by every CrystalBody: when the last (non-urgent) reseat ran. */
+const seatClock = { last: 0 }
+const SEAT_SPACING_MS = 60
 const NUCLEUS_SCALE = 0.76
 
 const GLOW_WHITE = new THREE.Color('#ffffff')
@@ -301,9 +312,11 @@ export default function CrystalBody({
   const crystalStyle = crystalStyleFor(morphType)
   const tempValue = normalizeExp05Temperature(temperature)
 
+  /* Temperature is passed per seat — rebuilding the evaluator re-samples the
+     whole radius field, which stalled every slider tick. */
   const evaluator = useMemo(
-    () => createExp05SurfaceEvaluator({ seed, morphologyType: morphType, temperature: tempValue }),
-    [seed, morphType, tempValue],
+    () => createExp05SurfaceEvaluator({ seed, morphologyType: morphType }),
+    [seed, morphType],
   )
   useLayoutEffect(() => () => evaluator.dispose(), [evaluator])
 
@@ -336,6 +349,18 @@ export default function CrystalBody({
       uBodyCentre: { value: new THREE.Vector3() },
       uDrift: { value: new THREE.Vector3() },
       uCoil: { value: 0 },
+      /* Unfolding (folds, flow strands, an aperture onto the light inside). */
+      uUnit: { value: 1 },
+      uFold: { value: 0 },
+      uOpen: { value: 0 },
+      uOpenDir: { value: new THREE.Vector3(0, 0, 1) },
+      uFlow: { value: 1 },
+      uFlowTime: { value: 0 },
+      uSwirl: { value: 0 },
+      uInnerLight: { value: new THREE.Color('#ffa24a') },
+      uBubble: { value: 0 },
+      uStrata: { value: 0 },
+      uShrink: { value: 0 },
     }),
     [],
   )
@@ -348,6 +373,7 @@ export default function CrystalBody({
       uBlue: { value: new THREE.Color('#cfe0ff') },
       uFrost: { value: new THREE.Color('#f4f1ff') },
       uShell: { value: new THREE.Color('#ecdde8') },
+      uOpen: { value: 0 },
     }),
     [],
   )
@@ -361,10 +387,21 @@ export default function CrystalBody({
     membraneGeo.setAttribute('aFacetNormal', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
     membraneGeo.setAttribute('aCoilOffset', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
     membraneGeo.setAttribute('aCoilNormal', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
+    membraneGeo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
 
     const nucleusGeo = new THREE.BufferGeometry()
     nucleusGeo.setIndex(new THREE.BufferAttribute(base.index, 1))
     nucleusGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
+    nucleusGeo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
+
+    /* Reseats land here; the visible skin eases toward them each frame. */
+    const targetGeo = new THREE.BufferGeometry()
+    targetGeo.setIndex(membraneGeo.index)
+    targetGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
+    const targetNucleusGeo = new THREE.BufferGeometry()
+    targetNucleusGeo.setIndex(nucleusGeo.index)
+    targetNucleusGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
+    const targetFacet = new Float32Array(base.count * 3)
 
     const fibreGeo = new THREE.BufferGeometry()
     const fibreVerts = FIBRES * FIBRE_SEGMENTS * 2
@@ -385,17 +422,17 @@ export default function CrystalBody({
     fibreGeo.setAttribute('color', new THREE.BufferAttribute(fibreColors, 3))
 
     const membraneMat = new THREE.MeshPhysicalMaterial({
-      color: '#fff4f8',
+      color: '#fbe9f0',
       metalness: 0,
-      roughness: 0.05,
-      transmission: 1,
-      thickness: 0.9,
+      roughness: 0.12,
+      transmission: MEMBRANE_TRANSMISSION,
+      thickness: 1.8,
       ior: 1.32,
       iridescence: 0.75,
       iridescenceIOR: 1.35,
       iridescenceThicknessRange: [100, 1000],
       attenuationColor: new THREE.Color('#f1aecd'),
-      attenuationDistance: 2.2,
+      attenuationDistance: 0.9,
       specularIntensity: 0.7,
       clearcoat: 0.3,
       clearcoatRoughness: 0.12,
@@ -415,6 +452,9 @@ export default function CrystalBody({
     return {
       membraneGeo,
       nucleusGeo,
+      targetGeo,
+      targetNucleusGeo,
+      targetFacet,
       fibreGeo,
       membraneMat,
       nucleusMat,
@@ -468,12 +508,19 @@ export default function CrystalBody({
   const pickMaterial = useMemo(() => new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }), [])
   useEffect(() => () => pickMaterial.dispose(), [pickMaterial])
   const huskLightRef = useRef(null)
+  const unfoldRef = useRef({ open: 0, dir: new THREE.Vector3(0, 0, 1), flowTime: 0 })
+  /* This life's history and what it makes of the body (see unfoldForm.js). */
+  /* How the medium is shaping the body now / has shaped it (unfoldForm.js). */
+  const morphRef = useRef(createMorph())
+  const historyRef = useRef({ seed: null, history: null, character: null, at: -99, marks: 0, pulse: 0, waves: [0, 0, 0], axis: new THREE.Vector3(0, 1, 0) })
+  const effLobeRef = useRef(lobeAmplitude)
 
   /* Individual palette shift (same material family, small hue moves). */
   useEffect(() => {
     resources.membraneMat.attenuationColor.set(tint.attenuation)
     resources.membraneMat.sheenColor.set(tint.sheen)
     uniforms.uCore.value.set(tint.core)
+    uniforms.uInnerLight.value.set('#ffa24a').lerp(new THREE.Color(tint.core), 0.2)
   }, [resources, tint, uniforms])
 
   const groupRef = useRef(null)
@@ -492,6 +539,35 @@ export default function CrystalBody({
     const n = data.pos.length
     const pos = new Float32Array(n)
     for (let i = 0; i < n; i++) pos[i] = data.pos[i] + data.facet[i] * facetAmt + data.coil[i] * coil
+    /* Keep the shape the medium gave it (relief along the normal, contraction). */
+    {
+      const tmp = new THREE.BufferGeometry()
+      tmp.setIndex(new THREE.BufferAttribute(base.index, 1))
+      tmp.setAttribute('position', new THREE.BufferAttribute(pos.slice(), 3))
+      tmp.computeVertexNormals()
+      const nrm = tmp.attributes.normal.array
+      const [cx, cy, cz] = data.center
+      const u = {
+        unit: data.unit,
+        openDir: uniforms.uOpenDir.value.toArray(),
+        flowTime: uniforms.uFlowTime.value,
+        swirl: uniforms.uSwirl.value,
+        fold: uniforms.uFold.value,
+        bubble: uniforms.uBubble.value,
+        strata: uniforms.uStrata.value,
+      }
+      const shrink = 1 - 0.14 * uniforms.uShrink.value
+      for (let i = 0; i < n; i += 3) {
+        const lx = data.pos[i], ly = data.pos[i + 1], lz = data.pos[i + 2]
+        const fx = lx - cx, fy = ly - cy, fz = lz - cz
+        const fl = Math.hypot(fx, fy, fz) || 1
+        const h = shapeHeight([fx / fl, fy / fl, fz / fl], [lx, ly, lz], u)
+        pos[i] = cx + (pos[i] + nrm[i] * h - cx) * shrink
+        pos[i + 1] = cy + (pos[i + 1] + nrm[i + 1] * h - cy) * shrink
+        pos[i + 2] = cz + (pos[i + 2] + nrm[i + 2] * h - cz) * shrink
+      }
+      tmp.dispose()
+    }
     const geometry = new THREE.BufferGeometry()
     geometry.setIndex(new THREE.BufferAttribute(base.index.slice(), 1))
     geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3))
@@ -535,9 +611,14 @@ export default function CrystalBody({
     if (frostRef.current) frostRef.current.count = 0
   }, [resources])
 
+  /** Evaluates the surface into the target buffers (not the visible skin). */
   function seat() {
-    const seated = evaluator.evaluateMany(base.dirList, life, { finiteDifferenceNormal: false, lobeAmplitude })
-    const pos = resources.membraneGeo.attributes.position.array
+    const seated = evaluator.evaluateMany(base.dirList, life, {
+      finiteDifferenceNormal: false,
+      lobeAmplitude: effLobeRef.current,
+      temperature: tempValue,
+    })
+    const pos = resources.targetGeo.attributes.position.array
     let cx = 0, cy = 0, cz = 0
     for (let i = 0; i < base.count; i++) {
       const p = seated[i]?.position ?? base.dirList[i]
@@ -547,9 +628,25 @@ export default function CrystalBody({
       cx += p[0]; cy += p[1]; cz += p[2]
     }
     cx /= base.count; cy /= base.count; cz /= base.count
+    /* What happened to this life: marks swell or press the skin, and the
+       side it was watched from flares into a lip. */
+    const character = historyRef.current.character
+    if (character) {
+      const f = bodyFactors(character, base.dirs)
+      let ax = 0, ay = 0, az = 0
+      for (let i = 0; i < base.count; i++) {
+        const j = i * 3
+        const k = 1 + f[i]
+        pos[j] = cx + (pos[j] - cx) * k
+        pos[j + 1] = cy + (pos[j + 1] - cy) * k
+        pos[j + 2] = cz + (pos[j + 2] - cz) * k
+        ax += pos[j]; ay += pos[j + 1]; az += pos[j + 2]
+      }
+      cx = ax / base.count; cy = ay / base.count; cz = az / base.count
+    }
     let unit = 0
     let minY = Infinity
-    const nuc = resources.nucleusGeo.attributes.position.array
+    const nuc = resources.targetNucleusGeo.attributes.position.array
     for (let i = 0; i < base.count; i++) {
       const j = i * 3
       const dx = pos[j] - cx, dy = pos[j + 1] - cy, dz = pos[j + 2] - cz
@@ -566,21 +663,55 @@ export default function CrystalBody({
       const j = i * 3
       rmax = Math.max(rmax, Math.hypot(pos[j] - cx, pos[j + 1] - cy, pos[j + 2] - cz))
     }
-    resources.membraneGeo.attributes.position.needsUpdate = true
-    resources.membraneGeo.computeVertexNormals()
-    resources.membraneGeo.computeBoundingSphere()
-    resources.nucleusGeo.attributes.position.needsUpdate = true
-    resources.nucleusGeo.computeVertexNormals()
-    resources.nucleusGeo.computeBoundingSphere()
+    resources.targetGeo.computeVertexNormals()
+    resources.targetNucleusGeo.computeVertexNormals()
+    /* The visible skin sits between the old and new shape while easing. */
+    for (const [shown, target] of [
+      [resources.membraneGeo, resources.targetGeo],
+      [resources.nucleusGeo, resources.targetNucleusGeo],
+    ]) {
+      target.computeBoundingSphere()
+      shown.boundingSphere = target.boundingSphere.clone()
+      shown.boundingSphere.radius *= 1.25
+    }
 
     /* Faceted (crystallized) target: each ray from the centre stops at the
        nearest facet plane, never deeper than 14% or prouder than 4%. */
-    const facetOffset = resources.membraneGeo.attributes.aFacetOffset.array
+    const facetOffset = resources.targetFacet
     const planes = plan.facets.map((f) => {
       const v = f.vertex * 3
       const h = ((pos[v] - cx) * f.n[0] + (pos[v + 1] - cy) * f.n[1] + (pos[v + 2] - cz) * f.n[2]) * f.depth
       return { n: f.n, h }
     })
+    /* The crystal habit follows the shape it froze in: warm ridges → a prism
+       along its axis; turbulent strata → tabular (flat top and bottom). */
+    const crystalMode = CRYSTAL_MODES[morphRef.current.mode] ?? CRYSTAL_MODES.plain
+    if (crystalMode.extra) {
+      const reach = (nx, ny, nz) => {
+        let best = 0
+        for (let i = 0; i < base.count; i++) {
+          const j = i * 3
+          best = Math.max(best, (pos[j] - cx) * nx + (pos[j + 1] - cy) * ny + (pos[j + 2] - cz) * nz)
+        }
+        return best
+      }
+      if (crystalMode.extra === 'tabular') {
+        for (const ny of [1, -1]) planes.push({ n: [0, ny, 0], h: reach(0, ny, 0) * 0.78 })
+      } else {
+        const ax = historyRef.current.axis
+        const ref = Math.abs(ax.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)
+        const t1 = new THREE.Vector3().crossVectors(ax, ref).normalize()
+        const t2 = new THREE.Vector3().crossVectors(ax, t1)
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2
+          const nx = t1.x * Math.cos(a) + t2.x * Math.sin(a)
+          const ny = t1.y * Math.cos(a) + t2.y * Math.sin(a)
+          const nz = t1.z * Math.cos(a) + t2.z * Math.sin(a)
+          planes.push({ n: [nx, ny, nz], h: reach(nx, ny, nz) * 0.86 })
+        }
+      }
+    }
+    const [facetLo, facetHi] = crystalMode.facets
     const facetPos = new Float32Array(base.count * 3)
     for (let i = 0; i < base.count; i++) {
       const j = i * 3
@@ -592,7 +723,7 @@ export default function CrystalBody({
         const d = ux * pl.n[0] + uy * pl.n[1] + uz * pl.n[2]
         if (d > 0.3) rf = Math.min(rf, pl.h / d)
       }
-      const rt = Math.max(rs * 0.86, Math.min(rs * 1.04, rf))
+      const rt = Math.max(rs * facetLo, Math.min(rs * facetHi, rf))
       facetOffset[j] = ux * (rt - rs)
       facetOffset[j + 1] = uy * (rt - rs)
       facetOffset[j + 2] = uz * (rt - rs)
@@ -606,7 +737,6 @@ export default function CrystalBody({
     facetGeo.computeVertexNormals()
     resources.membraneGeo.attributes.aFacetNormal.array.set(facetGeo.attributes.normal.array)
     resources.membraneGeo.attributes.aFacetNormal.needsUpdate = true
-    resources.membraneGeo.attributes.aFacetOffset.needsUpdate = true
     facetGeo.dispose()
 
     /* End of life: the crystallized husk coils into a ribbed planispiral
@@ -618,13 +748,16 @@ export default function CrystalBody({
     const wantsCoil = morphType === 'spiral' && (life?.dead || (life?.age ?? 0) >= 0.88)
     if (wantsCoil) {
       const coilPos = new Float32Array(base.count * 3)
+      /* Only partly: the shell keeps the life's own shape under the coil. */
+      const coilMax = character?.coilMax ?? 0.6
       for (let i = 0; i < base.count; i++) {
         const j = i * 3
         const dx = base.dirs[j], dy = base.dirs[j + 1], dz = base.dirs[j + 2]
         const r = unit * ammoniteRadius(dx, dy, dz)
-        const tx = cx + dx * r + facetOffset[j] * 0.35
-        const ty = cy + dy * r + facetOffset[j + 1] * 0.35
-        const tz = cz + dz * r + facetOffset[j + 2] * 0.35
+        const ox = pos[j] + facetOffset[j], oy = pos[j + 1] + facetOffset[j + 1], oz = pos[j + 2] + facetOffset[j + 2]
+        const tx = ox + (cx + dx * r + facetOffset[j] * 0.35 - ox) * coilMax
+        const ty = oy + (cy + dy * r + facetOffset[j + 1] * 0.35 - oy) * coilMax
+        const tz = oz + (cz + dz * r + facetOffset[j + 2] * 0.35 - oz) * coilMax
         coilOffset[j] = tx - (pos[j] + facetOffset[j])
         coilOffset[j + 1] = ty - (pos[j + 1] + facetOffset[j + 1])
         coilOffset[j + 2] = tz - (pos[j + 2] + facetOffset[j + 2])
@@ -640,7 +773,7 @@ export default function CrystalBody({
       coilGeo.dispose()
     } else {
       coilOffset.fill(0)
-      resources.membraneGeo.attributes.aCoilNormal.array.set(resources.membraneGeo.attributes.normal.array)
+      resources.membraneGeo.attributes.aCoilNormal.array.set(resources.targetGeo.attributes.normal.array)
     }
     resources.membraneGeo.attributes.aCoilOffset.needsUpdate = true
     resources.membraneGeo.attributes.aCoilNormal.needsUpdate = true
@@ -673,17 +806,37 @@ export default function CrystalBody({
     resources.fibreGeo.attributes.position.needsUpdate = true
     resources.fibreGeo.computeBoundingSphere()
 
-    return {
-      pos,
-      normal: resources.membraneGeo.attributes.normal.array,
-      facet: facetOffset,
-      coil: coilOffset,
-      hasCoil: wantsCoil,
-      center: [cx, cy, cz],
-      unit,
-      minY,
-      rmax,
+    return { hasCoil: wantsCoil, center: [cx, cy, cz], unit, minY, rmax }
+  }
+
+  /** Move the visible skin (and its shape scalars) a step toward the last seat.
+   *  Returns the largest remaining gap so easing can stop once settled. */
+  function easeSurface(data, target, k) {
+    const m = resources.membraneGeo.attributes
+    const n = resources.nucleusGeo.attributes
+    const pairs = [
+      [m.position, resources.targetGeo.attributes.position.array],
+      [m.normal, resources.targetGeo.attributes.normal.array],
+      [m.aFacetOffset, resources.targetFacet],
+      [n.position, resources.targetNucleusGeo.attributes.position.array],
+      [n.normal, resources.targetNucleusGeo.attributes.normal.array],
+    ]
+    let gap = 0
+    for (const [attr, to] of pairs) {
+      const from = attr.array
+      for (let i = 0; i < from.length; i++) {
+        const d = to[i] - from[i]
+        from[i] += d * k
+        const ad = d < 0 ? -d : d
+        if (ad > gap) gap = ad
+      }
+      attr.needsUpdate = true
     }
+    for (let i = 0; i < 3; i++) data.center[i] += (target.center[i] - data.center[i]) * k
+    data.unit += (target.unit - data.unit) * k
+    data.minY += (target.minY - data.minY) * k
+    data.rmax += (target.rmax - data.rmax) * k
+    return gap * (1 - k)
   }
 
   useFrame((state, delta) => {
@@ -696,17 +849,67 @@ export default function CrystalBody({
     const time = timeRef?.current ?? now
 
     const seatState = seatRef.current
-    const key = `${evaluator.seed}|${morphType}|${tempValue}|${plan.crystals.length}|${lobeAmplitude}`
+    /* History → character (every ~2 s; quantized, so reseats stay rare). */
+    {
+      const hist = historyRef.current
+      if (hist.seed !== life.seed) {
+        hist.seed = life.seed
+        hist.history = createHistory(life.seed)
+        hist.character = characterOf(hist.history, life.seed)
+        hist.at = now
+        hist.marks = 0
+        hist.pulse = 0
+        morphRef.current = createMorph()
+      }
+      if (!life.dead && now - hist.at > 4) {
+        hist.at = now
+        hist.character = characterOf(hist.history, life.seed)
+      }
+      /* The species form emerges, but only as far as this life lets it. */
+      effLobeRef.current = Math.min(lobeAmplitude, hist.character.lobeCap)
+    }
+    const key = `${evaluator.seed}|${morphType}|${tempValue}|${plan.crystals.length}|${effLobeRef.current}|${historyRef.current.character.key}|${morphRef.current.mode}`
     const stale = seatState.key !== key || seatState.life !== life
     const rebuilt = seatState.resources !== resources
-    if (!seatState.data || rebuilt || (stale && (seatState.key !== key || now - seatState.at > RESEAT_INTERVAL))) {
-      seatState.data = seat()
+    const mustSeat = !seatState.data || rebuilt
+    /* Env changes (slider drags) reseat at most every KEY_RESEAT_INTERVAL;
+       the easing below fills the gaps, so a drag reads as one motion. */
+    const wantSeat = stale && now - seatState.at > (seatState.key !== key ? KEY_RESEAT_INTERVAL : RESEAT_INTERVAL)
+    /* A reseat costs tens of ms (8k-vertex surface evaluation + normals).
+       Several lives reseating in the same frame stacked into a visible hitch
+       (read as flicker), so non-urgent reseats take turns: one per ~60 ms. */
+    const wallNow = performance.now()
+    if (mustSeat || (wantSeat && wallNow - seatClock.last > SEAT_SPACING_MS)) {
+      seatClock.last = wallNow
+      const target = seat()
+      if (mustSeat) {
+        const m = resources.membraneGeo.attributes
+        seatState.data = {
+          pos: m.position.array,
+          normal: m.normal.array,
+          facet: m.aFacetOffset.array,
+          coil: m.aCoilOffset.array,
+          center: [...target.center],
+          unit: target.unit,
+          minY: target.minY,
+          rmax: target.rmax,
+          hasCoil: target.hasCoil,
+        }
+      }
+      seatState.data.hasCoil = target.hasCoil
+      seatState.target = target
+      seatState.settling = true
       seatState.key = key
       seatState.life = life
       seatState.resources = resources
       seatState.at = now
     }
     const data = seatState.data
+    if (seatState.settling) {
+      /* First seat snaps; later ones ease in (~0.3 s) instead of jumping. */
+      const ease = mustSeat ? 1 : 1 - Math.exp(-Math.min(0.1, delta) * MORPH_EASE_RATE)
+      seatState.settling = easeSurface(data, seatState.target, ease) > 1e-5
+    }
     const S = data.unit
     /* End of life: wither (last stretch of AGE), then coil, sink and rest. */
     const age = life.age ?? 0
@@ -873,8 +1076,8 @@ export default function CrystalBody({
     uniforms.uCoil.value = coil
     /* The husk: clouded, stony crystal; the warm core and the film go out. */
     const mm = resources.membraneMat
-    mm.transmission = 1 - 0.45 * wither
-    mm.roughness = 0.05 + 0.27 * wither
+    mm.transmission = MEMBRANE_TRANSMISSION * (1 - 0.45 * wither)
+    mm.roughness = 0.12 + 0.2 * wither
     mm.iridescence = 0.75 - 0.45 * wither
     mm.sheen = 0.25 * (1 - 0.6 * wither)
     mm.attenuationColor.copy(tintAttenuation).lerp(HUSK_TINT, wither)
@@ -911,6 +1114,74 @@ export default function CrystalBody({
     uniforms.uFacet.value = facetAmt
     nucleusUniforms.uTime.value = time
     nucleusUniforms.uLevel.value = level
+
+    /* Unfolding. Folds multiply as the life grows; fibres stream while it
+       lives and freeze as it crystallizes; turbulence twists them. Near the
+       viewer (or in focus) the skin slowly opens toward them onto the light
+       inside; crystallizing closes it, and at the end it opens once more. */
+    {
+      const unf = unfoldRef.current
+      const camDist = resp.dist ?? state.camera.position.distanceTo(scratch.centre)
+      const notice = noticeRadius(resp.radius || 1.4)
+      let openTarget = smoothstep(notice, notice * 0.3, camDist) * 0.75
+      if (world?.current?.focusId === selfId) openTarget = Math.max(openTarget, 0.9)
+      openTarget = Math.min(1, openTarget + 0.12 * resp.hover)
+      openTarget *= (1 - 0.85 * level) * (1 - wither)
+      if (deathT >= 0) openTarget = smoothstep(0, 1.2, deathT) * (1 - smoothstep(2.2, 5, deathT))
+      unf.open += (openTarget - unf.open) * Math.min(1, delta * 0.9)
+      uniforms.uOpen.value = unf.open
+      nucleusUniforms.uOpen.value = unf.open
+      /* Turn the opening toward the viewer, slowly; unwatched, the fibres'
+         pole wanders on its own. */
+      /* The mouth is the life's own axis, turning partly toward the viewer. */
+      const ownAxis = historyRef.current.axis
+      if (openTarget > 0.05) {
+        scratch.p.copy(state.camera.position).sub(scratch.centre).applyQuaternion(scratch.inv).normalize()
+        scratch.p.lerp(ownAxis, 0.6)
+      } else scratch.p.copy(ownAxis)
+      if (scratch.p.lengthSq() > 1e-6) {
+        scratch.p.normalize()
+        unf.dir.lerp(scratch.p, Math.min(1, delta * 0.7))
+        if (unf.dir.lengthSq() > 1e-6) unf.dir.normalize()
+        else unf.dir.copy(scratch.p)
+      }
+      uniforms.uOpenDir.value.copy(unf.dir)
+      /* Record this moment of the life. */
+      if (!life.dead) {
+        const viewer = scratch.a.copy(state.camera.position).sub(scratch.centre).applyQuaternion(scratch.inv)
+        const vl = viewer.length()
+        updateHistory(historyRef.current.history, {
+          dt: Math.min(0.1, delta),
+          env: { temperature: tempValue, moisture, turbulence },
+          viewer: vl > 1e-6 ? [viewer.x / vl, viewer.y / vl, viewer.z / vl] : null,
+          near: camDist < notice,
+          focus: world?.current?.focusId === selfId,
+        })
+      }
+      /* The life's own axis (its mouth) settles toward where it was watched from. */
+      const hist = historyRef.current
+      if (hist.character) {
+        scratch.b.set(hist.character.axis[0], hist.character.axis[1], hist.character.axis[2])
+        hist.axis.lerp(scratch.b, Math.min(1, delta * 0.3)).normalize()
+      }
+      uniforms.uUnit.value = S
+      /* The medium shapes the body: warm → ridges, cold → contraction,
+         wet → blisters, turbulent → strata. Remembered, then frozen as it
+         crystallizes (see unfoldForm.js). */
+      const morph = stepMorph(morphRef.current, { temperature: tempValue, moisture, turbulence }, life.dead ? 0 : Math.min(0.1, delta), level)
+      const sh = morph.shown
+      const grown = smoothstep(0, 0.6, age)
+      uniforms.uFold.value = S * (0.025 + 0.03 * grown + 0.13 * sh.ridge) * (1 - 0.35 * sh.shrink)
+      uniforms.uBubble.value = S * 0.17 * sh.bubble * (0.4 + 0.6 * grown)
+      uniforms.uStrata.value = S * 0.11 * sh.strata * (0.4 + 0.6 * grown)
+      uniforms.uShrink.value = sh.shrink
+      const flow = (1 - 0.9 * level) * (1 - wither)
+      unf.flowTime += Math.min(0.1, delta) * (0.35 + 1.4 * turbulence) * flow
+      uniforms.uFlowTime.value = unf.flowTime
+      uniforms.uFlow.value = 0.25 + 0.75 * flow
+      uniforms.uSwirl.value += (turbulence - uniforms.uSwirl.value) * Math.min(1, delta * 0.5)
+      if (coreLightRef.current) coreLightRef.current.intensity = 0.9 * (1 - wither) + 2.2 * unf.open
+    }
 
     const { m, q, p, s, n, t, b, a, ref } = scratch
     /* Growths ride the membrane: the same drag and contact dents the shader
@@ -952,7 +1223,24 @@ export default function CrystalBody({
       return j
     }
 
-    /* Crystals: rooted inside, pierce the membrane as they grow. */
+    /* Crystals: rooted inside, pierce the membrane as they grow. Their habit
+       follows the shape the body froze in; they sit on its relief. */
+    const cm = CRYSTAL_MODES[morphRef.current.mode] ?? CRYSTAL_MODES.plain
+    const shapeU = {
+      unit: S,
+      openDir: uniforms.uOpenDir.value.toArray(),
+      flowTime: uniforms.uFlowTime.value,
+      swirl: uniforms.uSwirl.value,
+      fold: uniforms.uFold.value,
+      bubble: uniforms.uBubble.value,
+      strata: uniforms.uStrata.value,
+    }
+    const relief = (j) => {
+      const lx = data.pos[j], ly = data.pos[j + 1], lz = data.pos[j + 2]
+      const fx = lx - data.center[0], fy = ly - data.center[1], fz = lz - data.center[2]
+      const fl = Math.hypot(fx, fy, fz) || 1
+      return shapeHeight([fx / fl, fy / fl, fz / fl], [lx, ly, lz], shapeU)
+    }
     for (let i = 0; i < plan.crystals.length; i++) {
       const c = plan.crystals[i]
       const j = frame(c.vertex)
@@ -964,13 +1252,14 @@ export default function CrystalBody({
         data.pos[j + 2] + data.facet[j + 2] * facetAmt + data.coil[j + 2] * coil,
       )
       ride(p)
-      p.addScaledVector(n, -depth)
+      p.addScaledVector(n, relief(j) - depth)
         .addScaledVector(t, c.offT * S)
         .addScaledVector(b, c.offB * S)
       a.copy(n).addScaledVector(t, c.tiltT).addScaledVector(b, c.tiltB).normalize()
+      if (cm.flat) a.lerp(t, cm.flat).normalize()
       orientAlong(q, a, c.spin)
-      const len = depth * 0.97 + c.protrude * S * g * crystalStyle.len
-      const w = (c.embed + c.protrude) * S * c.wr * (0.6 + 0.4 * g) * crystalStyle.width
+      const len = depth * 0.97 + c.protrude * S * g * crystalStyle.len * cm.len
+      const w = (c.embed + c.protrude) * S * c.wr * (0.6 + 0.4 * g) * crystalStyle.width * cm.width
       s.set(w, len / PRISM_HEIGHT, w)
       m.compose(p, q, s)
       crystals.setMatrixAt(i, m)
@@ -993,7 +1282,7 @@ export default function CrystalBody({
       ride(p)
       p.addScaledVector(t, f.offT * S)
         .addScaledVector(b, f.offB * S)
-        .addScaledVector(n, plan.tent[f.vertex] * tentLift + f.lift * S * g - size * 0.2)
+        .addScaledVector(n, plan.tent[f.vertex] * tentLift + f.lift * S * g - size * 0.2 + relief(j))
       s.set(size, size, size)
       m.compose(p, q, s)
       frost.setMatrixAt(i, m)

@@ -12,8 +12,14 @@ import {
   habitatNormal,
   habitatRng,
   habitatVeil,
+  habitatSurfaceHeight,
   habitatVeilHeight,
+  holeDistance,
+  holeShape,
+  THROAT,
+  UNDERWORLD,
 } from './habitatField.js'
+import { underworldCeiling } from './caves.js'
 import { glintFragment, glintVertex } from './habitatShaders.js'
 
 /**
@@ -53,7 +59,23 @@ export function buildPolarGrid(radius, rings, segments, power, inner = 0) {
 export function buildGroundGeometry({ rings = 300, segments = 420 } = {}) {
   const geo = buildPolarGrid(HABITAT_RADIUS, rings, segments, 2.4)
   const pos = geo.attributes.position.array
-  for (let i = 0; i < pos.length; i += 3) pos[i + 1] = habitatHeight(pos[i], pos[i + 2])
+  for (let i = 0; i < pos.length; i += 3) pos[i + 1] = habitatSurfaceHeight(pos[i], pos[i + 2])
+  /* The underworld's opening: the throat mesh takes over inside THROAT.cut. */
+  {
+    const index = geo.index.array
+    const kept = []
+    const r = THROAT.cut
+    for (let t = 0; t < index.length; t += 3) {
+      const a = index[t] * 3
+      const b = index[t + 1] * 3
+      const c = index[t + 2] * 3
+      const cx = (pos[a] + pos[b] + pos[c]) / 3
+      const cz = (pos[a + 2] + pos[b + 2] + pos[c + 2]) / 3
+      if (holeDistance(cx, cz) < r) continue
+      kept.push(index[t], index[t + 1], index[t + 2])
+    }
+    geo.setIndex(kept)
+  }
   geo.computeVertexNormals()
   const nor = geo.attributes.normal.array
   const colors = new Float32Array(pos.length)
@@ -65,6 +87,119 @@ export function buildGroundGeometry({ rings = 300, segments = 420 } = {}) {
     colors[i] = c.r
     colors[i + 1] = c.g
     colors[i + 2] = c.b
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geo.computeBoundingSphere()
+  return geo
+}
+
+/** Smooth periodic noise around the opening, −1..1. */
+const angNoise = (a, s) => 0.5 * Math.sin(a * 2 + s) + 0.3 * Math.sin(a * 3 + s * 1.7) + 0.2 * Math.sin(a * 5 + s * 2.3)
+
+const smooth = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+
+/**
+ * The sinkhole's throat, in the ground's own sand: from just outside the
+ * ground cut it follows the surface (with its spiral grooves) to the lip,
+ * rolls over, and drops as a fluted, softly stratified wall through the
+ * cavern ceiling, ending in a collar tucked under the ceiling's edge.
+ */
+export function buildThroatGeometry({ segments = 240, outerRings = 12, wallRings = 48 } = {}) {
+  const { hole } = UNDERWORLD
+  const rows = outerRings + wallRings + 1
+  const pos = new Float32Array(segments * rows * 3)
+  const shade = new Float32Array(segments * rows)
+  for (let j = 0; j < segments; j++) {
+    const a = (j / segments) * Math.PI * 2
+    const ca = Math.cos(a)
+    const sa = Math.sin(a)
+    const { inner, lip } = holeShape(a)
+    /* Per-direction character, so the drop is not the same all the way round. */
+    const steep = 0.5 + 0.5 * angNoise(a, 1.1)
+    const strata = 0.12 + 0.4 * Math.max(0, angNoise(a, 4.2))
+    const bandSize = 0.8 + 0.7 * (0.5 + 0.5 * angNoise(a, 2.7))
+    const flute = 0.06 + 0.26 * (0.5 + 0.5 * angNoise(a, 5.9))
+    const cornice = 0.7 * Math.max(0, angNoise(a, 3.3))
+    const rollEnd = 0.5 + 0.35 * steep
+    const yLip = habitatSurfaceHeight(hole.x + ca * lip, hole.z + sa * lip) - 0.03
+    const yBottom =
+      Math.min(
+        underworldCeiling(hole.x + ca * inner, hole.z + sa * inner),
+        underworldCeiling(hole.x + ca * (inner + 2), hole.z + sa * (inner + 2)),
+      ) - 0.6
+    const fall = Math.max(1, yLip - yBottom)
+    for (let i = 0; i < rows; i++) {
+      let d
+      let y
+      let k = 1
+      if (i <= outerRings) {
+        d = THROAT.outer + (lip - THROAT.outer) * (i / outerRings)
+        y = habitatSurfaceHeight(hole.x + ca * d, hole.z + sa * d) - 0.03
+      } else {
+        const s = (i - outerRings) / wallRings
+        const roll = 1 - Math.pow(1 - Math.min(1, s / rollEnd), 2 + steep * 2)
+        d = lip + (inner - lip) * roll
+        /* The collar flares out under the ceiling's edge. */
+        d += smooth(0.86, 1, s) * 2
+        const wall = smooth(0.06, 0.3, s) * (1 - smooth(0.8, 0.92, s))
+        let drop = fall * Math.pow(s, 1.05 + 0.6 * (1 - steep))
+        const band = drop / bandSize + 0.8 * angNoise(a * 1.3, 9.1) + 0.25 * Math.sin(a * 9 + 0.4)
+        const f = band - Math.floor(band)
+        drop += strata * bandSize * (smooth(0.25, 0.75, f) - f) * wall
+        d -= wall * strata * 0.45 * (1 - smooth(0, 0.3, f))
+        d += wall * flute * (Math.sin(a * 11 + s * 2.4 + angNoise(a, 6.2) * 2.2) + 0.4 * Math.sin(a * 23 + 1.7 + s * 4))
+        d += wall * 0.3 * angNoise(a * 2 + s * 3, 8.8)
+        d -= cornice * Math.exp(-Math.pow((s - 0.12) / 0.08, 2))
+        y = yLip - drop
+        k = 1 - 0.6 * smooth(0.2, 1, s)
+      }
+      const v = j * rows + i
+      pos[v * 3] = hole.x + ca * d
+      pos[v * 3 + 1] = y
+      pos[v * 3 + 2] = hole.z + sa * d
+      shade[v] = k
+    }
+  }
+  const index = []
+  for (let j = 0; j < segments; j++) {
+    const jn = (j + 1) % segments
+    for (let i = 0; i < rows - 1; i++) {
+      const a0 = j * rows + i
+      const a1 = j * rows + i + 1
+      const b0 = jn * rows + i
+      const b1 = jn * rows + i + 1
+      index.push(a0, b0, a1, a1, b0, b1)
+    }
+  }
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+  geo.setIndex(index)
+  geo.computeVertexNormals()
+  /* Faces must look up / toward the axis (into the opening). */
+  const nor = geo.attributes.normal.array
+  const probe = 0 * rows + outerRings - 2
+  if (nor[probe * 3 + 1] < 0) {
+    const idx = geo.index.array
+    for (let t = 0; t < idx.length; t += 3) {
+      const tmp = idx[t + 1]
+      idx[t + 1] = idx[t + 2]
+      idx[t + 2] = tmp
+    }
+    geo.index.needsUpdate = true
+    geo.computeVertexNormals()
+  }
+  const colors = new Float32Array(pos.length)
+  const c = new THREE.Color()
+  for (let v = 0; v < pos.length / 3; v++) {
+    const slope = Math.min(1, (1 - Math.abs(nor[v * 3 + 1])) * 3)
+    const rgb = habitatColor(pos[v * 3], pos[v * 3 + 2], pos[v * 3 + 1], slope)
+    c.setRGB(rgb[0] * shade[v], rgb[1] * shade[v], rgb[2] * (0.08 + 0.92 * shade[v]) + 0.04 * (1 - shade[v]), THREE.SRGBColorSpace)
+    colors[v * 3] = c.r
+    colors[v * 3 + 1] = c.g
+    colors[v * 3 + 2] = c.b
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   geo.computeBoundingSphere()

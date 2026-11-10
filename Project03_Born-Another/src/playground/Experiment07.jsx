@@ -7,13 +7,21 @@ import { HERO_HOME, INITIAL_SPECIES, pickHome, speciesFor } from './finalHabitat
 import { freshRemainsPoints } from './finalHabitat/Remains.jsx'
 import ArchiveDrawer from './finalHabitat/ArchiveDrawer.jsx'
 import { createSpecimen, loadArchive, removeSpecimen, saveSpecimen } from './finalHabitat/archive.js'
+import { createLifeLog, lifeEntry, logWords, sampleLife, SAMPLE_EVERY, setStage, summarizeLife } from './finalHabitat/lifeLog.js'
 import {
   CRYSTAL_PRESETS,
   crystallizationState,
   crystallizationTarget,
   stepCrystallization,
 } from './crystalForm/crystallization.js'
-import { parseEnvironmentalLanguage } from './languageAsEnvironment/parseEnvironmentalLanguage.js'
+import { interpretExpression } from './languageAsEnvironment/interpretClient.js'
+import {
+  composeEnvironment,
+  effectFromInterpretation,
+  influenceAt,
+  influenceLabels,
+  pruneEffects,
+} from './languageAsEnvironment/languageInfluence.js'
 import { EXP05_LIFE_SEED } from './finalForm/exploreLifeAdapter.js'
 import { kinCrystalLevel } from './finalHabitat/habitatKin.js'
 import './finalHabitat/habitat.css'
@@ -40,13 +48,36 @@ function clamp01(v) {
   return Math.min(1, Math.max(0, Number(v) || 0))
 }
 
-function EnvRow({ id, label, value, onChange }) {
+/**
+ * One environment slider. `influence` is how far the language effects have
+ * moved it from its manual base: shown as a cyan span (base → current) on
+ * the track and a signed delta beside the value.
+ */
+function EnvRow({ id, label, value, onChange, influence = 0 }) {
+  const moved = Math.abs(influence) >= 0.01
+  const base = Math.min(1, Math.max(0, value - influence))
+  const from = Math.min(base, value) * 100
+  const span = Math.abs(value - base) * 100
   return (
-    <label className="exp07-env__row" htmlFor={id}>
+    <label className={`exp07-env__row${moved ? ' is-moved' : ''}`} htmlFor={id}>
       <span className="exp07-env__head">
         <span>{label}</span>
-        <span className="exp07-env__value">{value.toFixed(2)}</span>
+        <span className="exp07-env__value">
+          {moved ? (
+            <em className="exp07-env__delta" title={`Your words moved it from ${base.toFixed(2)}`}>
+              {influence > 0 ? '+' : '−'}
+              {Math.abs(influence).toFixed(2)}
+            </em>
+          ) : null}
+          {value.toFixed(2)}
+        </span>
       </span>
+      <span className="exp07-env__track">
+        {moved ? (
+          <span className="exp07-env__influence" aria-hidden="true" style={{ left: `${from}%`, width: `${span}%` }}>
+            <i style={{ left: base < value ? '0%' : '100%' }} />
+          </span>
+        ) : null}
       <input
         id={id}
         type="range"
@@ -54,9 +85,10 @@ function EnvRow({ id, label, value, onChange }) {
         max={1}
         step={0.01}
         value={value}
-        aria-valuetext={`${label} ${value.toFixed(2)}`}
+        aria-valuetext={`${label} ${value.toFixed(2)}${moved ? `, moved ${influence > 0 ? 'up' : 'down'} ${Math.abs(influence).toFixed(2)} by your words` : ''}`}
         onChange={(event) => onChange(Number(event.target.value))}
       />
+      </span>
     </label>
   )
 }
@@ -111,8 +143,49 @@ function createWorld() {
   }
 }
 
+/**
+ * "Tell it something" field. Keeps its own text state so typing re-renders
+ * only this form, not the whole page (the 3D scene sits beside it).
+ */
+function SayForm({ reply, onSend }) {
+  const [message, setMessage] = useState('')
+  const onSubmit = (event) => {
+    event.preventDefault()
+    if (onSend(message)) setMessage('')
+  }
+  return (
+    <form className="exp07-say" onSubmit={onSubmit}>
+      {reply ? (
+        <p className={`exp07-say__reply is-${reply.tone}`} role="status" title={reply.source}>
+          {reply.text}
+          {reply.source ? <span className="exp07-say__source">via {reply.source}</span> : null}
+        </p>
+      ) : null}
+      <div className="exp07-say__field">
+        <svg className="exp07-say__icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" />
+        </svg>
+        <label htmlFor="exp07-say-input" className="exp07-sr">Tell the organism something about its environment</label>
+        <input
+          id="exp07-say-input"
+          type="text"
+          autoComplete="off"
+          placeholder="Tell it something…"
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+        />
+        <button type="submit" aria-label="Send">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 12L20 4l-6 16-2.5-6.5L4 12z" />
+          </svg>
+        </button>
+      </div>
+    </form>
+  )
+}
+
 export default function Experiment07({ title, description, autoGrow = false, opening = false }) {
-  const { life, seekToAge, setPlaying, setMoisture, setTurbulence, changeSeed } = useLifeEngine(EXP05_LIFE_SEED)
+  const { life, seekToAge, setPlaying, setMoisture, setMoistureAtStep, setTurbulence, changeSeed } = useLifeEngine(EXP05_LIFE_SEED)
   const vignetteRef = useRef(null)
   const [revealed, setRevealed] = useState(false)
   const [lingering, setLingering] = useState(false)
@@ -136,11 +209,13 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   const [archive, setArchive] = useState(() => loadArchive())
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [savedKey, setSavedKey] = useState(null)
+  /* World Final: each life's story while it lives (for its archive record). */
+  const logRef = useRef(null)
+  if (!logRef.current) logRef.current = createLifeLog()
   const focusKin = Boolean(focusId && focusId !== 'hero')
   const focusKinRef = useRef(focusKin)
   focusKinRef.current = focusKin
   const runTouchedRef = useRef(false)
-  const [message, setMessage] = useState('')
   const [reply, setReply] = useState(null)
   const [layersOpen, setLayersOpen] = useState(false)
   const [layers, setLayers] = useState({
@@ -165,6 +240,11 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   const crystalRef = useRef({ level: 0.42, rate: 0, target: 0 })
   const envRef = useRef({ temperature, moisture, turbulence })
   envRef.current = { temperature, moisture, turbulence }
+  /* Manual base of the water, and the live language effects on top of it. */
+  const baseEnvRef = useRef({ ...START_ENV })
+  const effectsRef = useRef([])
+  /* How far the words currently move each channel (for the sliders). */
+  const [langInfluence, setLangInfluence] = useState({ temperature: 0, moisture: 0, turbulence: 0 })
   const timeRef = useRef(0)
   const runningRef = useRef(running)
   runningRef.current = running
@@ -204,7 +284,7 @@ export default function Experiment07({ title, description, autoGrow = false, ope
       const env = envRef.current
       const target = crystallizationTarget(env)
       const prev = state.level
-      state.level = stepCrystallization(prev, target, { turbulence: env.turbulence, dt })
+      state.level = stepCrystallization(prev, target, { turbulence: env.turbulence, moisture: env.moisture, dt })
       state.target = target
       state.rate = dt > 0 ? (state.level - prev) / dt : 0
       if (now - lastUi > 150) {
@@ -227,6 +307,14 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   const heroAgeRef = useRef(opening ? WORLD_START_AGE : START_AGE)
   const deadRef = useRef(dead)
   deadRef.current = dead
+  /* Which life is which in the log: a slot, its generation and its seed. */
+  const heroKeyRef = useRef('')
+  heroKeyRef.current = `hero-${heroLine.generation}-${life.seed}`
+  const lifeKeyFor = useCallback((id) => {
+    if (!id || id === 'hero') return heroKeyRef.current
+    const info = worldRef.current?.kinInfo.get(id)
+    return info ? `${id}-${info.generation}-${info.seed}` : id
+  }, [])
   useEffect(() => {
     const age = life.age
     /* Follow a slider jump. Ignore the tiny step a replay quantizes backwards,
@@ -390,6 +478,42 @@ export default function Experiment07({ title, description, autoGrow = false, ope
     return () => window.clearInterval(id)
   }, [opening, focusKin, focusId])
 
+  /* World Final: once a second, note how every life is doing; while a life
+     is observed, keep a picture of it when first seen and when it starts to
+     crystallize. */
+  useEffect(() => {
+    if (!opening) return undefined
+    const pending = new Set()
+    const capture = (id, key, now, stage) => {
+      const tag = `${key}:${stage}`
+      if (pending.has(tag)) return
+      pending.add(tag)
+      worldRef.current?.requestSnapshot?.(id, 240).then((image) => {
+        if (image) setStage(logRef.current, key, now, stage, image)
+        else pending.delete(tag)
+      })
+    }
+    const tick = () => {
+      const w = worldRef.current
+      if (!w || w.phase === 'descent') return
+      const now = performance.now() / 1000
+      const log = logRef.current
+      const env = envRef.current
+      const entries = [['hero', heroKeyRef.current, crystalRef.current.level, deadRef.current]]
+      for (const [id, info] of w.kinInfo) entries.push([id, `${id}-${info.generation}-${info.seed}`, info.level, info.ended])
+      for (const [id, key, level, ended] of entries) {
+        const watched = w.focusId === id
+        const entry = sampleLife(log, key, now, { level, env, watched, ended, dt: SAMPLE_EVERY })
+        if (watched && entry.endedAt == null) {
+          if (!entry.stages.first && entry.watched >= 3) capture(id, key, now, 'first')
+          if (!entry.stages.crystallizing && level >= 0.55) capture(id, key, now, 'crystallizing')
+        }
+      }
+    }
+    const id = window.setInterval(tick, SAMPLE_EVERY * 1000)
+    return () => window.clearInterval(id)
+  }, [opening])
+
   /* Esc: skip the descent, or return from observing to free exploration. */
   useEffect(() => {
     if (!opening) return undefined
@@ -428,36 +552,113 @@ export default function Experiment07({ title, description, autoGrow = false, ope
     return () => window.clearTimeout(id)
   }, [reply])
 
+  /* Manual controls (sliders, presets) set the *base* water; language adds a
+     bounded, relaxing influence on top (see the loop below). The effective
+     value is what the sliders show and what every life receives. */
   const applyEnv = useCallback(
     ({ temperature: t, moisture: m, turbulence: u }) => {
-      if (Number.isFinite(t)) setTemperature(clamp01(t))
-      if (Number.isFinite(m)) setMoisture(clamp01(m))
-      if (Number.isFinite(u)) setTurbulence(clamp01(u))
+      const infl = influenceAt(effectsRef.current, performance.now() / 1000)
+      const base = baseEnvRef.current
+      if (Number.isFinite(t)) {
+        base.temperature = clamp01(t - infl.temperature)
+        setTemperature(clamp01(t))
+      }
+      if (Number.isFinite(m)) {
+        base.moisture = clamp01(m - infl.moisture)
+        setMoisture(clamp01(m))
+      }
+      if (Number.isFinite(u)) {
+        base.turbulence = clamp01(u - infl.turbulence)
+        setTurbulence(clamp01(u))
+      }
     },
     [setMoisture, setTurbulence],
   )
+  const setTemperatureManual = useCallback((v) => applyEnv({ temperature: v }), [applyEnv])
+  const setMoistureManual = useCallback((v) => applyEnv({ moisture: v }), [applyEnv])
+  const setTurbulenceManual = useCallback((v) => applyEnv({ turbulence: v }), [applyEnv])
 
+  /* Language influence → effective water, a few times a second (smooth,
+     bounded, and it relaxes back to the base when the words fade). */
+  useEffect(() => {
+    let wasActive = false
+    const tick = () => {
+      const now = performance.now() / 1000
+      effectsRef.current = pruneEffects(effectsRef.current, now)
+      const active = effectsRef.current.length > 0
+      if (!active && !wasActive) return
+      wasActive = active
+      const infl = influenceAt(effectsRef.current, now)
+      const env = composeEnvironment(baseEnvRef.current, infl)
+      const cur = envRef.current
+      const q = (v) => Math.round(v * 100) / 100
+      /* What the sliders show as "moved by your words": effective − base. */
+      const shown = {
+        temperature: q(q(env.temperature) - baseEnvRef.current.temperature),
+        moisture: q(q(env.moisture) - baseEnvRef.current.moisture),
+        turbulence: q(q(env.turbulence) - baseEnvRef.current.turbulence),
+      }
+      setLangInfluence((prev) =>
+        prev.temperature === shown.temperature && prev.moisture === shown.moisture && prev.turbulence === shown.turbulence ? prev : shown,
+      )
+      if (Math.abs(q(env.temperature) - cur.temperature) >= 0.01) setTemperature(q(env.temperature))
+      if (Math.abs(q(env.moisture) - cur.moisture) >= 0.01) setMoistureAtStep(q(env.moisture))
+      if (Math.abs(q(env.turbulence) - cur.turbulence) >= 0.01) setTurbulence(q(env.turbulence))
+    }
+    const id = window.setInterval(tick, 250)
+    return () => window.clearInterval(id)
+  }, [setMoistureAtStep, setTurbulence])
+
+  /* Free language → interpreter (one request per expression; the world keeps
+     running meanwhile) → one bounded effect on the water → life history. */
   const handleSend = useCallback(
-    (event) => {
-      event.preventDefault()
-      const text = message.trim()
+    (raw) => {
+      const text = raw.trim()
       if (!text) {
-        setReply({ tone: 'quiet', text: 'Type something for the organism to sense, like “a cold, wet night”.' })
-        return
+        setReply({ tone: 'quiet', text: 'Say anything — a memory, a feeling, the weather.' })
+        return false
       }
-      const parsed = parseEnvironmentalLanguage(text)
-      const imp = parsed.impulses ?? {}
-      if (parsed.applied) {
-        applyEnv({
-          temperature: temperature + (imp.temperature ?? 0),
-          moisture: moisture + (imp.moisture ?? 0),
-          turbulence: turbulence + (imp.disturbance ?? 0),
+      const saidAt = performance.now() / 1000
+      const envBefore = { ...envRef.current }
+      /* AGE of every life at this moment, by its log key. */
+      const ages = { [heroKeyRef.current]: Math.round(heroAgeRef.current * 1000) / 1000 }
+      for (const [id, info] of worldRef.current?.kinInfo ?? []) ages[`${id}-${info.generation}-${info.seed}`] = Math.round(info.age * 1000) / 1000
+      setReply({ tone: 'pending', text: 'The water is listening…' })
+      interpretExpression(text).then((interp) => {
+        const now = performance.now() / 1000
+        const effect = effectFromInterpretation(interp, now)
+        if (effect.active) effectsRef.current = [...pruneEffects(effectsRef.current, now), effect]
+        logWords(logRef.current, saidAt, {
+          text,
+          applied: effect.active,
+          impulses: { temperature: effect.deltas.temperature, moisture: effect.deltas.moisture, disturbance: effect.deltas.turbulence },
+          durationSeconds: effect.duration,
+          ages,
+          envBefore,
+          interpretation: {
+            temperatureDelta: interp.temperatureDelta,
+            moistureDelta: interp.moistureDelta,
+            turbulenceDelta: interp.turbulenceDelta,
+            intensity: interp.intensity,
+            confidence: interp.confidence,
+            durationSeconds: interp.durationSeconds,
+            emotionalTone: interp.emotionalTone,
+            semanticSummary: interp.semanticSummary,
+            provider: interp.meta?.provider ?? null,
+            model: interp.meta?.model ?? null,
+            fallback: interp.meta?.fallback?.reason ?? null,
+          },
         })
-      }
-      setReply({ tone: parsed.applied ? 'applied' : 'quiet', text: parsed.explanation })
-      setMessage('')
+        const labels = influenceLabels(effect.deltas)
+        setReply({
+          tone: effect.active ? 'applied' : 'quiet',
+          text: `${interp.semanticSummary}${labels.length ? ` ${labels.join(' · ')}` : ' The water stays as it is.'}`,
+          source: `${interp.meta?.provider ?? '?'}${interp.meta?.model ? ` / ${interp.meta.model}` : ''}${interp.meta?.fallback ? ` (fallback: ${interp.meta.fallback.reason})` : ''}`,
+        })
+      })
+      return true
     },
-    [message, temperature, moisture, turbulence, applyEnv],
+    [],
   )
 
   const toggleFullscreen = useCallback(() => {
@@ -473,9 +674,17 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   useEffect(() => {
     if (!revealed) setSavedKey(null)
   }, [revealed])
-  const saveToArchive = () => {
+  const saveToArchive = async () => {
     const kin = focusKin ? worldRef.current?.kinInfo.get(focusId) : null
+    const id = focusKin ? focusId : 'hero'
+    const key = lifeKeyFor(id)
+    const now = performance.now() / 1000
+    if (opening) lifeEntry(logRef.current, key, now)
+    const story = opening ? summarizeLife(logRef.current, key, now) : null
+    const image = opening ? await (worldRef.current?.requestSnapshot?.(id, 420) ?? null) : null
     const specimen = createSpecimen({
+      story,
+      image,
       fossil: revealFossil,
       species: revealSpecies,
       seed: kin ? kin.seed : life.seed,
@@ -521,6 +730,7 @@ export default function Experiment07({ title, description, autoGrow = false, ope
           world={opening ? worldRef : null}
           heroHome={heroLine.home}
           heroSpecies={heroLine.species}
+          archive={opening ? archive : null}
           className="exp07-viewport"
         />
         <div ref={vignetteRef} className="exp07-vignette" aria-hidden="true" />
@@ -582,9 +792,12 @@ export default function Experiment07({ title, description, autoGrow = false, ope
 
           <section className="exp07-env" aria-labelledby="exp07-env-label">
             <p id="exp07-env-label" className="exp07-panel__label">Environment</p>
-            <EnvRow id="exp07-temperature" label="Temperature" value={temperature} onChange={setTemperature} />
-            <EnvRow id="exp07-moisture" label="Moisture" value={moisture} onChange={setMoisture} />
-            <EnvRow id="exp07-turbulence" label="Turbulence" value={turbulence} onChange={setTurbulence} />
+            <EnvRow id="exp07-temperature" label="Temperature" value={temperature} onChange={setTemperatureManual} influence={langInfluence.temperature} />
+            <EnvRow id="exp07-moisture" label="Moisture" value={moisture} onChange={setMoistureManual} influence={langInfluence.moisture} />
+            <EnvRow id="exp07-turbulence" label="Turbulence" value={turbulence} onChange={setTurbulenceManual} influence={langInfluence.turbulence} />
+            {Math.abs(langInfluence.temperature) + Math.abs(langInfluence.moisture) + Math.abs(langInfluence.turbulence) >= 0.01 ? (
+              <p className="exp07-env__words" role="status">Your words are moving the water</p>
+            ) : null}
             <div className="exp07-presets" role="group" aria-label="Environment presets">
               {CRYSTAL_PRESETS.map((p) => (
                 <button key={p.id} type="button" onClick={() => applyEnv(p)}>
@@ -641,32 +854,7 @@ export default function Experiment07({ title, description, autoGrow = false, ope
           ) : null}
         </aside>
 
-        <form className="exp07-say" onSubmit={handleSend}>
-          {reply ? (
-            <p className={`exp07-say__reply is-${reply.tone}`} role="status">
-              {reply.text}
-            </p>
-          ) : null}
-          <div className="exp07-say__field">
-            <svg className="exp07-say__icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" />
-            </svg>
-            <label htmlFor="exp07-say-input" className="exp07-sr">Tell the organism something about its environment</label>
-            <input
-              id="exp07-say-input"
-              type="text"
-              autoComplete="off"
-              placeholder="Tell it something…"
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-            />
-            <button type="submit" aria-label="Send">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 12L20 4l-6 16-2.5-6.5L4 12z" />
-              </svg>
-            </button>
-          </div>
-        </form>
+        <SayForm reply={reply} onSend={handleSend} />
 
         <p className="exp07-keys" aria-hidden="true">
           <span>WASD · Explore</span>
@@ -688,10 +876,17 @@ export default function Experiment07({ title, description, autoGrow = false, ope
               max={1}
               step={0.005}
               value={view.age}
-              disabled={focusKin}
-              title={focusKin ? 'Observing is not control: this life keeps its own time' : undefined}
               aria-valuetext={`Age ${view.age.toFixed(2)}`}
-              onChange={(event) => seekToAge(Number(event.target.value), { resume: false })}
+              onChange={(event) => {
+                const age = Number(event.target.value)
+                if (focusKin) {
+                  /* Another life: move its own clock (the habitat sim applies it next frame). */
+                  worldRef.current?.kinControl?.setAge?.set(focusId, age)
+                  setKinView((v) => (v ? { ...v, age, ended: false } : v))
+                } else {
+                  seekToAge(age, { resume: false })
+                }
+              }}
             />
           </label>
           <div className="exp07-foot__right">

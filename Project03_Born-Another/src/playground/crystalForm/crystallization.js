@@ -56,11 +56,13 @@ export function crystallizationTarget({
 }
 
 /** Ease `level` toward `target` over `dt` seconds. */
-export function stepCrystallization(level, target, { turbulence = 0, dt = 0 } = {}) {
+export function stepCrystallization(level, target, { turbulence = 0, dt = 0, moisture } = {}) {
   const current = clamp01(level)
   if (!(dt > 0)) return current
   const goal = clamp01(target)
-  let rate = CRYSTAL_RATES.grow
+  /* Dry water crystallizes faster (optional: only when moisture is given). */
+  const dry = moisture === undefined ? 0 : smoothstep(0.5, 0.1, clamp01(moisture))
+  let rate = CRYSTAL_RATES.grow * (1 + 1.6 * dry)
   if (goal < current) {
     rate = clamp01(turbulence) > 0.4 ? CRYSTAL_RATES.fracture : CRYSTAL_RATES.melt
   }

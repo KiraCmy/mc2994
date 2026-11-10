@@ -361,8 +361,9 @@
   padding: 0.55rem 0.9rem;
   border: 1px solid var(--exp07-line);
   border-radius: 1rem;
-  background: rgba(120, 128, 146, 0.38);
-  backdrop-filter: blur(10px);
+  /* No backdrop-filter over the WebGL canvas: in Chrome/Safari on macOS it
+     makes the canvas flicker while the caret blinks or text changes. */
+  background: rgba(104, 112, 130, 0.62);
   font-size: 0.72rem;
   line-height: 1.5;
   color: var(--exp07-ink-soft);
@@ -381,8 +382,8 @@
   padding: 0 0.55rem 0 1.25rem;
   border: 1px solid var(--exp07-line-strong);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(14px);
+  /* Solid tint instead of backdrop-filter (macOS canvas flicker, see reply). */
+  background: rgba(120, 128, 146, 0.42);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
@@ -413,6 +414,12 @@
   font: inherit;
   font-size: 0.86rem;
   letter-spacing: 0.02em;
+  outline: none;
+}
+
+/* The pill border already lights up on focus (:focus-within below). */
+.exp07-immerse .exp07-say__field input:focus,
+.exp07-immerse .exp07-say__field input:focus-visible {
   outline: none;
 }
 
@@ -1213,4 +1220,98 @@
   .exp07-archive-toggle {
     animation: none;
   }
+}
+
+.exp07-archive__note a {
+  color: var(--exp07-ink-soft);
+}
+
+/* Who interpreted the words (provider / model, or the fallback). */
+.exp07-say__source {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+
+/* Language influence on the environment sliders (base → current). */
+.exp07-env__track {
+  position: relative;
+  display: block;
+}
+
+.exp07-env__influence {
+  position: absolute;
+  top: 50%;
+  height: 3px;
+  margin-top: -1.5px;
+  background: rgba(159, 216, 230, 0.9);
+  box-shadow: 0 0 8px rgba(159, 216, 230, 0.6);
+  pointer-events: none;
+  transition: left 0.25s linear, width 0.25s linear;
+}
+
+/* The manual base: where the water returns when the words fade. */
+.exp07-env__influence i {
+  position: absolute;
+  top: -4px;
+  width: 1px;
+  height: 11px;
+  background: rgba(159, 216, 230, 0.95);
+}
+
+.exp07-env__delta {
+  margin-right: 0.55em;
+  font-style: normal;
+  color: #9fd8e6;
+}
+
+.exp07-env__words {
+  margin: -0.2rem 0 0;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #9fd8e6;
+}
+
+/* A kept life resting in the underworld (label when near). */
+.exp07-remain {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  min-width: 10rem;
+  max-width: 16rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(244, 239, 230, 0.35);
+  background: rgba(20, 18, 28, 0.55);
+  color: #f4efe6;
+  text-align: center;
+  pointer-events: auto;
+  white-space: normal;
+}
+
+.exp07-remain p {
+  margin: 0;
+}
+
+.exp07-remain__name {
+  font-size: 0.6rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(244, 239, 230, 0.7);
+}
+
+.exp07-remain__words {
+  font-size: 0.85rem;
+  font-style: italic;
+  font-weight: 300;
+}
+
+.exp07-remain__link {
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #9fd8e6;
+  text-decoration: none;
 }

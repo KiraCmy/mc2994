@@ -92,6 +92,7 @@ const KinBody = memo(function KinBody({ org, life, slot, envRef, temperature, la
           colorB={visual.surface.colorB}
           rimColor={visual.surface.rimColor}
           useAgeClock={false}
+          occludedByBody
         />
       ) : null}
     </CrystalBody>
@@ -107,7 +108,7 @@ const KinBody = memo(function KinBody({ org, life, slot, envRef, temperature, la
  */
 export default function HabitatKin({ world = null, crystalRef, envRef, timeRef, heroRef, toneRef = null, temperature, moisture, turbulence, running, layers, crystalLevel }) {
   const environment = useMemo(() => ({ temperature, moisture, turbulence }), [temperature, moisture, turbulence])
-  const controlRef = useRef({ hold: new Set(), release: new Set() })
+  const controlRef = useRef({ hold: new Set(), release: new Set(), setAge: new Map() })
   if (world?.current) world.current.kinControl = controlRef.current
   const { popRef, snapshot, lives } = useHabitatKin({
     count: world ? WORLD_KIN_COUNT : KIN_COUNT,

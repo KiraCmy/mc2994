@@ -86,8 +86,84 @@ function habitatHeightFine(x, z, seed = HABITAT_SEED) {
 }
 
 /** Ground height at (x, z). Camera looks toward −z; the clearing sits at 0,0. */
+/**
+ * The underworld: one hole in the sand opening onto a cavern under the dunes
+ * (floor and ceiling are two more height fields; see caves.js). The hole is
+ * cut out of the ground mesh; inside it the "ground" is the cavern floor.
+ */
+export const UNDERWORLD = Object.freeze({
+  hole: Object.freeze({ x: -46, z: 26, r: 5.5, rim: 15 }),
+  centre: Object.freeze({ x: -57, z: 35 }),
+  radius: 34,
+  depth: 13,
+})
+
+const levels = new Map()
+function underworldLevels(seed) {
+  if (!levels.has(seed)) {
+    const { hole, depth } = UNDERWORLD
+    const rim = habitatHeightBase(hole.x, hole.z, seed)
+    levels.set(seed, { rim, floor: rim - depth })
+  }
+  return levels.get(seed)
+}
+
+/** Distance from the hole's centre. */
+export function holeDistance(x, z) {
+  return Math.hypot(x - UNDERWORLD.hole.x, z - UNDERWORLD.hole.z)
+}
+
+/**
+ * The opening's outline by angle: `inner` is the throat (where the wall has
+ * dropped through to the cavern), `lip` where the sand rolls over into it.
+ */
+export function holeShape(angle) {
+  const r = UNDERWORLD.hole.r
+  const n = 0.55 * Math.sin(3 * angle + 1.3) + 0.3 * Math.sin(5 * angle + 0.4) + 0.15 * Math.sin(8 * angle + 2.1)
+  const m = 0.5 * Math.sin(2 * angle + 0.7) + 0.5 * Math.sin(7 * angle + 2.9)
+  const inner = r * (1 + 0.15 * n)
+  return { inner, lip: inner + 2.3 + 0.7 * m }
+}
+
+/** Ground mesh is cut inside `cut`; the throat mesh reaches out to `outer`. */
+export const THROAT = Object.freeze({ cut: UNDERWORLD.hole.r + 4.2, outer: UNDERWORLD.hole.r + 6 })
+
+export function inHole(x, z) {
+  return holeDistance(x, z) < UNDERWORLD.hole.r
+}
+
+/** Cavern floor height (gentle drifts of sand). */
+export function underworldFloor(x, z, seed = HABITAT_SEED) {
+  return underworldLevels(seed).floor + fbm2(seed + 301, x * 0.07, z * 0.07, { octaves: 3 }) * 1.1
+}
+
+/**
+ * The sand surface, without the hole: dunes, easing to a level rim that
+ * slumps gently toward the opening.
+ */
+export function habitatSurfaceHeight(x, z, seed = HABITAT_SEED) {
+  const fine = habitatHeightFine(x, z, seed)
+  let h = habitatHeightBase(x, z, seed) + fine
+  const { hole } = UNDERWORLD
+  const d = holeDistance(x, z)
+  if (d < hole.rim + 4) {
+    const { rim } = underworldLevels(seed)
+    const k = 1 - smoothstep(hole.rim * 0.55, hole.rim + 4, d)
+    h += (rim + fine * 0.4 - h) * k
+    /* The sand funnels toward the opening, drawn in along spiral grooves. */
+    const g = 1 - smoothstep(hole.r, hole.rim + 2, d)
+    h -= 3.2 * g * g
+    const a = Math.atan2(z - hole.z, x - hole.x)
+    const crest = Math.pow(0.5 + 0.5 * Math.sin(a * 7 - Math.log(Math.max(d, 1)) * 7.5), 2.5)
+    h += 0.3 * (crest - 0.3) * smoothstep(hole.r + 1, hole.r + 5, d) * (1 - smoothstep(hole.rim - 3, hole.rim + 5, d))
+  }
+  return h
+}
+
+/** Ground height under the sky: the sand, or — in the hole — the cavern floor. */
 export function habitatHeight(x, z, seed = HABITAT_SEED) {
-  return habitatHeightBase(x, z, seed) + habitatHeightFine(x, z, seed)
+  if (inHole(x, z)) return underworldFloor(x, z, seed)
+  return habitatSurfaceHeight(x, z, seed)
 }
 
 /** Translucent veil coverage 0..1 for layer 0 / 1 (sheets grow with distance). */
@@ -101,7 +177,8 @@ export function habitatVeil(x, z, seed = HABITAT_SEED, layer = 0) {
     smoothstep(layer ? 0.05 : -0.1, 0.45, n) *
       (0.55 + 0.45 * streak) *
       smoothstep(1.4, 3, r) *
-      (1 - smoothstep(HABITAT_VEIL_RADIUS * 0.6, HABITAT_VEIL_RADIUS * 0.95, r)),
+      (1 - smoothstep(HABITAT_VEIL_RADIUS * 0.6, HABITAT_VEIL_RADIUS * 0.95, r)) *
+      smoothstep(THROAT.outer, THROAT.outer + 4, holeDistance(x, z)),
   )
 }
 
@@ -110,7 +187,7 @@ export function habitatVeilHeight(x, z, seed = HABITAT_SEED, layer = 0) {
   const r = Math.hypot(x, z)
   const swell = 0.5 + 0.5 * fbm2(seed + 91 + layer * 7, x * 0.25, z * 0.25, { octaves: 2 })
   const lift = ((layer ? 0.16 : 0.06) + swell * (layer ? 0.32 : 0.18)) * (1 + r * 0.025)
-  return Math.max(habitatHeight(x, z, seed) + 0.02 + layer * 0.02, habitatHeightBase(x, z, seed) + lift)
+  return Math.max(habitatSurfaceHeight(x, z, seed) + 0.02 + layer * 0.02, habitatHeightBase(x, z, seed) + lift)
 }
 
 /** Normal by central differences (for placing growths upright-ish). */

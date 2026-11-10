@@ -113,6 +113,11 @@ export default function ExploreLifeScatter({
    * at different life stages share one canvas (Exp04 Population).
    */
   useAgeClock = true,
+  /**
+   * false (default): petals draw over everything. true: the body occludes
+   * far-side petals — needs a body that writes depth.
+   */
+  occludedByBody = false,
 }) {
   const meshRefs = useRef([])
   const lifeRef = useRef(life)
@@ -211,11 +216,11 @@ export default function ExploreLifeScatter({
         uniforms,
         transparent: true,
         depthWrite: false,
-        depthTest: false,
+        depthTest: occludedByBody,
         side: THREE.DoubleSide,
         toneMapped: false,
       }),
-    [uniforms],
+    [uniforms, occludedByBody],
   )
 
   const scratch = useMemo(

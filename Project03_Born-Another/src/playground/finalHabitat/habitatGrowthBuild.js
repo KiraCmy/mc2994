@@ -25,6 +25,7 @@ import {
   orientAlong,
   PRISM_HEIGHT,
 } from './crystalShapes.js'
+import { EXPLORE_SITES } from './exploreSites.js'
 
 const _m = new THREE.Matrix4()
 const _q = new THREE.Quaternion()
@@ -47,7 +48,9 @@ export function buildOutcrops() {
   const r = habitatRng(HABITAT_SEED + 202)
   const crystals = []
   const beads = []
-  for (const o of OUTCROPS) {
+  /* The clearing's own outcrops, then the places scattered for exploring. */
+  const clusters = [...OUTCROPS, ...EXPLORE_SITES.filter((site) => site.outcrop && site.outcrop.style !== 'ember').map((site) => site.outcrop)]
+  for (const o of clusters) {
     const n = habitatNormal(o.x, o.z)
     const count = Math.round(o.count * 1.4)
     for (let i = 0; i < count; i++) {
@@ -90,7 +93,7 @@ export function buildOutcrops() {
       }
     }
     /* frost-flower beads where the cluster meets the sand */
-    const rosettes = Math.round(o.count * 2.6)
+    const rosettes = Math.round(o.count * (o.rosettes ?? 2.6))
     for (let k = 0; k < rosettes; k++) {
       const ang = r() * Math.PI * 2
       const rad = Math.pow(r(), 0.6) * o.spread * 1.35
@@ -200,6 +203,18 @@ export function createResidueResources() {
     const [x, z, rad] = near(2.2, 40)
     blobList.push({ x, z, size: (0.02 + Math.pow(r(), 2) * 0.09) * (1 + rad * 0.03), squash: 0.4 + r() * 0.2 })
   }
+  /* Residue at the places to find (see exploreSites.js). */
+  const around = (site) => {
+    const ang = r() * Math.PI * 2
+    const rad = Math.sqrt(r()) * site.radius
+    return [site.x + Math.cos(ang) * rad, site.z + Math.sin(ang) * rad]
+  }
+  for (const site of EXPLORE_SITES) {
+    for (let i = 0; i < site.residue.blobs; i++) {
+      const [x, z] = around(site)
+      blobList.push({ x, z, size: (0.05 + Math.pow(r(), 2) * 0.18) * site.residue.size, squash: 0.4 + r() * 0.25 })
+    }
+  }
   const blobs = instanced(blobGeo, blobMat, blobList, (b) => {
     _q.identity()
     _p.set(b.x, habitatHeight(b.x, b.z) + b.size * b.squash * 0.35, b.z)
@@ -219,6 +234,19 @@ export function createResidueResources() {
       const z = cz + Math.sin(ba) * ring * radius
       const size = radius * (b === 0 ? 0.45 : 0.2 + r() * 0.2)
       beadList.push({ x, z, size })
+    }
+  }
+  for (const site of EXPLORE_SITES) {
+    for (let k = 0; k < site.residue.beadClusters; k++) {
+      const [cx, cz] = around(site)
+      const radius = (0.04 + r() * 0.06) * site.residue.size
+      const cnt = 4 + Math.floor(r() * 6)
+      for (let b = 0; b < cnt; b++) {
+        const ring = b === 0 ? 0 : Math.sqrt(r())
+        const ba = r() * Math.PI * 2
+        const size = radius * (b === 0 ? 0.45 : 0.2 + r() * 0.2)
+        beadList.push({ x: cx + Math.cos(ba) * ring * radius, z: cz + Math.sin(ba) * ring * radius, size })
+      }
     }
   }
   const beadGeo = createBeadGeometry()
@@ -259,6 +287,12 @@ export function createResidueResources() {
   for (let i = 0; i < 140; i++) {
     const [x, z, rad] = near(1.8, 36)
     flakeList.push({ x, z, size: (0.05 + Math.pow(r(), 2) * 0.2) * (1 + rad * 0.03), yaw: r() * Math.PI * 2, tilt: (r() - 0.5) * 0.5 })
+  }
+  for (const site of EXPLORE_SITES) {
+    for (let i = 0; i < site.residue.flakes; i++) {
+      const [x, z] = around(site)
+      flakeList.push({ x, z, size: (0.08 + Math.pow(r(), 2) * 0.3) * site.residue.size, yaw: r() * Math.PI * 2, tilt: (r() - 0.5) * 0.5 })
+    }
   }
   const euler = new THREE.Euler()
   const flakes = instanced(flakeGeo, flakeMat, flakeList, (f) => {

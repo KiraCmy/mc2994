@@ -110,6 +110,19 @@ export function useHabitatKin({ count = 6, playing = true, environment = POPULAT
       ) {
         pop = setPopulationEnvironment(pop, rawEnv)
       }
+      /* The viewer dragged a life's growth bar: put it at that age (back to
+         life if it had ended). */
+      const ageControl = controlRef?.current?.setAge
+      if (ageControl?.size) {
+        for (const org of pop.organisms) {
+          if (!ageControl.has(org.id)) continue
+          const a = Math.max(0, Math.min(KIN_HOLD_AGE - 1e-3, Number(ageControl.get(org.id)) || 0))
+          org.age = a
+          org.ended = false
+          org.stage = stageForAge(a)
+        }
+        ageControl.clear()
+      }
       if (o.playing) {
         const before = pop.step
         pop = stepPopulation(pop, elapsed + ageAccum, 6)

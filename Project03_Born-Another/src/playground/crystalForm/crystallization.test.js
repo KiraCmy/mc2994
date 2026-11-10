@@ -57,3 +57,9 @@ test('state labels follow level and rate', () => {
   assert.equal(crystallizationState(0.5, -0.05, 0.1), 'Thawing')
   assert.equal(crystallizationState(0.5, -0.05, 0.8), 'Fracturing')
 })
+
+test('dry water crystallizes faster', () => {
+  const wet = stepCrystallization(0, 1, { dt: 1, moisture: 0.8 })
+  const dry = stepCrystallization(0, 1, { dt: 1, moisture: 0.1 })
+  assert.ok(dry > wet * 1.4)
+})

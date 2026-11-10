@@ -23,6 +23,9 @@ const PlaygroundPage = lazy(() =>
 const WorldFinalPage = lazy(() =>
   import('./worldFinal/index.js').then((mod) => ({ default: mod.WorldFinalPage })),
 )
+const ArchivePage = lazy(() =>
+  import('./archive/index.js').then((mod) => ({ default: mod.ArchivePage })),
+)
 const MemoryLabPage = lazy(() =>
   import('./memoryLab/index.js').then((mod) => ({ default: mod.MemoryLabPage })),
 )
@@ -806,6 +809,16 @@ export default function App() {
           <WorldFinalPage
             header={<SiteHeader modeId={modeId} onSelectMode={selectMode} />}
           />
+        </Suspense>
+      </main>
+    )
+  }
+
+  if (modeId === 'archive') {
+    return (
+      <main className="stage">
+        <Suspense fallback={null}>
+          <ArchivePage modeId={modeId} onSelectMode={selectMode} />
         </Suspense>
       </main>
     )

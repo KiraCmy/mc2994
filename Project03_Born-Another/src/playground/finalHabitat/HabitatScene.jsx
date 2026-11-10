@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { OrbitControls } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import WebGLCanvas from '../../WebGLCanvas.jsx'
 import { resolveRenderDpr, STUDIES_MAX_PIXELS } from '../../renderBudget.js'
 import { syncAgeClock } from '../../ageClock.js'
+import { cutOutPixels } from './snapshotCutout.js'
 import CrystalBody from './CrystalBody.jsx'
 import ExploreLifeScatter from '../finalForm/ExploreLifeScatter.jsx'
 import { mapLifeToExploreVisual } from '../finalForm/exploreLifeAdapter.js'
@@ -18,6 +19,8 @@ import { DescentCamera, FocusRig, WaterSurface, WitnessClock } from './WorldOpen
 import { descentPose, HERO_HOME, INITIAL_SPECIES } from './worldOpening.js'
 import HabitatTerrain from './HabitatTerrain.jsx'
 import CrystalSpires from './CrystalSpires.jsx'
+import Caves from './Caves.jsx'
+import { underworldSpan } from './caves.js'
 import { pushOutOfSpires, spireColliders } from './crystalSpires.js'
 import {
   HABITAT_FOG,
@@ -51,7 +54,7 @@ function ExploreKeys({ world = null }) {
   const controls = useThree((s) => s.controls)
   const keys = useRef({})
   const tmp = useMemo(
-    () => ({ fwd: new THREE.Vector3(), right: new THREE.Vector3(), want: new THREE.Vector3(), vel: new THREE.Vector3(), step: new THREE.Vector3() }),
+    () => ({ fwd: new THREE.Vector3(), right: new THREE.Vector3(), want: new THREE.Vector3(), vel: new THREE.Vector3(), step: new THREE.Vector3(), last: null }),
     [],
   )
 
@@ -169,13 +172,32 @@ function ExploreKeys({ world = null }) {
       camera.position.add(step)
       controls?.target?.add(step)
     }
-    /* Stay above the sand, below the sky, inside the world (every frame, so
-       orbiting or looking can never sink the camera into a dune). */
-    const ground = habitatHeight(camera.position.x, camera.position.z)
-    const lift = Math.max(0, ground + 0.5 - camera.position.y) - Math.max(0, camera.position.y - (ground + 90))
-    if (lift) {
-      camera.position.y += lift
-      if (controls?.target) controls.target.y += lift
+    /* Under the sand (World Final underworld): stay between the cavern's
+       floor and ceiling; a wall or pillar sends you back where you were. */
+    let span = w ? underworldSpan(camera.position.x, camera.position.y, camera.position.z) : null
+    if (span && span.ceiling - span.floor < 1.4 && tmp.last) {
+      step.set(tmp.last.x - camera.position.x, 0, tmp.last.z - camera.position.z)
+      camera.position.add(step)
+      controls?.target?.add(step)
+      span = underworldSpan(camera.position.x, camera.position.y, camera.position.z)
+    }
+    if (span) {
+      const lo = span.floor + 0.5
+      const hi = Math.max(lo, span.ceiling - 0.45)
+      const fix = Math.max(0, lo - camera.position.y) - Math.max(0, camera.position.y - hi)
+      if (fix) {
+        camera.position.y += fix
+        if (controls?.target) controls.target.y += fix
+      }
+    } else {
+      /* Stay above the sand, below the sky, inside the world (every frame, so
+         orbiting or looking can never sink the camera into a dune). */
+      const ground = habitatHeight(camera.position.x, camera.position.z)
+      const lift = Math.max(0, ground + 0.5 - camera.position.y) - Math.max(0, camera.position.y - (ground + 90))
+      if (lift) {
+        camera.position.y += lift
+        if (controls?.target) controls.target.y += lift
+      }
     }
     if (w) {
       const [px, pz] = pushOutOfSpires([camera.position.x, camera.position.y, camera.position.z], SPIRE_COLLIDERS)
@@ -193,6 +215,8 @@ function ExploreKeys({ world = null }) {
       controls?.target?.add(step)
     }
     controls?.update?.()
+    tmp.last = tmp.last ?? new THREE.Vector3()
+    tmp.last.copy(camera.position)
   })
   return null
 }
@@ -247,6 +271,67 @@ function SpecimenLeader({ bodyRef, overlayRef, world = null }) {
   return null
 }
 
+/**
+ * World Final: pictures of a life for its archive record. Anyone may call
+ * `world.current.requestSnapshot(id, px)`; the next frame, right after it is
+ * rendered, the life is cropped out of the canvas (square, around its body)
+ * and handed back as a small data URL (or null if it is not in view).
+ */
+function SnapshotTaker({ world }) {
+  const { gl, camera } = useThree()
+  const tmp = useMemo(() => ({ c: new THREE.Vector3(), e: new THREE.Vector3(), b: new THREE.Vector3() }), [])
+  useEffect(() => {
+    const w = world.current
+    w.snapshotQueue = []
+    w.requestSnapshot = (id, px = 360) => new Promise((resolve) => w.snapshotQueue.push({ id, px, resolve }))
+    return () => {
+      for (const job of w.snapshotQueue ?? []) job.resolve(null)
+      w.snapshotQueue = []
+      w.requestSnapshot = null
+    }
+  }, [world])
+  /* Priority 2: after HabitatPost has drawn this frame (priority 1), while the
+     drawing buffer still holds it. */
+  useFrame(() => {
+    const w = world.current
+    if (!w.snapshotQueue?.length) return
+    const src = gl.domElement
+    for (const job of w.snapshotQueue.splice(0)) {
+      try {
+        const body = w.bodies.get(job.id)
+        if (!body || !Number.isFinite(body.x)) {
+          job.resolve(null)
+          continue
+        }
+        tmp.b.set(body.x, body.y, body.z)
+        tmp.c.copy(tmp.b).project(camera)
+        if (tmp.c.z > 1 || Math.abs(tmp.c.x) > 1.2 || Math.abs(tmp.c.y) > 1.2) {
+          job.resolve(null)
+          continue
+        }
+        tmp.e.setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(body.r * 1.55).add(tmp.b).project(camera)
+        const cx = (tmp.c.x * 0.5 + 0.5) * src.width
+        const cy = (-tmp.c.y * 0.5 + 0.5) * src.height
+        const rad = Math.max(24, Math.abs(tmp.e.x - tmp.c.x) * 0.5 * src.width)
+        const out = document.createElement('canvas')
+        out.width = out.height = job.px
+        const ctx = out.getContext('2d', { willReadFrequently: true })
+        ctx.drawImage(src, cx - rad, cy - rad, rad * 2, rad * 2, 0, 0, job.px, job.px)
+        /* Lift the life out of its water (transparent background). */
+        const pixels = ctx.getImageData(0, 0, job.px, job.px)
+        cutOutPixels(pixels.data, job.px)
+        ctx.putImageData(pixels, 0, 0)
+        let url = out.toDataURL('image/webp', 0.82)
+        if (!url.startsWith('data:image/webp')) url = out.toDataURL('image/png')
+        job.resolve(url)
+      } catch {
+        job.resolve(null)
+      }
+    }
+  }, 2)
+  return null
+}
+
 function HabitatClock({ timeRef, runningRef, age }) {
   useEffect(() => {
     syncAgeClock(age)
@@ -268,7 +353,12 @@ function PixelScale({ children }) {
  * forest floor. Everything reads the same crystalRef / envRef so the body and
  * the habitat answer one medium.
  */
-export default function HabitatScene({
+/* Memoized: the page re-renders on every keystroke in the "Tell it something"
+   field; without this the whole 3D tree re-rendered per key and frames dropped
+   (visible as flicker while typing). */
+export default memo(HabitatScene)
+
+function HabitatScene({
   life,
   crystalRef,
   envRef,
@@ -287,6 +377,8 @@ export default function HabitatScene({
   /** World Final lineage: where the hero lives now and what it is. */
   heroHome = null,
   heroSpecies = null,
+  /** Kept specimens (World Final): their remains rest in the underworld. */
+  archive = null,
   className = 'exp07-viewport',
 }) {
   const dpr = useDpr()
@@ -339,6 +431,7 @@ export default function HabitatScene({
       {world ? <WaterSurface world={world} groundY={GROUND_Y} /> : null}
       {world ? <RemainsField world={world} /> : null}
       {world ? <CrystalSpires /> : null}
+      {world ? <Caves crystalRef={crystalRef} world={world} archive={archive} /> : null}
       <HabitatSky toneRef={toneRef} />
       <HabitatLights toneRef={toneRef} />
       <PixelScale>
@@ -411,6 +504,7 @@ export default function HabitatScene({
               colorA={KIN_TINTS[0].petal}
               colorB={visual.surface.colorB}
               rimColor={visual.surface.rimColor}
+              occludedByBody
             />
           ) : null}
         </CrystalBody>
@@ -435,6 +529,7 @@ export default function HabitatScene({
       {world ? <DescentCamera world={world} groundY={GROUND_Y} /> : null}
       {world ? <FocusRig world={world} overlayRef={overlayRef} /> : null}
       <HabitatPost bloomStrength={layers?.bloom === false ? 0 : 0.12} />
+      {world ? <SnapshotTaker world={world} /> : null}
     </WebGLCanvas>
   )
 }
