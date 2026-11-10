@@ -335,6 +335,10 @@ export function createEmberMaterial() {
 
 const TINTS = ['#ffffff', '#ffeee2', '#ffe4d2', '#fbeef4', '#f4f0ff', '#fff1e4'].map((h) => new THREE.Color(h))
 const TINT_WEIGHTS = [0.24, 0.24, 0.16, 0.14, 0.12, 0.1]
+export function emberTintFor(t) {
+  return tintFor(t)
+}
+
 function tintFor(t) {
   let acc = 0
   for (let i = 0; i < TINTS.length; i++) {

@@ -9,6 +9,9 @@ import { createCaveResources } from './caveGeometry.js'
 const CAVE_FOG = new THREE.Color('#2b2735')
 const MAX_REMAINS = 40
 const NEAR = 6
+const _c = new THREE.Vector3()
+const _e = new THREE.Vector3()
+const _right = new THREE.Vector3()
 
 /** `?cave=hole` (at the rim) or `?cave=inside` (below): start exploring there. */
 function requestedPose() {
@@ -260,6 +263,7 @@ function KeptRemains({ entries }) {
   useEffect(() => () => glow.dispose(), [glow])
 
   const refs = useRef([])
+  const tagRef = useRef(null)
   const [near, setNear] = useState(-1)
   useFrame((state) => {
     let best = -1
@@ -277,6 +281,15 @@ function KeptRemains({ entries }) {
       }
     })
     if (best !== near) setNear(best)
+    /* The tag's leader starts at the edge of the remains: its on-screen radius. */
+    const g = best >= 0 ? refs.current[best] : null
+    if (g && tagRef.current) {
+      _right.setFromMatrixColumn(camera.matrixWorld, 0)
+      _c.copy(g.position).project(camera)
+      _e.copy(g.position).addScaledVector(_right, 0.8).project(camera)
+      const px = Math.abs(_e.x - _c.x) * state.size.width * 0.5
+      tagRef.current.style.setProperty('--r', `${Math.min(220, px).toFixed(1)}px`)
+    }
   })
 
   const open = (entry) => window.open(`${window.location.pathname}#archive/${encodeURIComponent(entry.key)}`, '_blank', 'noopener')
@@ -299,12 +312,16 @@ function KeptRemains({ entries }) {
         )
       })}
       {near >= 0 && shown[near] ? (
-        <Html position={[niches[near][0], niches[near][1] + 1.5, niches[near][2]]} center zIndexRange={[20, 0]}>
-          <div className="exp07-remain">
-            <p className="exp07-remain__name">{shown[near].name}</p>
-            <p className="exp07-remain__words">{lastWords(shown[near]) ? `“${lastWords(shown[near])}”` : 'no words'}</p>
-            <a className="exp07-remain__link" href={`#archive/${encodeURIComponent(shown[near].key)}`} target="_blank" rel="noopener">
-              Archive ↗
+        <Html position={niches[near]} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
+          {/* A leader drawn out from the remains, then a small white-ruled tag. */}
+          <div className="exp07-tag" ref={tagRef} key={shown[near].key}>
+            <span className="exp07-tag__dot" />
+            <span className="exp07-tag__lead" />
+            <span className="exp07-tag__run" />
+            <a className="exp07-tag__box" href={`#archive/${encodeURIComponent(shown[near].key)}`} target="_blank" rel="noopener">
+              <span className="exp07-tag__name">{shown[near].name}</span>
+              <span className="exp07-tag__words">{lastWords(shown[near]) ? `“${lastWords(shown[near])}”` : 'no words'}</span>
+              <span className="exp07-tag__link">Archive ↗</span>
             </a>
           </div>
         </Html>
@@ -330,7 +347,7 @@ export default function Caves({ crystalRef, world = null, archive = [] }) {
   const baseExposure = useRef(null)
   const pos = useMemo(() => [0, 0, 0], [])
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     /* Wait for the opening hand-over to settle before taking the camera. */
     if (jump.current && world?.current?.phase === 'explore' && !world.current.focusId && controls?.enabled !== false) settled.current += delta
     else settled.current = 0
@@ -353,10 +370,16 @@ export default function Caves({ crystalRef, world = null, archive = [] }) {
       if ('density' in scene.fog) scene.fog.density *= 1 + 1.6 * m
       scene.fog.color.lerp(CAVE_FOG, 0.7 * m)
     }
-    gl.toneMappingExposure = baseExposure.current * (1 - 0.3 * m)
+    /* Underground darker; while a life is observed, a little darker too (FocusStudio). */
+    gl.toneMappingExposure = baseExposure.current * (1 - 0.3 * m) * (1 - 0.16 * (world?.current?.focusDim ?? 0))
     const level = crystalRef?.current?.level ?? 0
-    res.crystalMat.emissiveIntensity = 0.3 + 0.35 * level + 0.3 * m
-    res.ceilingMat.emissiveIntensity = 0.25 + 0.25 * m
+    /* The cavern's druses glow a little more as the water freezes. */
+    res.emberMat.userData.uniforms.uEmberGlow.value = 1 + level * 0.5
+    res.lilacMat.emissiveIntensity = 0.06 + 0.06 * level
+    /* Oil-film skin: sparkles move with the light. */
+    const t = state.clock.elapsedTime
+    res.floorMat.userData.uniforms.uTime.value = t
+    res.ceilingMat.userData.uniforms.uTime.value = t
   })
 
   return (

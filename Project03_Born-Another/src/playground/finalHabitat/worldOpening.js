@@ -37,7 +37,7 @@ export const WORLD_KIN_COUNT = 3
 
 /* --------------------------------------------------------------- descent */
 
-export const DESCENT_SECONDS = 14
+export const DESCENT_SECONDS = 22
 /** Height of the water surface above the clearing. */
 export const SURFACE_HEIGHT = 52
 /** Seconds after landing over which the haze thins to the normal water. */
@@ -50,20 +50,25 @@ export const ARRIVAL = Object.freeze([-2, 30])
  *  close to the eye instead of swinging around the far clearing). */
 export const ARRIVAL_LOOK = 16
 
-/** Exploration pose the descent hands over to: a little above the dunes,
- *  looking out toward the clearing with a gentle downward gaze. */
+/** Exploration pose the descent hands over to: low over the dunes, looking
+ *  across the clearing and a little up, so the lower part of the sun sits
+ *  in the top of the frame. */
 export function explorePose(groundY, groundAt = habitatHeight) {
   const [x, z] = ARRIVAL
   const local = groundAt ? groundAt(x, z) : groundY
-  const y = Math.max(groundY + 4.6, local + 2.4)
-  let dx = HERO_HOME[0] - x
-  let dz = HERO_HOME[1] - z
-  const len = Math.hypot(dx, dz) || 1
-  dx /= len
-  dz /= len
+  const y = Math.max(groundY + 3.2, local + 1.7)
+  const heroYaw = Math.atan2(HERO_HOME[0] - x, -(HERO_HOME[1] - z))
+  /* Sun sits up and to the right of the clearing (LIGHT_DIR). Yaw most of
+     the way toward it without losing the lives ahead. */
+  const sunYaw = Math.atan2(0.62, 0.62)
+  /* Landing view: the lives ahead near the centre, the sun's glow up in the
+     top-right corner, the near dunes filling the bottom of the frame. */
+  const yaw = heroYaw + Math.max(-0.14, Math.min(0.14, sunYaw - heroYaw))
+  const pitch = 0.07
+  const d = dirFrom(yaw, pitch)
   return {
     position: [x, y, z],
-    target: [x + dx * ARRIVAL_LOOK, y - ARRIVAL_LOOK * 0.07, z + dz * ARRIVAL_LOOK],
+    target: [x + d[0] * ARRIVAL_LOOK, y + d[1] * ARRIVAL_LOOK, z + d[2] * ARRIVAL_LOOK],
   }
 }
 
@@ -85,23 +90,59 @@ function dirFrom(yaw, pitch) {
 export function descentPose(t, groundY) {
   const end = explorePose(groundY)
   const a = dirAngles(end.position, end.target)
-  const s = clamp01(t / DESCENT_SECONDS)
-  const sink = smoother(s)
+  /* One continuous sink. The gaze starts a little upward and tips down with
+     the fall, so the light overhead is just what the descent passes through. */
+  const sink = smoother(clamp01(t / DESCENT_SECONDS))
   const position = [
-    lerp(end.position[0] + 3, end.position[0], sink),
-    lerp(groundY + SURFACE_HEIGHT - 13, end.position[1], sink),
-    lerp(end.position[2] + 9, end.position[2], sink),
+    lerp(end.position[0] + 2.2, end.position[0], sink),
+    lerp(groundY + SURFACE_HEIGHT - 12, end.position[1], sink),
+    lerp(end.position[2] + 5, end.position[2], sink),
   ]
-  const look = smooth(0.06, 0.74, s)
-  /* Not staring straight up: a tilted look through the water toward the
-     light, so the surface reads as soft glow, never as a pattern. */
-  const pitch = lerp(0.62, a.pitch, look)
-  const yaw = lerp(a.yaw + 0.5, a.yaw, smooth(0.05, 0.95, s))
+  const pitch = lerp(0.46, a.pitch, sink)
+  const yaw = lerp(a.yaw + 0.28, a.yaw, sink)
   const d = dirFrom(yaw, pitch)
   return {
     position,
     target: [position[0] + d[0] * a.len, position[1] + d[1] * a.len, position[2] + d[2] * a.len],
     depth: 1 - sink,
+  }
+}
+
+/* --------------------------------------------------------------- entrance */
+
+/** Cinematic dark-to-world passage, on the same clock as the descent. */
+export const ENTRANCE_SECONDS = 18
+
+/** Quiet lines. Each eases in, holds, then eases out before the next.
+ *  The last one is gone while the world is still mostly covered. */
+export const ENTRANCE_LINES = Object.freeze([
+  Object.freeze({ text: 'to encounter', in: [2.2, 3.6], out: [4.8, 6.2] }),
+  Object.freeze({ text: 'to know', in: [6.7, 8.0], out: [8.8, 10.1] }),
+  Object.freeze({ text: 'to remember', in: [10.5, 11.7], out: [12.2, 13.4] }),
+])
+
+function windowOpacity(t, inn, out) {
+  if (t <= inn[0] || t >= out[1]) return 0
+  if (t < inn[1]) return smooth(inn[0], inn[1], t)
+  if (t <= out[0]) return 1
+  return 1 - smooth(out[0], out[1], t)
+}
+
+/**
+ * Cover at `t` seconds.
+ *  night — the black sheet. 1 is pure dark; it lifts to reveal the teal wash.
+ *  veil  — the wash itself. 1 hides the world; 0 leaves the habitat untouched.
+ * Phrases each fade in and out. At most one is visible, and the last is gone
+ * while the world is still mostly covered.
+ */
+export function entranceCue(t) {
+  const x = Math.max(0, Number(t) || 0)
+  const night = x >= 8.4 ? 0 : 1 - smooth(1.3, 8.4, x)
+  const veil = x >= ENTRANCE_SECONDS ? 0 : 1 - smooth(9.2, ENTRANCE_SECONDS, x)
+  return {
+    night,
+    veil,
+    phrases: ENTRANCE_LINES.map((line) => windowOpacity(x, line.in, line.out)),
   }
 }
 

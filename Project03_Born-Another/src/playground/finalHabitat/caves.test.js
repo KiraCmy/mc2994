@@ -48,3 +48,20 @@ test('underground span, depth, and niches', () => {
   /* Newer first, nearer the hole. */
   assert.ok(holeDistance(niches[0][0], niches[0][2]) < holeDistance(niches.at(-1)[0], niches.at(-1)[2]))
 })
+
+test('cavern druses: both surface kinds, on floor, walls and vault, clear of the hole and the remains', async () => {
+  const { underworldClusters } = await import('./caveGeometry.js')
+  const { remainNiches } = await import('./caves.js')
+  const l = underworldClusters()
+  const kinds = new Set(l.sites.map((s) => s.kind))
+  assert.deepEqual([...kinds].sort(), ['floor', 'hang', 'wall'])
+  assert.ok(l.lilac.length > 40 && l.ember.length > 40, `${l.lilac.length} / ${l.ember.length}`)
+  assert.ok(l.lilac.length + l.ember.length < 500)
+  const niches = remainNiches(40)
+  for (const s of l.sites) {
+    assert.ok(holeDistance(s.x, s.z) > UNDERWORLD.hole.r + 2)
+    for (const [nx, , nz] of niches) assert.ok(Math.hypot(nx - s.x, nz - s.z) >= 2.6)
+  }
+  for (const c of [...l.lilac, ...l.ember]) assert.ok([c.x, c.y, c.z, c.height, c.width, ...c.axis].every(Number.isFinite) && c.height > 0)
+  assert.deepEqual(underworldClusters(), underworldClusters())
+})

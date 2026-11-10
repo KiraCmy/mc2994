@@ -3,7 +3,7 @@ import { useLifeEngine } from '../worldv2/life/useLifeEngine.js'
 import HabitatScene from './finalHabitat/HabitatScene.jsx'
 import FossilReveal from './finalHabitat/FossilReveal.jsx'
 import { fossilForBody, fossilForSpecies } from './finalHabitat/habitatFossil.js'
-import { HERO_HOME, INITIAL_SPECIES, pickHome, speciesFor } from './finalHabitat/worldOpening.js'
+import { ENTRANCE_LINES, HERO_HOME, INITIAL_SPECIES, pickHome, speciesFor } from './finalHabitat/worldOpening.js'
 import { freshRemainsPoints } from './finalHabitat/Remains.jsx'
 import ArchiveDrawer from './finalHabitat/ArchiveDrawer.jsx'
 import { createSpecimen, loadArchive, removeSpecimen, saveSpecimen } from './finalHabitat/archive.js'
@@ -139,8 +139,37 @@ function createWorld() {
     kinInfo: new Map(),
     kinControl: null,
     dimming: { id: null, dusk: 0 },
-    opening: { t: 0, skip: false, skipping: null, haze: 1, depth: 1 },
+    opening: { t: 0, skip: false, skipping: null, haze: 1, depth: 1, veil: 1 },
   }
+}
+
+/** A few slow specks — the sense of sinking, not a particle system. */
+const ENTRANCE_MOTES = Object.freeze([
+  [7, 18, 2], [16, 22, 6], [24, 16, 1], [33, 20, 9],
+  [41, 17, 4], [49, 24, 0], [58, 19, 7], [66, 21, 3],
+  [74, 15, 8], [82, 23, 5], [90, 18, 2], [38, 26, 11],
+])
+
+function EntranceVeil() {
+  return (
+    <div className="exp07-entrance" aria-hidden="true">
+      <div className="exp07-entrance__wash">
+        {ENTRANCE_MOTES.map(([left, duration, delay]) => (
+          <span
+            key={left}
+            className="exp07-entrance__mote"
+            style={{ left: `${left}%`, animationDuration: `${duration}s`, animationDelay: `-${delay}s` }}
+          />
+        ))}
+      </div>
+      <div className="exp07-entrance__night" />
+      {ENTRANCE_LINES.map((line, i) => (
+        <p key={line.text} className="exp07-entrance__line" style={{ opacity: `var(--exp07-p${i}, 0)` }}>
+          {line.text}
+        </p>
+      ))}
+    </div>
+  )
 }
 
 /**
@@ -184,7 +213,7 @@ function SayForm({ reply, onSend }) {
   )
 }
 
-export default function Experiment07({ title, description, autoGrow = false, opening = false }) {
+export default function Experiment07({ title, description, autoGrow = false, opening = false, active = true, onRestart = null }) {
   const { life, seekToAge, setPlaying, setMoisture, setMoistureAtStep, setTurbulence, changeSeed } = useLifeEngine(EXP05_LIFE_SEED)
   const vignetteRef = useRef(null)
   const [revealed, setRevealed] = useState(false)
@@ -196,7 +225,12 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   /* World Final opening experience: descent → discovery → encounter → focus.
      Per-frame state lives in worldRef; React hears phase / focus / hover. */
   const worldRef = useRef(null)
-  if (opening && !worldRef.current) worldRef.current = createWorld()
+  if (opening && !worldRef.current) {
+    worldRef.current = createWorld()
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      worldRef.current.opening.reduced = true
+    }
+  }
   if (worldRef.current && !worldRef.current.anchors) worldRef.current.anchors = new Map([['hero', HERO_HOME]])
   const [phase, setPhase] = useState(opening ? 'descent' : 'lab')
   const [focusId, setFocusId] = useState(null)
@@ -246,8 +280,17 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   /* How far the words currently move each channel (for the sliders). */
   const [langInfluence, setLangInfluence] = useState({ temperature: 0, moisture: 0, turbulence: 0 })
   const timeRef = useRef(0)
+  /* Hidden (another page is open): the world pauses exactly as it is. */
   const runningRef = useRef(running)
-  runningRef.current = running
+  runningRef.current = running && active
+  const activeRef = useRef(active)
+  activeRef.current = active
+  const [confirmRestart, setConfirmRestart] = useState(false)
+  useEffect(() => {
+    if (!confirmRestart) return undefined
+    const id = window.setTimeout(() => setConfirmRestart(false), 3500)
+    return () => window.clearTimeout(id)
+  }, [confirmRestart])
   const ageRateRef = useRef(HERO_AGE_RATE)
   ageRateRef.current = opening ? WORLD_AGE_RATE : autoGrow ? OPENING_GROW_RATE : HERO_AGE_RATE
 
@@ -518,7 +561,7 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   useEffect(() => {
     if (!opening) return undefined
     const onKey = (event) => {
-      if (event.key !== 'Escape') return
+      if (event.key !== 'Escape' || !activeRef.current) return
       const w = worldRef.current
       if (w?.phase === 'descent') w.opening.skip = true
       else exitFocus()
@@ -529,7 +572,7 @@ export default function Experiment07({ title, description, autoGrow = false, ope
 
   useEffect(() => {
     const onKey = (event) => {
-      if (event.code !== 'Space') return
+      if (event.code !== 'Space' || !activeRef.current) return
       const tag = event.target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || event.target?.isContentEditable) return
       event.preventDefault()
@@ -720,6 +763,7 @@ export default function Experiment07({ title, description, autoGrow = false, ope
           envRef={envRef}
           timeRef={timeRef}
           runningRef={runningRef}
+          active={active}
           temperature={temperature}
           moisture={moisture}
           turbulence={turbulence}
@@ -735,6 +779,7 @@ export default function Experiment07({ title, description, autoGrow = false, ope
         />
         <div ref={vignetteRef} className="exp07-vignette" aria-hidden="true" />
         <div className="exp07-dusk" aria-hidden="true" />
+        {opening && phase === 'descent' ? <EntranceVeil /> : null}
         {revealed && !lingering ? (
           <FossilReveal
             fossil={revealFossil}
@@ -748,6 +793,15 @@ export default function Experiment07({ title, description, autoGrow = false, ope
         {opening && phase !== 'descent' && !(revealed && !lingering) ? (
           <button type="button" className="exp07-archive-toggle" aria-expanded={archiveOpen} onClick={() => setArchiveOpen((v) => !v)}>
             Archive{archive.length ? ` · ${archive.length}` : ''}
+          </button>
+        ) : null}
+        {opening && onRestart && phase !== 'descent' && !(revealed && !lingering) ? (
+          <button
+            type="button"
+            className={`exp07-restart${confirmRestart ? ' is-confirming' : ''}`}
+            onClick={() => (confirmRestart ? onRestart() : setConfirmRestart(true))}
+          >
+            {confirmRestart ? 'Restart? · click again' : 'Restart the world'}
           </button>
         ) : null}
         {archiveOpen ? (

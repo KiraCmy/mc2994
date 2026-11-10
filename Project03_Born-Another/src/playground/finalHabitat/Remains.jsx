@@ -19,13 +19,28 @@ const _box = new THREE.Box3()
 const _q = new THREE.Quaternion()
 const _axis = new THREE.Vector3()
 
-function createSkinMaterial(uniforms) {
-  const material = new THREE.MeshStandardMaterial({ color: SKIN.clone(), roughness: 0.72, metalness: 0, envMapIntensity: 0.7 })
+/* The husk starts as the body looked (its own pearly tint, iridescent,
+   glossy) and petrifies slowly once it lies on the sand. */
+function createSkinMaterial(uniforms, tint) {
+  const living = new THREE.Color(tint?.sheen ?? '#ffd6ec').lerp(new THREE.Color(tint?.attenuation ?? '#f1aecd'), 0.35)
+  const material = new THREE.MeshPhysicalMaterial({
+    color: living.clone(),
+    roughness: 0.18,
+    metalness: 0,
+    iridescence: 0.75,
+    iridescenceIOR: 1.35,
+    iridescenceThicknessRange: [120, 900],
+    sheen: 0.4,
+    sheenColor: new THREE.Color(tint?.sheen ?? '#ffd6ec'),
+    clearcoat: 0.5,
+    envMapIntensity: 0.9,
+  })
+  material.userData.living = living
   patchSediment(material, uniforms)
   return material
 }
 
-function createRemainsCrystalMaterial(style, uniforms) {
+function createRemainsCrystalMaterial(style, uniforms, tint) {
   const c = style?.crystal ?? {}
   const material = new THREE.MeshPhysicalMaterial({
     ...styleMaterialParams({ color: c.color ?? '#f3f0ff', sheenColor: c.sheenColor ?? '#ffffff' }),
@@ -37,6 +52,8 @@ function createRemainsCrystalMaterial(style, uniforms) {
     sheen: c.sheen ? 0.6 : 0,
     envMapIntensity: 1.3,
   })
+  /* Same tone the crystals had on the living body. */
+  if (tint?.sheen) material.color.lerp(new THREE.Color(tint.sheen), 0.45)
   patchSediment(material, uniforms)
   return material
 }
@@ -63,13 +80,13 @@ export default function RemainsField({ world }) {
       const group = new THREE.Group()
       snap.matrix.decompose(group.position, group.quaternion, group.scale)
       const uniforms = sedimentUniforms(0, 1)
-      const skinMat = createSkinMaterial(uniforms)
+      const skinMat = createSkinMaterial(uniforms, snap.tint)
       const skin = new THREE.Mesh(snap.geometry, skinMat)
       group.add(skin)
       let crystals = null
       let crystalMat = null
       if (snap.crystalCount > 0) {
-        crystalMat = createRemainsCrystalMaterial(snap.style, uniforms)
+        crystalMat = createRemainsCrystalMaterial(snap.style, uniforms, snap.tint)
         crystals = new THREE.InstancedMesh(snap.crystalGeometry, crystalMat, snap.crystalCount)
         crystals.instanceMatrix.array.set(snap.crystalMatrices)
         crystals.instanceMatrix.needsUpdate = true
@@ -143,7 +160,14 @@ export default function RemainsField({ world }) {
       /* Settles, then sinks a little as the floor takes it in. */
       it.group.position.y = THREE.MathUtils.lerp(it.from.position.y, it.restY, settle) - it.height * 0.18 * bury
       it.group.quaternion.slerpQuaternions(it.from.quaternion, it.restQ, settle)
-      it.skinMat.color.copy(SKIN).lerp(SAND, 0.1 + 0.25 * bury)
+      /* Petrifying: from its living pearl to stone, then toward the sand. */
+      const stone = Math.min(1, settle * 0.35 + bury * 0.65)
+      const m = it.skinMat
+      m.color.copy(m.userData.living ?? SKIN).lerp(SKIN, stone).lerp(SAND, 0.25 * bury)
+      m.roughness = 0.18 + 0.56 * stone
+      m.iridescence = 0.75 * (1 - stone)
+      m.sheen = 0.4 * (1 - stone)
+      m.clearcoat = 0.5 * (1 - stone)
       it.uniforms.uBury.value = bury
     }
   })

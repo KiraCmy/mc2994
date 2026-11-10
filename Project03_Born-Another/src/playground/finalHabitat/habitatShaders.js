@@ -58,7 +58,7 @@ export const nucleusFragment = /* glsl */ `
     body *= body;
     col = mix(uShell, col, body);
     /* Unfolding: the core kindles behind the opening. */
-    col += mix(uGold, vec3(1.0, 0.9, 0.7), core) * uOpen * (0.5 + 1.4 * core + fil * 0.8);
+    col += mix(uGold, vec3(1.0, 0.9, 0.7), core) * uOpen * (0.3 + 0.8 * core + fil * 0.5);
     gl_FragColor = vec4(col, 1.0);
   }
 `
@@ -91,6 +91,10 @@ export function patchMembrane(material, uniforms) {
     shader.uniforms.uBubble ??= { value: 0 }
     shader.uniforms.uStrata ??= { value: 0 }
     shader.uniforms.uShrink ??= { value: 0 }
+    shader.uniforms.uRidgeMode ??= { value: 0 }
+    shader.uniforms.uBubbleScale ??= { value: 3.2 }
+    shader.uniforms.uLightView ??= { value: new THREE.Vector3(0.4, 0.6, 0.5).normalize() }
+    shader.uniforms.uDeep ??= { value: new THREE.Color('#d98aa8') }
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -120,6 +124,10 @@ export function patchMembrane(material, uniforms) {
         uniform float uBubble;
         uniform float uStrata;
         uniform float uShrink;
+        uniform float uRidgeMode;
+        uniform float uBubbleScale;
+        attribute float aCavity;
+        varying float vCavity;
         varying float vBubble;
         varying float vFrost;
         varying vec3 vLocal;
@@ -163,6 +171,9 @@ export function patchMembrane(material, uniforms) {
           float lat = acos(clamp(dot(fc, uOpenDir), -1.0, 1.0));
           vec3 w = local / max(uUnit, 1e-4) * 1.6;
           float warp = bnNoise(w * 1.3 + vec3(0.0, uFlowTime * 0.03, 0.0)) * 2.0 - 1.0;
+          /* Species: 0 bundles to the mouth, 1 twisting spiral, 2 rings (segments). */
+          if (uRidgeMode > 1.5) return lat * 11.0 + warp * (1.0 + 1.6 * uSwirl) + sin(ang * 3.0) * 0.4;
+          if (uRidgeMode > 0.5) return ang * 7.0 + warp * (1.4 + 2.4 * uSwirl) + lat * (5.0 + 4.0 * uSwirl);
           return ang * 9.0 + warp * (1.4 + 2.4 * uSwirl) + lat * (1.2 + 2.6 * uSwirl);
         }
         /* The body's own relief along those bundles: ridges and grooves of
@@ -177,7 +188,7 @@ export function patchMembrane(material, uniforms) {
         }
         /* Wet: blisters — domes of different sizes swelling out of the skin. */
         float bnBubble(vec3 fc) {
-          vec3 p = fc * 3.2 + vec3(5.3, 1.7, 9.1);
+          vec3 p = fc * uBubbleScale + vec3(5.3, 1.7, 9.1);
           vec3 i = floor(p);
           vec3 f = p - i;
           float best = 0.0;
@@ -283,6 +294,7 @@ export function patchMembrane(material, uniforms) {
         vLocal = position;
         vFromCentre = fromCentre;
         vBubble = bnB0 * step(1e-6, uBubble);
+        vCavity = aCavity;
         vFold = clamp(0.6 + bnF0 / (max(uUnit, 1e-4) * 0.12), 0.0, 1.0);`,
       )
     shader.fragmentShader = shader.fragmentShader
@@ -301,6 +313,11 @@ export function patchMembrane(material, uniforms) {
         varying vec3 vFromCentre;
         varying float vFold;
         varying float vBubble;
+        varying float vCavity;
+        uniform float uRidgeMode;
+        uniform float uBubbleScale;
+        uniform vec3 uLightView;
+        uniform vec3 uDeep;
         uniform float uUnit;
         uniform float uOpen;
         uniform vec3 uOpenDir;
@@ -347,6 +364,9 @@ export function patchMembrane(material, uniforms) {
           float lat = acos(clamp(dot(fc, uOpenDir), -1.0, 1.0));
           vec3 w = local / max(uUnit, 1e-4) * 1.6;
           float warp = bnNoise(w * 1.3 + vec3(0.0, uFlowTime * 0.03, 0.0)) * 2.0 - 1.0;
+          /* Species: 0 bundles to the mouth, 1 twisting spiral, 2 rings (segments). */
+          if (uRidgeMode > 1.5) return lat * 11.0 + warp * (1.0 + 1.6 * uSwirl) + sin(ang * 3.0) * 0.4;
+          if (uRidgeMode > 0.5) return ang * 7.0 + warp * (1.4 + 2.4 * uSwirl) + lat * (5.0 + 4.0 * uSwirl);
           return ang * 9.0 + warp * (1.4 + 2.4 * uSwirl) + lat * (1.2 + 2.6 * uSwirl);
         }
         /* The body's own relief along those bundles: ridges and grooves of
@@ -361,7 +381,7 @@ export function patchMembrane(material, uniforms) {
         }
         /* Wet: blisters — domes of different sizes swelling out of the skin. */
         float bnBubble(vec3 fc) {
-          vec3 p = fc * 3.2 + vec3(5.3, 1.7, 9.1);
+          vec3 p = fc * uBubbleScale + vec3(5.3, 1.7, 9.1);
           vec3 i = floor(p);
           vec3 f = p - i;
           float best = 0.0;
@@ -403,7 +423,12 @@ export function patchMembrane(material, uniforms) {
         float bnJit = bnNoise(bnW * 5.0) * 2.0 - 1.0;
         float bnS1 = 0.5 + 0.5 * sin(bnMer * 22.0 + bnJit * 2.2 + bnLat * 4.0 - uFlowTime * 0.6);
         float bnS2 = 0.5 + 0.5 * sin(bnMer * 37.0 + bnJit * 3.0 + bnLat * 6.7 - uFlowTime * 0.9 + 1.7);
-        float bnStrand = pow(bnS1, 3.0) * 0.72 + pow(bnS2, 5.0) * 0.28;
+        /* Fade each layer of fibres to its average before it gets finer than
+           a couple of pixels (no zebra stripes / moiré from afar). */
+        float bnPx = fwidth(bnMer) / 6.2831853;
+        float bnFine1 = 1.0 - smoothstep(0.03, 0.08, bnPx * 22.0 * 0.5);
+        float bnFine2 = 1.0 - smoothstep(0.03, 0.08, bnPx * 37.0 * 0.5);
+        float bnStrand = mix(0.3, pow(bnS1, 3.0), bnFine1) * 0.72 + mix(0.22, pow(bnS2, 5.0), bnFine2) * 0.28;
         float bnBundle = smoothstep(0.15, 0.85, 0.5 + 0.5 * sin(bnMer + bnWarp * 2.0));
         float bnStrandK = uFlow * (0.55 + 0.45 * bnBundle);
         /* Creases sit in shadow; strands are grooves across the skin. */
@@ -413,6 +438,11 @@ export function patchMembrane(material, uniforms) {
            like oil on the fibres. */
         vec3 bnCast = mix(mix(vec3(0.84, 0.8, 1.0), vec3(1.0, 0.84, 0.74), smoothstep(-0.4, 0.5, bnWarp)), vec3(0.8, 0.95, 0.9), smoothstep(0.55, 0.9, bnNoise(bnW * 0.8 + 11.0)));
         diffuseColor.rgb *= mix(vec3(1.0), bnCast, 0.55 * bnBundle * uFlow);
+        /* Depth of the flesh: looking straight in, the colour is deeper. */
+        float bnFacingD = abs(dot(normalize(vNormal), normalize(vViewPosition)));
+        diffuseColor.rgb *= mix(vec3(1.0), uDeep, 0.28 * pow(bnFacingD, 1.5));
+        /* Baked cavity: hollows of the shape sit in shadow. */
+        diffuseColor.rgb *= 1.0 - 0.45 * vCavity;
         /* The opening is a cavity: darker skin between the rays of light. */
         float bnApW = 0.03 + 0.5 * uOpen;
         float bnInCap = smoothstep(1.0 - bnApW, 1.0, bnApD) * uOpen;
@@ -434,12 +464,15 @@ export function patchMembrane(material, uniforms) {
         /* Fibres in relief: screen-space bump from the strand height, faded
            where they get finer than a pixel (no moiré at a distance). */
         {
-          float bnH = (bnStrand * 0.6 + bnBundle * 0.4) * bnStrandK;
+          /* Pores: fine pits in the skin (like porous coral), faded with distance. */
+          float bnPoreN = bnNoise(vLocal / max(uUnit, 1e-4) * 34.0);
+          float bnPore = smoothstep(0.62, 0.8, bnPoreN) * (1.0 - smoothstep(0.08, 0.25, fwidth(vLocal.x / max(uUnit, 1e-4) * 34.0)));
+          float bnH = (bnStrand * 0.6 + bnBundle * 0.4) * bnStrandK - bnPore * 0.9;
           vec3 dpx = dFdx(-vViewPosition);
           vec3 dpy = dFdy(-vViewPosition);
           float hx = dFdx(bnH);
           float hy = dFdy(bnH);
-          float bnFine = 1.0 - smoothstep(0.25, 0.7, fwidth(bnMer * 22.0) / 6.2831);
+          float bnFine = bnFine1;
           vec3 r1 = cross(dpy, normal);
           vec3 r2 = cross(normal, dpx);
           float det = dot(dpx, r1);
@@ -483,6 +516,14 @@ export function patchMembrane(material, uniforms) {
         /* UNFOLD — strand sheen, then the light inside: rays in the opening,
            a halo on its lip, and a little warmth seeping out of the creases. */
         totalEmissiveRadiance += filmHue * bnStrand * bnStrandK * 0.035 * (0.3 + filmFacing);
+        /* Light through the skin: thin edges glow when lit from behind
+           (subsurface), thick middles hold a deeper tone. */
+        {
+          vec3 Vv = normalize(vViewPosition);
+          vec3 Lb = normalize(uLightView + normal * 0.35);
+          float through = pow(clamp(dot(Vv, -Lb), 0.0, 1.0), 3.0) * (0.35 + 0.65 * filmFacing);
+          totalEmissiveRadiance += mix(uCore, vec3(1.0, 0.9, 0.86), 0.4) * through * 0.22 * (1.0 - frostMask);
+        }
         {
           float apW = 0.03 + 0.5 * uOpen;
           float inCap = smoothstep(1.0 - apW, 1.0, bnApD);
@@ -490,13 +531,13 @@ export function patchMembrane(material, uniforms) {
           float rays = 0.35 + 0.65 * pow(0.5 + 0.5 * sin(bnAng * 13.0 + bnWarp * 3.0), 2.0);
           float lipGlow = smoothstep(1.0 - apW - 0.32, 1.0 - apW, bnApD) * (1.0 - inCap);
           vec3 hot = mix(uInnerLight, vec3(1.0, 0.88, 0.62), heart * 0.6);
-          totalEmissiveRadiance += hot * uOpen * (inCap * rays * (0.25 + 1.0 * bnStrand) * 1.1 + heart * 1.6);
+          totalEmissiveRadiance += hot * uOpen * (inCap * rays * (0.25 + 1.0 * bnStrand) * 0.75 + heart * 0.85);
           totalEmissiveRadiance += uInnerLight * uOpen * lipGlow * (0.12 + 0.3 * bnStrand);
           totalEmissiveRadiance += uInnerLight * (1.0 - bnCrease) * (0.04 + 0.18 * uOpen) * (1.0 - frostMask);
         }`,
       )
   }
-  material.customProgramCacheKey = () => 'exp07-membrane-v11-morph'
+  material.customProgramCacheKey = () => 'exp07-membrane-v14-ao'
 }
 
 export const skyVertex = /* glsl */ `
@@ -527,23 +568,33 @@ export const skyFragment = /* glsl */ `
 
 export const shaftVertex = /* glsl */ `
   varying vec2 vUv;
+  varying float vFace;
   void main() {
     vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vec3 n = normalize(mat3(modelMatrix) * normal);
+    vFace = abs(dot(n, normalize(cameraPosition - world.xyz)));
+    gl_Position = projectionMatrix * viewMatrix * world;
   }
 `
 
+/* Light shafts: soft across, fading out at BOTH ends (they come out of the
+   haze above and dissolve before the sand), and fading when a sheet is seen
+   edge-on, so no hard ends or lines show. */
 export const shaftFragment = /* glsl */ `
   uniform float uTime;
   uniform float uStrength;
   uniform float uSeed;
   varying vec2 vUv;
+  varying float vFace;
   void main() {
     float across = smoothstep(0.0, 0.5, vUv.x) * smoothstep(1.0, 0.5, vUv.x);
-    across = pow(across, 1.6);
-    float along = smoothstep(0.0, 0.25, vUv.y) * (0.35 + 0.65 * vUv.y);
+    across = pow(across, 2.2);
+    float along = smoothstep(0.0, 0.35, vUv.y) * (1.0 - smoothstep(0.55, 1.0, vUv.y));
+    along *= 0.75 + 0.25 * sin(vUv.y * 5.0 + uSeed * 4.0);
     float flicker = 0.75 + 0.25 * sin(uTime * 0.35 + uSeed * 6.0 + vUv.y * 3.0);
-    float a = across * along * flicker * uStrength * 1.8;
+    float face = smoothstep(0.08, 0.6, vFace);
+    float a = across * along * flicker * face * uStrength * 1.9;
     gl_FragColor = vec4(vec3(0.86, 0.9, 1.0) * a, a);
   }
 `
@@ -683,6 +734,12 @@ export function createEnvironmentScene() {
   panel('#ffffff', 2, LIGHT_DIR.clone().multiplyScalar(8), 5, 6)
   panel('#ffd6ea', 1.4, new THREE.Vector3(-7, 2, 3), 5, 3)
   panel('#d7ecff', 1.2, new THREE.Vector3(6, 0, 5), 4, 3)
+  /* Studio: a large soft box overhead, two tall strip lights behind (crisp
+     long highlights on glass and skin), a faint warm bounce from below. */
+  panel('#ffffff', 1.6, new THREE.Vector3(0, 9, 0.5), 7, 7)
+  panel('#eef3ff', 2.4, new THREE.Vector3(-5.5, 1.5, -6), 1.1, 7)
+  panel('#fff2ea', 2.0, new THREE.Vector3(6, 1.5, -5), 1.1, 7)
+  panel('#f3dfe6', 0.5, new THREE.Vector3(0, -8, 1), 9, 9)
   return scene
 }
 

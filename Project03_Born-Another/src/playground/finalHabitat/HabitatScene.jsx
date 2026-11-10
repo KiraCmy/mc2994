@@ -3,6 +3,7 @@ import { OrbitControls } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import WebGLCanvas from '../../WebGLCanvas.jsx'
+import FocusStudio, { ViewCapture } from './FocusStudio.jsx'
 import { resolveRenderDpr, STUDIES_MAX_PIXELS } from '../../renderBudget.js'
 import { syncAgeClock } from '../../ageClock.js'
 import { cutOutPixels } from './snapshotCutout.js'
@@ -380,6 +381,8 @@ function HabitatScene({
   /** Kept specimens (World Final): their remains rest in the underworld. */
   archive = null,
   className = 'exp07-viewport',
+  /** False while another page is open: the world is paused, not unmounted. */
+  active = true,
 }) {
   const dpr = useDpr()
   /* The hero's collision body, shared with the kin physics (contacts back). */
@@ -408,17 +411,21 @@ function HabitatScene({
         : null,
     [life, petalScale],
   )
+  /* World Final: the body grows its own petals on its skin (CrystalBody). */
   const showPetals =
-    layers?.petals !== false && visual && !visual.isDead && (visual.petalPlan?.petalCount ?? 0) > 0
+    !world && layers?.petals !== false && visual && !visual.isDead && (visual.petalPlan?.petalCount ?? 0) > 0
   return (
     <WebGLCanvas
+      frameloop={active ? 'always' : 'never'}
       className={className}
       camera={{ position: opening ? opening.position : [1.6, GROUND_Y + 3.4, 11.5], fov: 34, near: 0.05, far: 3000 }}
       dpr={dpr}
       gl={{ antialias: false, alpha: false, powerPreference: 'high-performance' }}
       onCreated={({ gl }) => {
-        gl.toneMapping = THREE.ACESFilmicToneMapping
-        gl.toneMappingExposure = 0.78
+        /* Neutral (Khronos PBR) tone mapping: keeps the palette's hues and
+           saturation, rolls highlights off instead of blowing them white. */
+        gl.toneMapping = THREE.NeutralToneMapping
+        gl.toneMappingExposure = 0.82
         gl.outputColorSpace = THREE.SRGBColorSpace
       }}
     >
@@ -431,6 +438,8 @@ function HabitatScene({
       {world ? <WaterSurface world={world} groundY={GROUND_Y} /> : null}
       {world ? <RemainsField world={world} /> : null}
       {world ? <CrystalSpires /> : null}
+      {world ? <FocusStudio world={world} /> : null}
+      {world ? <ViewCapture /> : null}
       {world ? <Caves crystalRef={crystalRef} world={world} archive={archive} /> : null}
       <HabitatSky toneRef={toneRef} />
       <HabitatLights toneRef={toneRef} />
@@ -526,7 +535,7 @@ function HabitatScene({
         maxPolarAngle={world ? 1.85 : 2.0}
       />
       <ExploreKeys world={world} />
-      {world ? <DescentCamera world={world} groundY={GROUND_Y} /> : null}
+      {world ? <DescentCamera world={world} groundY={GROUND_Y} overlayRef={overlayRef} /> : null}
       {world ? <FocusRig world={world} overlayRef={overlayRef} /> : null}
       <HabitatPost bloomStrength={layers?.bloom === false ? 0 : 0.12} />
       {world ? <SnapshotTaker world={world} /> : null}

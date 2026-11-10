@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  descentPose, DESCENT_SECONDS, explorePose, focusPose, noticeRadius, openingHaze,
+  descentPose, DESCENT_SECONDS, entranceCue, ENTRANCE_SECONDS, explorePose, focusPose, noticeRadius, openingHaze,
   pickResponse, responseEnvelope, RESPONSE_SECONDS, HERO_HOME, KIN_ANCHORS,
 } from './worldOpening.js'
 
@@ -27,6 +27,43 @@ test('descent is smooth (no jumps between frames)', () => {
   }
 })
 
+test('the entrance opens from darkness through three quiet lines into the world', () => {
+  const start = entranceCue(0)
+  assert.equal(start.night, 1)
+  assert.equal(start.veil, 1)
+  assert.ok(start.phrases.every((v) => v === 0))
+  const early = entranceCue(4.2)
+  assert.ok(early.night < 0.75 && early.night > 0.15, `gradient arriving, night ${early.night}`)
+  assert.equal(early.veil, 1)
+  assert.ok(early.phrases[0] > 0.9)
+  const know = entranceCue(8.4)
+  assert.equal(know.phrases[0], 0)
+  assert.ok(know.phrases[1] > 0.9)
+  const remember = entranceCue(11.9)
+  assert.ok(remember.phrases[2] > 0.9)
+  assert.equal(remember.phrases[0], 0)
+  assert.equal(remember.phrases[1], 0)
+  assert.ok(remember.veil > 0.55, `last line still in the dim, veil ${remember.veil}`)
+  const after = entranceCue(13.6)
+  assert.equal(after.phrases[2], 0)
+  assert.ok(after.veil > 0.35, 'the world is not fully open the moment the line ends')
+  assert.equal(entranceCue(ENTRANCE_SECONDS).veil, 0)
+  assert.equal(entranceCue(ENTRANCE_SECONDS).night, 0)
+  assert.ok(entranceCue(ENTRANCE_SECONDS).phrases.every((v) => v === 0))
+  let prevVeil = 1
+  for (let t = 0; t <= ENTRANCE_SECONDS; t += 0.05) {
+    const cue = entranceCue(t)
+    assert.ok(cue.phrases.filter((v) => v > 0.2).length <= 1, `overlap at ${t}`)
+    assert.ok(cue.veil <= prevVeil + 1e-9, `veil jumped up at ${t}`)
+    prevVeil = cue.veil
+    if (cue.phrases[2] > 0.15) {
+      const edgeIn = cue.phrases[2] < 0.98
+      assert.ok(cue.veil > 0.5, `remember against a bright world at ${t}`)
+      if (edgeIn) assert.ok(cue.phrases[2] > 0)
+    }
+  }
+})
+
 test('the haze is thick while sinking and clears after arrival', () => {
   assert.equal(openingHaze(3), 1)
   assert.ok(openingHaze(DESCENT_SECONDS + 10) < 1 && openingHaze(DESCENT_SECONDS + 10) > 0)
@@ -40,13 +77,13 @@ test('the three lives sit near enough to meet, and the landing gaze is level', (
     assert.ok(d > 3.2 && d < 12, `pair ${i}-${j} distance ${d}`)
   }
   const pose = explorePose(0)
-  const drop = pose.position[1] - pose.target[1]
-  assert.ok(drop >= 0 && drop < 2, 'level-to-gently-down gaze after the sink')
+  const rise = pose.target[1] - pose.position[1]
+  assert.ok(rise > 0.4 && rise < 2.5, `lands looking nearly level, a little up (rise ${rise})`)
   assert.ok(Math.hypot(pose.position[0] - HERO_HOME[0], pose.position[2] - HERO_HOME[1]) > 28, 'lands well back: the lives are found, not handed over')
   const fwd = [pose.target[0] - pose.position[0], pose.target[2] - pose.position[2]]
   const toHero = [HERO_HOME[0] - pose.position[0], HERO_HOME[1] - pose.position[2]]
   const cos = (fwd[0] * toHero[0] + fwd[1] * toHero[1]) / (Math.hypot(...fwd) * Math.hypot(...toHero))
-  assert.ok(cos > 0.8, `hero within the forward view (cos ${cos})`)
+  assert.ok(cos > 0.97, `the lives near the centre of the landing view (cos ${cos})`)
 })
 
 test('a response rises, holds and fades; every kind is reachable', () => {

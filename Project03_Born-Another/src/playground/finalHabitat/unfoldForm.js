@@ -48,6 +48,29 @@ function randomDir(r) {
 
 export const MAX_MARKS = 10
 
+/**
+ * Each species answers the same water in its own way (family traits), so
+ * lives — and their remains — of different species do not converge:
+ *   gain       how strongly warm / cold / wet / turbulent water shapes it
+ *   ridge      how its relief runs: 'meridian' (bundles to the mouth),
+ *              'spiral' (twisting bundles), 'rings' (transverse segments)
+ *   bubbleScale density of its blisters (higher = smaller, botryoidal)
+ *   marks      what a word leaves: 'spot', 'band' (a whole segment), or
+ *              'cluster' (a knot of small swellings)
+ *   habit      how it crystallizes: 'prisms' (a druse of stout terminated
+ *              columns),
+ *              'plates' (stacked blades), 'blocks' (cubic aggregates)
+ */
+export const SPECIES_FORM = Object.freeze({
+  spiral: Object.freeze({ gain: { ridge: 1.4, shrink: 0.8, bubble: 0.5, strata: 0.6 }, ridge: 'spiral', ridgeCode: 1, bubbleScale: 3.2, marks: 'spot', habit: 'prisms' }),
+  segmented: Object.freeze({ gain: { ridge: 0.7, shrink: 1.3, bubble: 0.7, strata: 1.6 }, ridge: 'rings', ridgeCode: 2, bubbleScale: 3.6, marks: 'band', habit: 'plates' }),
+  trilobite: Object.freeze({ gain: { ridge: 0.7, shrink: 1, bubble: 1.5, strata: 0.7 }, ridge: 'meridian', ridgeCode: 0, bubbleScale: 6, marks: 'cluster', habit: 'blocks' }),
+  world: Object.freeze({ gain: { ridge: 1, shrink: 1, bubble: 1, strata: 1 }, ridge: 'meridian', ridgeCode: 0, bubbleScale: 3.2, marks: 'spot', habit: 'prisms' }),
+})
+export function speciesForm(species) {
+  return SPECIES_FORM[species] ?? SPECIES_FORM.world
+}
+
 export function createHistory(seed = 1) {
   return {
     seed,
@@ -117,7 +140,7 @@ export function updateHistory(h, { dt, env, viewer = null, near = false, focus =
 }
 
 /** What the history makes of this life (deterministic, quantized). */
-export function characterOf(h, seed = h?.seed ?? 1) {
+export function characterOf(h, seed = h?.seed ?? 1, species = 'world') {
   const r = rng((seed * 2246822519) >>> 0)
   const avg = h?.avg ?? { temperature: 0.5, moisture: 0.5, turbulence: 0 }
   const marks = h?.marks ?? []
@@ -136,7 +159,7 @@ export function characterOf(h, seed = h?.seed ?? 1) {
     lobeCap, coilMax, marks.length,
     opening ? opening.amount + ':' + opening.dir.map((v) => v.toFixed(2)).join(',') : '-',
   ].join('|')
-  return { lobeCap, coilMax, marks, opening, axis, restless, key }
+  return { lobeCap, coilMax, marks, opening, axis, restless, key, markStyle: speciesForm(species).marks }
 }
 
 /**
@@ -149,9 +172,30 @@ export function bodyFactors(character, dirs, out = new Float32Array(dirs.length 
   for (let i = 0; i < out.length; i++) {
     const x = dirs[i * 3], y = dirs[i * 3 + 1], z = dirs[i * 3 + 2]
     let f = 0
+    const style = character.markStyle ?? 'spot'
+    const ax = character.axis ?? [0, 1, 0]
     for (const m of marks) {
       const d = x * m.dir[0] + y * m.dir[1] + z * m.dir[2]
-      const g = Math.exp((d - 1) / (m.width * m.width))
+      let g
+      if (style === 'band') {
+        /* A whole segment swells or tightens: a band around the body's axis. */
+        const h = x * ax[0] + y * ax[1] + z * ax[2]
+        const hm = m.dir[0] * ax[0] + m.dir[1] * ax[1] + m.dir[2] * ax[2]
+        g = Math.exp(-(((h - hm) / (m.width * 0.55)) ** 2)) * (0.55 + 0.45 * Math.max(0, d))
+      } else if (style === 'cluster') {
+        /* A knot of small swellings around where it was touched. */
+        g = 0
+        for (let k = 0; k < 4; k++) {
+          const a = k * 2.399 + m.width * 7
+          const ox = m.dir[0] + Math.cos(a) * 0.22, oy = m.dir[1] + Math.sin(a) * 0.22, oz = m.dir[2] + Math.cos(a * 1.7) * 0.22
+          const ol = Math.hypot(ox, oy, oz) || 1
+          const dk = (x * ox + y * oy + z * oz) / ol
+          g += Math.exp((dk - 1) / (0.1 * 0.1 + m.width * m.width * 0.12)) * (k === 0 ? 1 : 0.7)
+        }
+        g = Math.min(1.3, g)
+      } else {
+        g = Math.exp((d - 1) / (m.width * m.width))
+      }
       f += m.amp * g * (1 + m.ripple * 0.5 * Math.sin(d * 12))
     }
     if (opening) {
@@ -191,10 +235,12 @@ export function createMorph() {
 }
 
 /** One step: follow the medium, remember it, freeze as it crystallizes. */
-export function stepMorph(m, env, dt, level = 0) {
+export function stepMorph(m, env, dt, level = 0, species = 'world') {
   if (!(dt > 0)) return m
   const step = Math.min(dt, 0.25)
   const target = morphTargets(env)
+  const gain = speciesForm(species).gain
+  for (const k of MORPH_KEYS) target[k] = Math.min(1.2, target[k] * gain[k])
   const open = 1 - smooth(0.35, 0.6, level) /* frozen once crystallized */
   const follow = (1 - Math.exp(-step / 4)) * open
   const fade = Math.exp(-step / 130)
@@ -230,10 +276,10 @@ export function crystalModeOf(shown) {
  */
 export const CRYSTAL_MODES = Object.freeze({
   plain: { facets: [0.86, 1.04], extra: null, len: 1, width: 1, flat: 0 },
-  ridge: { facets: [0.86, 1.04], extra: 'prism', len: 1.55, width: 0.72, flat: 0 },
-  shrink: { facets: [0.78, 1.0], extra: null, len: 0.62, width: 0.85, flat: 0 },
-  bubble: { facets: [0.95, 1.03], extra: null, len: 0.42, width: 1.5, flat: 0 },
-  strata: { facets: [0.86, 1.04], extra: 'tabular', len: 0.55, width: 1.7, flat: 0.65 },
+  ridge: { facets: [0.86, 1.04], extra: 'prism', len: 1.25, width: 0.85, flat: 0 },
+  shrink: { facets: [0.8, 1.0], extra: null, len: 0.7, width: 0.9, flat: 0 },
+  bubble: { facets: [0.95, 1.03], extra: null, len: 0.5, width: 1.3, flat: 0 },
+  strata: { facets: [0.86, 1.04], extra: 'tabular', len: 0.6, width: 1.2, flat: 0.3 },
 })
 
 /* --- JS mirror of the membrane shader's shape (habitatShaders.js) ------- */
@@ -268,15 +314,21 @@ export function shapeRidge(fc, local, u) {
   const lat = Math.acos(clamp(dot3(fc, u.openDir), -1, 1))
   const k = 1.6 / Math.max(u.unit, 1e-4)
   const warp = bnNoise(local[0] * k * 1.3, local[1] * k * 1.3 + u.flowTime * 0.03, local[2] * k * 1.3) * 2 - 1
-  const mer = ang * 9 + warp * (1.4 + 2.4 * u.swirl) + lat * (1.2 + 2.6 * u.swirl)
+  const mode = u.ridgeMode ?? 0
+  const mer =
+    mode === 2
+      ? lat * 11 + warp * (1.0 + 1.6 * u.swirl) + Math.sin(ang * 3) * 0.4
+      : mode === 1
+        ? ang * 7 + warp * (1.4 + 2.4 * u.swirl) + lat * (5 + 4 * u.swirl)
+        : ang * 9 + warp * (1.4 + 2.4 * u.swirl) + lat * (1.2 + 2.6 * u.swirl)
   const fade = smooth(0.18, 0.55, lat) * (1 - smooth(2.55, 3.05, lat))
   const b = 0.5 + 0.5 * Math.sin(mer)
   const sub = 0.5 + 0.5 * Math.sin(mer * 3 + 1.3)
   return (b ** 1.6 * 0.75 + sub ** 2 * 0.25 - 0.36) * fade
 }
 
-export function shapeBubble(fc) {
-  const px = fc[0] * 3.2 + 5.3, py = fc[1] * 3.2 + 1.7, pz = fc[2] * 3.2 + 9.1
+export function shapeBubble(fc, scale = 3.2) {
+  const px = fc[0] * scale + 5.3, py = fc[1] * scale + 1.7, pz = fc[2] * scale + 9.1
   const ix = Math.floor(px), iy = Math.floor(py), iz = Math.floor(pz)
   const fx = px - ix, fy = py - iy, fz = pz - iz
   let best = 0
@@ -303,7 +355,7 @@ export function shapeStrata(local, u) {
 export function shapeHeight(fc, local, u) {
   let h = 0
   if (u.fold > 1e-6) h += u.fold * shapeRidge(fc, local, u)
-  if (u.bubble > 1e-6) h += u.bubble * shapeBubble(fc)
+  if (u.bubble > 1e-6) h += u.bubble * shapeBubble(fc, u.bubbleScale ?? 3.2)
   if (u.strata > 1e-6) h += u.strata * shapeStrata(local, u)
   return h
 }

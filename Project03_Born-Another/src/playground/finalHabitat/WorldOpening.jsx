@@ -7,6 +7,7 @@ import {
   descentPose,
   DESCENT_SECONDS,
   easeInOut,
+  entranceCue,
   explorePose,
   FOCUS_SECONDS,
   focusPose,
@@ -29,7 +30,17 @@ import { surfaceFragment, surfaceVertex } from './worldShaders.js'
 
 const SKIP_SECONDS = 1.4
 
-export function DescentCamera({ world, groundY }) {
+function writeEntrance(root, cue) {
+  if (!root) return
+  const phrases = cue?.phrases ?? [0, 0, 0]
+  root.style.setProperty('--exp07-night', (cue?.night ?? 0).toFixed(3))
+  root.style.setProperty('--exp07-veil', (cue?.veil ?? 0).toFixed(3))
+  root.style.setProperty('--exp07-p0', (phrases[0] ?? 0).toFixed(3))
+  root.style.setProperty('--exp07-p1', (phrases[1] ?? 0).toFixed(3))
+  root.style.setProperty('--exp07-p2', (phrases[2] ?? 0).toFixed(3))
+}
+
+export function DescentCamera({ world, groundY, overlayRef = null }) {
   const camera = useThree((s) => s.camera)
   const controls = useThree((s) => s.controls)
   const tmp = useMemo(() => ({ target: new THREE.Vector3(), from: new THREE.Vector3(), fromTarget: new THREE.Vector3(), end: new THREE.Vector3(), endTarget: new THREE.Vector3() }), [])
@@ -38,15 +49,37 @@ export function DescentCamera({ world, groundY }) {
     const w = world.current
     const o = w.opening
     const dt = Math.min(0.1, delta)
+    const root = overlayRef?.current?.parentElement
+    const clear = { night: 0, veil: 0, phrases: [0, 0, 0] }
     if (w.phase !== 'descent') {
       o.t += dt
       o.haze = openingHaze(o.t)
       o.depth = 0
+      o.veil = 0
+      writeEntrance(root, clear)
       return
     }
     if (controls) controls.enabled = false
     const end = explorePose(groundY)
     let done = false
+    let cue = entranceCue(0)
+    /* Reduced motion: no long glide and no lines — arrive on the first frame. */
+    if (o.reduced) {
+      o.t = DESCENT_SECONDS
+      o.depth = 0
+      o.veil = 0
+      o.haze = 1
+      camera.position.set(...end.position)
+      if (controls) {
+        controls.target.set(...end.target)
+        controls.enabled = true
+        controls.update()
+      }
+      writeEntrance(root, clear)
+      w.phase = 'explore'
+      w.onPhase?.('explore')
+      return
+    }
     if (o.skip) {
       if (!o.skipping) {
         o.skipping = { t: 0 }
@@ -61,6 +94,9 @@ export function DescentCamera({ world, groundY }) {
       tmp.target.lerpVectors(tmp.fromTarget, tmp.endTarget, e)
       camera.lookAt(tmp.target)
       o.depth *= 1 - e
+      const at = entranceCue(o.t)
+      const k = 1 - e
+      cue = { night: at.night * k, veil: at.veil * k, phrases: [0, 0, 0] }
       done = o.skipping.t >= SKIP_SECONDS
     } else {
       o.t += dt
@@ -69,13 +105,19 @@ export function DescentCamera({ world, groundY }) {
       tmp.target.set(...pose.target)
       camera.lookAt(tmp.target)
       o.depth = pose.depth
+      cue = entranceCue(o.t)
       done = o.t >= DESCENT_SECONDS
     }
+    o.veil = cue.veil
     o.haze = 1
+    writeEntrance(root, cue)
     if (done) {
-      /* Hand over: the orbit target sits on the gaze, controls take over. */
+      /* Hand over: the orbit target sits on the gaze, controls take over.
+         The entrance veil is already gone; the habitat tone is its own. */
       o.t = DESCENT_SECONDS
       o.depth = 0
+      o.veil = 0
+      writeEntrance(root, clear)
       camera.position.set(...end.position)
       if (controls) {
         controls.target.set(...end.target)
@@ -239,8 +281,12 @@ export function WaterSurface({ world, groundY }) {
     res.mat.uniforms.uTime.value = state.clock.elapsedTime
     /* Bright while looking up through it on the way down; nearly gone once
        the gaze is level, so the ripple sheet does not sit across the view. */
-    const depth = world.current.opening.depth ?? 0
-    res.mat.uniforms.uOpacity.value = 0.12 + 0.88 * depth
+    const opening = world.current.opening
+    const depth = opening.depth ?? 0
+    const veil = opening.veil ?? 0
+    /* The ripple sheet stays hidden while the entrance veil is up. */
+    const gate = veil <= 0 ? 1 : veil >= 0.35 ? 0 : 1 - veil / 0.35
+    res.mat.uniforms.uOpacity.value = (0.12 + 0.88 * depth) * gate
   })
   return (
     <mesh

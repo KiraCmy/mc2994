@@ -139,6 +139,20 @@ export function HabitatTone({ envRef, toneRef, deathRef = null, overlayRef = nul
         target[key] = target[key].map((v, i) => v + (target.top[i] - v) * 0.3 * depth)
       }
       target.shaftStrength *= 1 + 0.8 * depth
+      /* Entrance: the same clock pulls the water toward near-black, then
+         lets go. At veil 0 the habitat tone is unchanged. */
+      const veil = Math.min(1, Math.max(0, o.veil ?? 0))
+      if (veil > 0) {
+        const dark = [0.02, 0.034, 0.04]
+        for (const key of ['fog', 'top', 'horizon', 'bottom']) {
+          target[key] = target[key].map((v, i) => v + (dark[i] - v) * veil * 0.94)
+        }
+        target.fogDensity = Math.min(0.05, target.fogDensity * (1 + veil * 3.2))
+        target.keyIntensity *= 1 - veil * 0.88
+        target.hemiIntensity *= 1 - veil * 0.8
+        target.shaftStrength *= 1 - veil * 0.72
+        target.bloomAlpha *= 1 - veil * 0.85
+      }
     }
     const k = 1 - Math.exp(-Math.min(0.1, delta) * 1.6)
     for (const key of TONE_COLORS) {
@@ -242,7 +256,8 @@ export function LightShafts({ timeRef, toneRef = null }) {
         side: THREE.DoubleSide,
       })
       const width = 1.2 + r() * 2.4
-      const top = new THREE.Vector3(5 + r() * 8, 12, -9 - r() * 6)
+      /* Start high in the haze, so the faded top is lost in it (no cut end). */
+      const top = new THREE.Vector3(5 + r() * 8, 26, -9 - r() * 6)
       const target = new THREE.Vector3(-2 + r() * 5, -0.5, -2 + r() * 4)
       shafts.push({ mat, width, top, target, cross: r() * Math.PI, base: mat.uniforms.uStrength.value })
     }

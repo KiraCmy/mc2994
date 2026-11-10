@@ -1,7 +1,7 @@
-/* Specimen sheet — a monochrome archive plate, landscape (16:10).
- * Site type: Anybody for labels and the name; the Concept page's quote serif
- * for the italic lines. Sizes use --u (1cqw on desktop) so the plate keeps
- * its proportions at any width; narrow screens restack and enlarge --u. */
+/* Specimen sheet — a dark archive plate, landscape (16:10).
+ * Type is Anybody, the same face as the rest of the site, including its italic.
+ * Sizes use --u (1cqw on desktop) so the plate keeps its proportions at any
+ * width; narrow screens restack and enlarge --u. */
 .arc-specimen {
   display: grid;
   justify-items: center;
@@ -9,7 +9,6 @@
 }
 
 .arc-sheet {
-  --arc-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   container-type: inline-size;
   width: min(100%, 1400px, calc((100svh - var(--site-header-h) - 7rem) * 1.6));
   min-width: min(100%, 320px);
@@ -51,16 +50,6 @@
 .arc-sheet dd,
 .arc-sheet ol {
   margin: 0;
-}
-
-/* Monochrome specimen photography: the pastel remains read mid-grey, not white. */
-.arc-sheet .arc-remains img,
-.arc-stage__thumb img {
-  filter: grayscale(1) brightness(0.82) contrast(1.35);
-}
-
-.arc-detail .arc-remains img {
-  filter: grayscale(1) brightness(0.72) contrast(1.5);
 }
 
 .arc-sheet .arc-remains--plate {
@@ -107,7 +96,6 @@
 
 .arc-sheet__could {
   margin-top: calc(var(--u) * 1) !important;
-  font-family: var(--arc-serif);
   font-size: calc(var(--u) * 1.6);
   font-style: italic;
   color: var(--arc-soft);
@@ -135,7 +123,6 @@
 }
 
 .arc-sheet__meta dd {
-  font-family: var(--arc-serif);
   font-size: calc(var(--u) * 0.95);
   font-style: italic;
   color: var(--arc-soft);
@@ -164,7 +151,6 @@
   display: -webkit-box;
   margin-top: calc(var(--u) * 0.8) !important;
   overflow: hidden;
-  font-family: var(--arc-serif);
   font-size: calc(var(--u) * 5);
   font-style: italic;
   line-height: 1.05;

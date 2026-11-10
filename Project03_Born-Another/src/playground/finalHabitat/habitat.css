@@ -916,6 +916,76 @@
   animation-delay: 1.5s;
 }
 
+/* Cinematic entrance: one veil on the same descent clock. It fades away,
+   so the habitat underneath is unchanged once the journey arrives. */
+.exp07-entrance {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.exp07-entrance__wash {
+  position: absolute;
+  inset: 0;
+  opacity: var(--exp07-veil, 1);
+  background:
+    radial-gradient(ellipse 62% 48% at 72% 40%, rgba(90, 150, 168, 0.16), transparent 64%),
+    radial-gradient(ellipse 50% 42% at 22% 62%, rgba(18, 42, 52, 0.4), transparent 70%),
+    linear-gradient(180deg, #060c10 0%, #0c1519 52%, #101c22 100%);
+}
+
+.exp07-entrance__night {
+  position: absolute;
+  inset: 0;
+  background: #05080c;
+  opacity: var(--exp07-night, 1);
+}
+
+.exp07-entrance__line {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(1.85rem, 3.3vw, 2.45rem);
+  letter-spacing: 0.045em;
+  color: rgba(244, 241, 236, 0.92);
+  text-shadow: 0 0 28px rgba(186, 206, 160, 0.28);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.exp07-entrance__mote {
+  position: absolute;
+  bottom: -4%;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(176, 210, 214, 0.5);
+  opacity: 0;
+  animation-name: exp07-entrance-rise;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes exp07-entrance-rise {
+  0% { transform: translateY(0); opacity: 0; }
+  18% { opacity: 0.45; }
+  80% { opacity: 0.16; }
+  100% { transform: translateY(-78vh); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exp07-entrance__line,
+  .exp07-entrance__mote {
+    display: none;
+  }
+}
+
 .exp07-unfocus {
   top: calc(var(--site-header-h) + 1.6rem);
 }
@@ -1314,4 +1384,145 @@
   text-transform: uppercase;
   color: #9fd8e6;
   text-decoration: none;
+}
+
+/* Restart the world: the only thing that resets World Final. */
+.exp07-restart {
+  position: absolute;
+  top: calc(var(--site-header-h) + 4.2rem);
+  right: 3.4vw;
+  z-index: 4;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.55rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--exp07-ink-soft);
+  background: transparent;
+  opacity: 0.7;
+  cursor: pointer;
+  animation: exp07-reveal-in 1.6s ease both;
+  transition: opacity 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.exp07-restart:hover,
+.exp07-restart.is-confirming {
+  opacity: 1;
+  border-color: var(--exp07-line);
+  color: var(--exp07-ink);
+}
+
+.is-world.is-focused .exp07-restart {
+  top: calc(var(--site-header-h) + 7rem);
+}
+
+/* Kept remains in the cavern: a leader drawn from the remains to a small
+   white-ruled tag (transparent, white type). Opens the archive card. */
+.exp07-tag {
+  --r: 60px;
+  --sx: calc(var(--r) * 0.62);
+  --sy: calc(var(--r) * -0.62);
+  position: relative;
+  width: 0;
+  height: 0;
+  color: #fff;
+  pointer-events: none;
+}
+
+.exp07-tag__dot {
+  position: absolute;
+  left: calc(var(--sx) - 2.5px);
+  top: calc(var(--sy) - 2.5px);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+  animation: exp07-tag-fade 0.25s ease-out both;
+}
+
+.exp07-tag__lead,
+.exp07-tag__run {
+  position: absolute;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.9);
+  transform-origin: 0 50%;
+}
+
+.exp07-tag__lead {
+  left: var(--sx);
+  top: var(--sy);
+  width: 62px;
+  transform: rotate(-45deg) scaleX(0);
+  animation: exp07-tag-lead 0.32s 0.08s cubic-bezier(0.3, 0.6, 0.2, 1) forwards;
+}
+
+.exp07-tag__run {
+  left: calc(var(--sx) + 44px);
+  top: calc(var(--sy) - 44px);
+  width: 26px;
+  transform: scaleX(0);
+  animation: exp07-tag-run 0.2s 0.38s ease-out forwards;
+}
+
+.exp07-tag__box {
+  position: absolute;
+  left: calc(var(--sx) + 70px);
+  top: calc(var(--sy) - 44px);
+  display: grid;
+  gap: 0.2rem;
+  min-width: 8.5rem;
+  max-width: 15rem;
+  padding: 0.5rem 0.75rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  background: transparent;
+  color: #fff;
+  text-decoration: none;
+  text-align: left;
+  white-space: normal;
+  pointer-events: auto;
+  cursor: pointer;
+  transform: translateY(-50%);
+  opacity: 0;
+  animation: exp07-tag-fade 0.3s 0.52s ease-out forwards;
+  transition: background 0.2s ease;
+}
+
+.exp07-tag__box:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.exp07-tag__name {
+  font-size: 0.58rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.exp07-tag__words {
+  font-size: 0.85rem;
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1.3;
+}
+
+.exp07-tag__link {
+  font-size: 0.56rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+@keyframes exp07-tag-lead {
+  to { transform: rotate(-45deg) scaleX(1); }
+}
+
+@keyframes exp07-tag-run {
+  to { transform: scaleX(1); }
+}
+
+@keyframes exp07-tag-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

@@ -114,10 +114,9 @@ export function buildOutcrops() {
   return { crystals, beads }
 }
 
-export function createOutcropResources() {
-  const layout = buildOutcrops()
-  const crystalGeo = createPrismCrystalGeometry({ taper: 0.1 })
-  const crystalMat = createCrystalMaterial({
+/** Lilac ground-crystal glass (the clearing's druses; also the cavern's). */
+export function createOutcropCrystalMaterial(overrides = {}) {
+  return createCrystalMaterial({
     /* Cool grey-lilac: the ground crystals step back from the warm body. */
     color: '#e4e3f0',
     roughness: 0.02,
@@ -130,18 +129,12 @@ export function createOutcropResources() {
     emissive: new THREE.Color('#fff0f6'),
     emissiveIntensity: 0.025,
     envMapIntensity: 2.2,
+    ...overrides,
   })
-  const crystals = instanced(crystalGeo, crystalMat, layout.crystals, (c) => {
-    orientAlong(_q, c.axis, c.spin)
-    _p.set(c.x, c.y, c.z)
-    _s.set(c.width, c.height / PRISM_HEIGHT, c.width)
-  })
-  const tints = ['#ffffff', '#f3e6ff', '#ffecf5', '#eceeff'].map((h) => new THREE.Color(h))
-  layout.crystals.forEach((c, i) => crystals.setColorAt(i, tints[Math.floor(Math.abs(Math.sin(c.x * 12.9 + c.z * 78.2)) * tints.length) % tints.length]))
-  crystals.instanceColor.needsUpdate = true
+}
 
-  /* Milky phantom inside each large crystal: seen refracted, gives depth. */
-  const phantomMat = new THREE.MeshStandardMaterial({
+export function createOutcropPhantomMaterial() {
+  return new THREE.MeshStandardMaterial({
     color: '#d9d6e6',
     roughness: 0.55,
     metalness: 0,
@@ -149,6 +142,28 @@ export function createOutcropResources() {
     emissiveIntensity: 0.14,
     flatShading: true,
   })
+}
+
+const OUTCROP_TINTS = ['#ffffff', '#f3e6ff', '#ffecf5', '#eceeff'].map((h) => new THREE.Color(h))
+/** Per-crystal tint for an instanced lilac mesh (list items need x, z). */
+export function applyOutcropTints(mesh, list) {
+  list.forEach((c, i) => mesh.setColorAt(i, OUTCROP_TINTS[Math.floor(Math.abs(Math.sin(c.x * 12.9 + c.z * 78.2)) * OUTCROP_TINTS.length) % OUTCROP_TINTS.length]))
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+}
+
+export function createOutcropResources() {
+  const layout = buildOutcrops()
+  const crystalGeo = createPrismCrystalGeometry({ taper: 0.1 })
+  const crystalMat = createOutcropCrystalMaterial()
+  const crystals = instanced(crystalGeo, crystalMat, layout.crystals, (c) => {
+    orientAlong(_q, c.axis, c.spin)
+    _p.set(c.x, c.y, c.z)
+    _s.set(c.width, c.height / PRISM_HEIGHT, c.width)
+  })
+  applyOutcropTints(crystals, layout.crystals)
+
+  /* Milky phantom inside each large crystal: seen refracted, gives depth. */
+  const phantomMat = createOutcropPhantomMaterial()
   const phantomList = layout.crystals.filter((c) => c.phantom)
   const phantoms = instanced(crystalGeo, phantomMat, phantomList, (c) => {
     orientAlong(_q, c.axis, c.spin + 0.5)

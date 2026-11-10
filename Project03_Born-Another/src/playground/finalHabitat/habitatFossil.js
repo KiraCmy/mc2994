@@ -41,11 +41,10 @@ export function deathPhases(t) {
   }
 }
 
-/** Coil amount for the body: begins in the last days of life, completes after. */
-export function coilAmount(age, t) {
-  const before = smooth(0.9, 1, age) * 0.55
-  if (!(t >= 0)) return before
-  return 0.55 + 0.45 * deathPhases(t).coil
+/** Coil amount for the body: eases in over the last stretch of life and is
+ *  complete at death — nothing changes shape after the life has ended. */
+export function coilAmount(age) {
+  return smooth(0.86, 1, age)
 }
 
 /**

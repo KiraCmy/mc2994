@@ -49,7 +49,8 @@ const KinBody = memo(function KinBody({ org, life, slot, envRef, temperature, la
   /* A held (focused) life that reached its end becomes a husk like the hero. */
   const bodyLife = useMemo(() => (life && ended ? { ...life, dead: true, age: 1 } : life), [life, ended])
   if (!life || (life.dead && !ended)) return null
-  const showPetals = !ended && layers?.petals !== false && visual && !visual.isDead && (visual.petalPlan?.petalCount ?? 0) > 0
+  /* World Final: the body grows its own petals on its skin (CrystalBody). */
+  const showPetals = !world && !ended && layers?.petals !== false && visual && !visual.isDead && (visual.petalPlan?.petalCount ?? 0) > 0
   return (
     <CrystalBody
       life={bodyLife}

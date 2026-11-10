@@ -170,6 +170,7 @@ const INITIAL_ROUTE = parseAppRoute(
 
 export default function App() {
   const [modeId, setModeId] = useState(INITIAL_ROUTE.modeId)
+  const worldKeptRef = useRef(false)
   const [lastStudyMode, setLastStudyMode] = useState(
     isStudyMode(INITIAL_ROUTE.modeId) ? INITIAL_ROUTE.modeId : DEFAULT_STUDY_MODE,
   )
@@ -766,12 +767,33 @@ export default function App() {
         ? MATERIAL_MAX_DISTANCE
         : DEFAULT_MAX_DISTANCE
 
+  /* World Final keeps its state while you visit other pages (it is hidden
+     and paused, not unmounted); only its own "Restart the world" resets it. */
+  if (modeId === 'world-final') worldKeptRef.current = true
+  const worldActive = modeId === 'world-final'
+  const worldLayer = worldKeptRef.current ? (
+    <main className="stage" style={worldActive ? undefined : { display: 'none' }} aria-hidden={!worldActive || undefined}>
+      <Suspense fallback={null}>
+        <WorldFinalPage
+          active={worldActive}
+          header={<SiteHeader modeId={modeId} onSelectMode={selectMode} />}
+        />
+      </Suspense>
+    </main>
+  ) : null
+  const withWorld = (page) => (
+    <>
+      {page}
+      {worldLayer}
+    </>
+  )
+
   if (modeId === 'worldv2') {
-    return <WorldV2 modeId={modeId} onSelectMode={selectMode} />
+    return withWorld(<WorldV2 modeId={modeId} onSelectMode={selectMode} />)
   }
 
   if (modeId === 'concept') {
-    return (
+    return withWorld(
       <main className="stage">
         <ConceptPage
           header={<SiteHeader modeId={modeId} onSelectMode={selectMode} />}
@@ -781,7 +803,7 @@ export default function App() {
   }
 
   if (modeId === 'system') {
-    return (
+    return withWorld(
       <main className="stage">
         <SystemPage
           header={<SiteHeader modeId={modeId} onSelectMode={selectMode} />}
@@ -791,7 +813,7 @@ export default function App() {
   }
 
   if (modeId === 'playground') {
-    return (
+    return withWorld(
       <main className="stage">
         <Suspense fallback={null}>
           <PlaygroundPage
@@ -802,20 +824,10 @@ export default function App() {
     )
   }
 
-  if (modeId === 'world-final') {
-    return (
-      <main className="stage">
-        <Suspense fallback={null}>
-          <WorldFinalPage
-            header={<SiteHeader modeId={modeId} onSelectMode={selectMode} />}
-          />
-        </Suspense>
-      </main>
-    )
-  }
+  if (modeId === 'world-final') return withWorld(null)
 
   if (modeId === 'archive') {
-    return (
+    return withWorld(
       <main className="stage">
         <Suspense fallback={null}>
           <ArchivePage modeId={modeId} onSelectMode={selectMode} />
@@ -825,7 +837,7 @@ export default function App() {
   }
 
   if (modeId === 'memory-lab') {
-    return (
+    return withWorld(
       <main className="stage">
         <Suspense fallback={null}>
           <MemoryLabPage modeId={modeId} onSelectMode={selectMode} />
@@ -834,7 +846,7 @@ export default function App() {
     )
   }
 
-  return (
+  return withWorld(
     <main className="stage">
       <WebGLCanvas
         className="viewport"

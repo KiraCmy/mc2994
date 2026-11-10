@@ -10,16 +10,20 @@ import {
 import { normalizeExp05Temperature } from '../finalForm/exp05EnvironmentCoupling.js'
 import { crystalGrowth, rimeAmount, smoothstep } from '../crystalForm/crystallization.js'
 import { habitatHeight, habitatRng } from './habitatField.js'
-import { nucleusFragment, nucleusVertex, patchMembrane } from './habitatShaders.js'
-import { bodyFactors, characterOf, createHistory, createMorph, CRYSTAL_MODES, shapeHeight, stepMorph, updateHistory } from './unfoldForm.js'
+import { LIGHT_DIR, nucleusFragment, nucleusVertex, patchMembrane } from './habitatShaders.js'
+import { bodyFactors, characterOf, createHistory, createMorph, CRYSTAL_MODES, shapeHeight, speciesForm, stepMorph, updateHistory } from './unfoldForm.js'
 import { KIN_TINTS } from './habitatKin.js'
 import { ammoniteRadius, coilAmount, deathPhases, witherAmount } from './habitatFossil.js'
 import { glowFragment, glowVertex } from './worldShaders.js'
 import { noticeRadius, pickResponse, responseCooldown, responseEnvelope, RESPONSE_SECONDS } from './worldOpening.js'
 import {
-  createCrystalMaterial,
+
   createBeadMaterial,
+  createBluntPrismGeometry,
+
   createFrostGeometry,
+  createBodyCrystalMaterial,
+  createBlockGeometry,
   createHabitGeometry,
   crystalStyleFor,
   styleMaterialParams,
@@ -100,6 +104,21 @@ function randomDir(r) {
 }
 
 /** Unit-sphere vertex directions shared by every seat. */
+/** A petal: a thin cupped ellipse lying on the skin (one side lifted). */
+function createPetalGeometry() {
+  const geo = new THREE.CircleGeometry(1, 18)
+  geo.rotateX(-Math.PI / 2)
+  const p = geo.attributes.position.array
+  for (let i = 0; i < p.length; i += 3) {
+    const x = p[i], z = p[i + 2]
+    p[i] = x * 0.62
+    p[i + 2] = z + 1
+    p[i + 1] = (x * x) * 0.25 + (z + 1) * (z + 1) * 0.06
+  }
+  geo.computeVertexNormals()
+  return geo
+}
+
 function createBase() {
   let geo = new THREE.IcosahedronGeometry(1, BODY_DETAIL)
   geo.deleteAttribute('normal')
@@ -114,7 +133,59 @@ function createBase() {
     dirs.set(d, i * 3)
     dirList[i] = d
   }
-  return { index: geo.index.array.slice(), count, dirs, dirList }
+  /* Neighbour lists (CSR), for the baked cavity shading. */
+  const index = geo.index.array.slice()
+  const sets = Array.from({ length: count }, () => new Set())
+  for (let t = 0; t < index.length; t += 3) {
+    const a = index[t], b = index[t + 1], c = index[t + 2]
+    sets[a].add(b); sets[a].add(c); sets[b].add(a); sets[b].add(c); sets[c].add(a); sets[c].add(b)
+  }
+  const nbStart = new Uint32Array(count + 1)
+  for (let i = 0; i < count; i++) nbStart[i + 1] = nbStart[i] + sets[i].size
+  const nb = new Uint32Array(nbStart[count])
+  for (let i = 0; i < count; i++) {
+    let k = nbStart[i]
+    for (const j of sets[i]) nb[k++] = j
+  }
+  return { index, count, dirs, dirList, nbStart, nb }
+}
+
+/**
+ * Baked cavity (ambient occlusion from the shape): how much each vertex sits
+ * in a hollow relative to its ring, smoothed a little. Computed at reseat
+ * only — free at render time.
+ */
+function bakeCavity(base, pos, nrm, out) {
+  const n = base.count
+  const raw = new Float32Array(n)
+  for (let i = 0; i < n; i++) {
+    const j = i * 3
+    let sum = 0
+    let len = 0
+    const s0 = base.nbStart[i], s1 = base.nbStart[i + 1]
+    for (let k = s0; k < s1; k++) {
+      const q = base.nb[k] * 3
+      const dx = pos[q] - pos[j], dy = pos[q + 1] - pos[j + 1], dz = pos[q + 2] - pos[j + 2]
+      const l = Math.hypot(dx, dy, dz) || 1
+      sum += (dx * nrm[j] + dy * nrm[j + 1] + dz * nrm[j + 2]) / l
+      len++
+    }
+    raw[i] = len ? sum / len : 0
+  }
+  /* Two smoothing passes: occlusion is broader than one ring. */
+  let a = raw
+  for (let pass = 0; pass < 2; pass++) {
+    const b = new Float32Array(n)
+    for (let i = 0; i < n; i++) {
+      let acc = a[i]
+      const s0 = base.nbStart[i], s1 = base.nbStart[i + 1]
+      for (let k = s0; k < s1; k++) acc += a[base.nb[k]]
+      b[i] = acc / (1 + s1 - s0)
+    }
+    a = b
+  }
+  for (let i = 0; i < n; i++) out[i] = smoothstep(0.01, 0.16, a[i])
+  return out
 }
 
 function nearestVertex(base, dir) {
@@ -131,7 +202,7 @@ function nearestVertex(base, dir) {
 }
 
 /** Seed-stable layout of eruptions, crystals, frost and fibres. */
-function buildPlan(base, seed, siteDirections) {
+function buildPlan(base, seed, siteDirections, habit = 'prisms') {
   const r = habitatRng((Number(seed) || 1) * 977 + 5)
   const sites = siteDirections.slice(0, 12).map(norm3)
   while (sites.length < 7) sites.push(randomDir(r))
@@ -251,7 +322,7 @@ function buildPlan(base, seed, siteDirections) {
       bow: [(r() - 0.5) * 2, (r() - 0.5) * 2, (r() - 0.5) * 2],
       amp: 0.08 + r() * 0.16,
       start: 0.7 + r() * 0.4,
-      reach: 0.78 + r() * 0.16,
+      reach: 0.56 + r() * 0.16,
       warm: r(),
     }
   })
@@ -268,7 +339,50 @@ function buildPlan(base, seed, siteDirections) {
     facets.push({ n, vertex: nearestVertex(base, n), depth: 0.88 + r() * 0.07 })
   }
 
-  return { eruptions, crystals, beads, fibres, tent, frost, facets }
+  /* Each species crystallizes in its own habit: every crystal site grows a
+     spray of needles, a stack of blades, or a knot of blocks. */
+  const grown = []
+  for (const c of crystals) {
+    if (habit === 'prisms') {
+      /* A druse: stout terminated columns, nearly parallel, of mixed size. */
+      const k = 3 + Math.floor(r() * 3)
+      for (let i = 0; i < k; i++) {
+        const a = r() * Math.PI * 2
+        const cone = 0.06 + r() * 0.3
+        const rr = i === 0 ? 0 : 0.02 + r() * 0.05
+        grown.push({ ...c, offT: c.offT + Math.cos(a) * rr, offB: c.offB + Math.sin(a) * rr, tiltT: c.tiltT * 0.7 + Math.cos(a) * cone, tiltB: c.tiltB * 0.7 + Math.sin(a) * cone, spin: r() * Math.PI, protrude: c.protrude * (i === 0 ? 0.9 : 0.35 + r() * 0.5), wr: c.wr * (0.55 + r() * 0.25), th: c.th + r() * 0.08 })
+      }
+    } else if (habit === 'plates') {
+      const k = 2 + Math.floor(r() * 3)
+      for (let i = 0; i < k; i++) {
+        grown.push({ ...c, offT: c.offT + (i - k / 2) * 0.03, offB: c.offB + (r() - 0.5) * 0.02, tiltT: c.tiltT * 0.6 + (r() - 0.5) * 0.25, tiltB: c.tiltB * 0.6 + (r() - 0.5) * 0.25, spin: c.spin + i * 0.18, protrude: c.protrude * (0.55 + r() * 0.45), wr: c.wr * (0.9 + r() * 0.3), th: c.th + i * 0.03 })
+      }
+    } else {
+      const k = 3 + Math.floor(r() * 3)
+      for (let i = 0; i < k; i++) {
+        const a = r() * Math.PI * 2
+        const rr = 0.02 + r() * 0.06
+        grown.push({ ...c, offT: c.offT + Math.cos(a) * rr, offB: c.offB + Math.sin(a) * rr, tiltT: (r() - 0.5) * 1.6, tiltB: (r() - 0.5) * 1.6, spin: r() * Math.PI, protrude: c.protrude * (0.25 + r() * 0.25), wr: c.wr * (1.1 + r() * 0.6), th: c.th + r() * 0.1, block: true })
+      }
+    }
+  }
+
+  /* Petals: translucent scales lying on the skin; wet water grows more. */
+  const petals = []
+  for (let i = 0; i < 320; i++) {
+    const vertex = Math.floor(r() * base.count)
+    petals.push({
+      vertex,
+      offT: (r() - 0.5) * 0.03,
+      offB: (r() - 0.5) * 0.03,
+      size: 0.035 + Math.pow(r(), 2) * 0.05,
+      lift: 0.25 + r() * 0.6,
+      spin: r() * Math.PI * 2,
+      th: r(),
+    })
+  }
+
+  return { eruptions, crystals: grown, beads, fibres, tent, frost, facets, petals }
 }
 
 /* ---------- shaders ---------- */
@@ -324,10 +438,10 @@ export default function CrystalBody({
   const sites = life?.outputs?.surface?.spatialGrowthSites
   const siteKey = (sites ?? []).map((s) => s.id).join('|')
   const plan = useMemo(
-    () => buildPlan(base, seed, (sites ?? []).map((s) => s.direction)),
+    () => buildPlan(base, seed, (sites ?? []).map((s) => s.direction), speciesForm(morphType).habit),
     // siteKey captures the site set; directions are stable per id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [base, seed, siteKey],
+    [base, seed, siteKey, morphType],
   )
 
   /* ---------- GPU resources ---------- */
@@ -361,6 +475,10 @@ export default function CrystalBody({
       uBubble: { value: 0 },
       uStrata: { value: 0 },
       uShrink: { value: 0 },
+      uRidgeMode: { value: 0 },
+      uBubbleScale: { value: 3.2 },
+      uLightView: { value: new THREE.Vector3(0.4, 0.6, 0.5) },
+      uDeep: { value: new THREE.Color('#d98aa8') },
     }),
     [],
   )
@@ -388,6 +506,7 @@ export default function CrystalBody({
     membraneGeo.setAttribute('aCoilOffset', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
     membraneGeo.setAttribute('aCoilNormal', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
     membraneGeo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(base.count * 3), 3))
+    membraneGeo.setAttribute('aCavity', new THREE.BufferAttribute(new Float32Array(base.count), 1))
 
     const nucleusGeo = new THREE.BufferGeometry()
     nucleusGeo.setIndex(new THREE.BufferAttribute(base.index, 1))
@@ -460,21 +579,38 @@ export default function CrystalBody({
       nucleusMat,
       fibreMat,
       /* Each species grows its own mineral (habit, frost, material). */
-      crystalGeo: createHabitGeometry(crystalStyle.habit),
-      beadGeo: createFrostGeometry(crystalStyle.frost),
-      crystalMat: createCrystalMaterial({
-        emissive: new THREE.Color('#efe6ff'),
-        emissiveIntensity: 0.03,
-        envMapIntensity: 2,
-        clearcoatRoughness: 0.06,
-        ...styleMaterialParams(crystalStyle.crystal),
+      /* Habit by species: needle sprays, stacked blades, cubic blocks. */
+      crystalGeo: (() => {
+        const habit = speciesForm(morphType).habit
+        if (habit === 'prisms') return createBluntPrismGeometry()
+        if (habit === 'blocks') return createBlockGeometry()
+        return createHabitGeometry('plate')
+      })(),
+      petalGeo: createPetalGeometry(),
+      petalMat: new THREE.MeshPhysicalMaterial({
+        color: '#fdf8ff',
+        metalness: 0,
+        roughness: 0.16,
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        iridescence: 0.85,
+        iridescenceIOR: 1.35,
+        iridescenceThicknessRange: [180, 820],
+        sheen: 0.6,
+        sheenColor: new THREE.Color('#ffffff'),
+        envMapIntensity: 1.3,
       }),
+      beadGeo: createFrostGeometry(crystalStyle.frost),
+      /* Real crystal: refracting, with an inside, bright edges, a frosted root. */
+      crystalMat: createBodyCrystalMaterial(speciesForm(morphType).habit),
       frostMat: createBeadMaterial({
         emissiveIntensity: 0,
         ...styleMaterialParams(crystalStyle.frostMat),
       }),
     }
-  }, [base, plan, uniforms, nucleusUniforms, crystalStyle])
+  }, [base, plan, uniforms, nucleusUniforms, crystalStyle, morphType])
 
   useEffect(
     () => () => {
@@ -521,11 +657,19 @@ export default function CrystalBody({
     resources.membraneMat.sheenColor.set(tint.sheen)
     uniforms.uCore.value.set(tint.core)
     uniforms.uInnerLight.value.set('#ffa24a').lerp(new THREE.Color(tint.core), 0.2)
-  }, [resources, tint, uniforms])
+    uniforms.uDeep.value.set(tint.attenuation)
+    /* The body's crystals: clear, faintly tinted by the life, rooted in its skin. */
+    const cmat = resources.crystalMat
+    cmat.attenuationColor.set('#ece2f4').lerp(new THREE.Color(tint.attenuation), 0.35)
+    cmat.userData.uniforms.uSkin.value.set(tint.sheen).lerp(new THREE.Color(tint.attenuation), 0.35)
+  }, [resources, tint, uniforms, crystalStyle, morphType])
 
   const groupRef = useRef(null)
   const crystalsRef = useRef(null)
   const frostRef = useRef(null)
+  /* Nucleus + fibres: contract with the skin so nothing pokes through. */
+  const innerRef = useRef(null)
+  const petalsRef = useRef(null)
   const seatRef = useRef({ data: null, key: null, life: null, resources: null, at: -1, facetAmt: 0, coil: 0 })
 
   /* Remains: a frozen copy of this body as it is now (husk skin + crystals,
@@ -555,6 +699,8 @@ export default function CrystalBody({
         fold: uniforms.uFold.value,
         bubble: uniforms.uBubble.value,
         strata: uniforms.uStrata.value,
+        ridgeMode: uniforms.uRidgeMode.value,
+        bubbleScale: uniforms.uBubbleScale.value,
       }
       const shrink = 1 - 0.14 * uniforms.uShrink.value
       for (let i = 0; i < n; i += 3) {
@@ -665,6 +811,8 @@ export default function CrystalBody({
     }
     resources.targetGeo.computeVertexNormals()
     resources.targetNucleusGeo.computeVertexNormals()
+    bakeCavity(base, pos, resources.targetGeo.attributes.normal.array, resources.membraneGeo.attributes.aCavity.array)
+    resources.membraneGeo.attributes.aCavity.needsUpdate = true
     /* The visible skin sits between the old and new shape while easing. */
     for (const [shown, target] of [
       [resources.membraneGeo, resources.targetGeo],
@@ -745,7 +893,7 @@ export default function CrystalBody({
     const coilOffset = resources.membraneGeo.attributes.aCoilOffset.array
     /* Only the spiral closes into an ammonite. Dickinsonia and the trilobite
        crystallize in the silhouette they already have. */
-    const wantsCoil = morphType === 'spiral' && (life?.dead || (life?.age ?? 0) >= 0.88)
+    const wantsCoil = morphType === 'spiral' && (life?.dead || (life?.age ?? 0) >= 0.84)
     if (wantsCoil) {
       const coilPos = new Float32Array(base.count * 3)
       /* Only partly: the shell keeps the life's own shape under the coil. */
@@ -855,15 +1003,17 @@ export default function CrystalBody({
       if (hist.seed !== life.seed) {
         hist.seed = life.seed
         hist.history = createHistory(life.seed)
-        hist.character = characterOf(hist.history, life.seed)
+        hist.character = characterOf(hist.history, life.seed, morphType)
         hist.at = now
         hist.marks = 0
         hist.pulse = 0
         morphRef.current = createMorph()
+        unfoldRef.current.rime = undefined
+        unfoldRef.current.wet = 0
       }
       if (!life.dead && now - hist.at > 4) {
         hist.at = now
-        hist.character = characterOf(hist.history, life.seed)
+        hist.character = characterOf(hist.history, life.seed, morphType)
       }
       /* The species form emerges, but only as far as this life lets it. */
       effLobeRef.current = Math.min(lobeAmplitude, hist.character.lobeCap)
@@ -916,7 +1066,7 @@ export default function CrystalBody({
     const deathT = life.dead ? Math.max(0, deathRef?.current?.t ?? 0) : -1
     const wither = life.dead ? 1 : witherAmount(age)
     const phases = deathPhases(deathT)
-    const coil = data.hasCoil ? coilAmount(age, deathT) : 0
+    const coil = data.hasCoil ? (life.dead ? 1 : coilAmount(age)) : 0
     /* Placement: the hero floats at the clearing; kin follow their sim seat. */
     const place = placeRef?.current
     const k = place ? Math.max(0.0001, place.scale) : bodyScale
@@ -974,7 +1124,7 @@ export default function CrystalBody({
     resp.hover += (hoverTarget - resp.hover) * Math.min(1, delta * 5)
     /* Suspended in water: slow, deep buoyant bob. */
     const pulse = place?.pulse ?? 0.3
-    const hover = gy + (-data.minY + (1.7 - 1.15 * phases.sink) * S + Math.sin(time * pulse + phase) * 0.22 * S * (1 - 0.8 * wither) * (1 - 0.85 * still) + 0.12 * S * still) * k + (place?.lift ?? 0)
+    const hover = gy + (-data.minY + (2.6 - 2.05 * phases.sink) * S + Math.sin(time * pulse + phase) * 0.22 * S * (1 - 0.8 * wither) * (1 - 0.85 * still) + 0.12 * S * still) * k + (place?.lift ?? 0)
     if (place?.snap || place?.direct || !group.userData.placed) {
       group.position.y = hover
       group.userData.placed = true
@@ -1003,7 +1153,7 @@ export default function CrystalBody({
 
     /* Collision body (centre height above the sand, radius; local units). */
     const bodyRadius = 0.4 * S + 0.6 * data.rmax
-    const centreLocal = -data.minY + 1.7 * S + data.center[1]
+    const centreLocal = -data.minY + 2.6 * S + data.center[1]
     if (place) place.body = { centre: centreLocal, radius: bodyRadius }
     scratch.centre.set(data.center[0], data.center[1], data.center[2]).multiplyScalar(k).add(group.position)
     resp.radius = bodyRadius * k
@@ -1069,7 +1219,10 @@ export default function CrystalBody({
     const level = Math.max(crystalRef.current?.level ?? 0, wither)
     const moisture = envRef.current?.moisture ?? 0.5
     const turbulence = envRef.current?.turbulence ?? 0
-    const rime = rimeAmount(level, moisture)
+    /* After death the surface keeps the frost it had. */
+    const frozenState = unfoldRef.current
+    if (!life.dead || frozenState.rime === undefined) frozenState.rime = rimeAmount(level, moisture)
+    const rime = frozenState.rime
 
     uniforms.uTime.value = time
     uniforms.uBreath.value = 0.035 * S * (1 - 0.85 * level) * (1 + turbulence * 1.5) * (1 - wither)
@@ -1101,7 +1254,7 @@ export default function CrystalBody({
       gm.scale.setScalar(bodyRadius * 6)
       gm.quaternion.copy(group.quaternion).invert().multiply(state.camera.quaternion)
     }
-    resources.fibreMat.opacity = 1 - wither
+    resources.fibreMat.opacity = 0.7 * (1 - wither)
     if (coreLightRef.current) coreLightRef.current.intensity = 0.9 * (1 - wither)
     if (huskLightRef.current) huskLightRef.current.intensity = 2.6 * phases.dusk
     for (const key of Object.keys(NUCLEUS_ALIVE)) nucleusUniforms[key].value.copy(NUCLEUS_ALIVE[key]).lerp(NUCLEUS_FOSSIL, wither * 0.85)
@@ -1127,7 +1280,7 @@ export default function CrystalBody({
       if (world?.current?.focusId === selfId) openTarget = Math.max(openTarget, 0.9)
       openTarget = Math.min(1, openTarget + 0.12 * resp.hover)
       openTarget *= (1 - 0.85 * level) * (1 - wither)
-      if (deathT >= 0) openTarget = smoothstep(0, 1.2, deathT) * (1 - smoothstep(2.2, 5, deathT))
+      if (deathT >= 0) openTarget = 0
       unf.open += (openTarget - unf.open) * Math.min(1, delta * 0.9)
       uniforms.uOpen.value = unf.open
       nucleusUniforms.uOpen.value = unf.open
@@ -1168,19 +1321,35 @@ export default function CrystalBody({
       /* The medium shapes the body: warm → ridges, cold → contraction,
          wet → blisters, turbulent → strata. Remembered, then frozen as it
          crystallizes (see unfoldForm.js). */
-      const morph = stepMorph(morphRef.current, { temperature: tempValue, moisture, turbulence }, life.dead ? 0 : Math.min(0.1, delta), level)
-      const sh = morph.shown
+      const form = speciesForm(morphType)
+      uniforms.uRidgeMode.value = form.ridgeCode
+      uniforms.uBubbleScale.value = form.bubbleScale
+      scratch.t.copy(LIGHT_DIR).transformDirection(state.camera.matrixWorldInverse)
+      uniforms.uLightView.value.copy(scratch.t)
+      const morph = stepMorph(morphRef.current, { temperature: tempValue, moisture, turbulence }, life.dead ? 0 : Math.min(0.1, delta), level, morphType)
+      /* The strongest shaping leads; the others recede, so the body reads as
+         one thing at a time instead of everything at once. */
+      const raw = morph.shown
+      const top = Math.max(raw.ridge, raw.shrink, raw.bubble, raw.strata, 1e-4)
+      const lead = (v) => v * Math.pow(v / top, 1.5)
+      const sh = { ridge: lead(raw.ridge), shrink: lead(raw.shrink), bubble: lead(raw.bubble), strata: lead(raw.strata) }
       const grown = smoothstep(0, 0.6, age)
-      uniforms.uFold.value = S * (0.025 + 0.03 * grown + 0.13 * sh.ridge) * (1 - 0.35 * sh.shrink)
+      uniforms.uFold.value = S * ((0.02 + 0.025 * grown) * (1 - 0.7 * Math.max(sh.bubble, sh.strata)) + 0.13 * sh.ridge) * (1 - 0.35 * sh.shrink)
       uniforms.uBubble.value = S * 0.17 * sh.bubble * (0.4 + 0.6 * grown)
       uniforms.uStrata.value = S * 0.11 * sh.strata * (0.4 + 0.6 * grown)
       uniforms.uShrink.value = sh.shrink
+      if (innerRef.current) {
+        const k = 1 - 0.14 * sh.shrink
+        const [cx, cy, cz] = data.center
+        innerRef.current.scale.setScalar(k)
+        innerRef.current.position.set(cx * (1 - k), cy * (1 - k), cz * (1 - k))
+      }
       const flow = (1 - 0.9 * level) * (1 - wither)
       unf.flowTime += Math.min(0.1, delta) * (0.35 + 1.4 * turbulence) * flow
       uniforms.uFlowTime.value = unf.flowTime
       uniforms.uFlow.value = 0.25 + 0.75 * flow
       uniforms.uSwirl.value += (turbulence - uniforms.uSwirl.value) * Math.min(1, delta * 0.5)
-      if (coreLightRef.current) coreLightRef.current.intensity = 0.9 * (1 - wither) + 2.2 * unf.open
+      if (coreLightRef.current) coreLightRef.current.intensity = 0.9 * (1 - wither) + 1.3 * unf.open
     }
 
     const { m, q, p, s, n, t, b, a, ref } = scratch
@@ -1234,6 +1403,28 @@ export default function CrystalBody({
       fold: uniforms.uFold.value,
       bubble: uniforms.uBubble.value,
       strata: uniforms.uStrata.value,
+      ridgeMode: uniforms.uRidgeMode.value,
+      bubbleScale: uniforms.uBubbleScale.value,
+    }
+    const shrinkK = 1 - 0.14 * uniforms.uShrink.value
+    const openAmt = uniforms.uOpen.value
+    const openDir = uniforms.uOpenDir.value
+    const [ccx, ccy, ccz] = data.center
+    /* Where the skin actually is (as the shader moves it): on its relief,
+       sunk into the mouth, contracted — crystals root there. */
+    const settle = (v, j) => {
+      const fx = data.pos[j] - ccx, fy = data.pos[j + 1] - ccy, fz = data.pos[j + 2] - ccz
+      const fl = Math.hypot(fx, fy, fz) || 1
+      const ux = fx / fl, uy = fy / fl, uz = fz / fl
+      v.addScaledVector(n, relief(j))
+      const apW = 0.03 + 0.5 * openAmt
+      const inCap = smoothstep(1 - apW, 1, ux * openDir.x + uy * openDir.y + uz * openDir.z)
+      const sink = inCap * openAmt * S * 0.39
+      v.x -= ux * sink; v.y -= uy * sink; v.z -= uz * sink
+      v.x = ccx + (v.x - ccx) * shrinkK
+      v.y = ccy + (v.y - ccy) * shrinkK
+      v.z = ccz + (v.z - ccz) * shrinkK
+      return v
     }
     const relief = (j) => {
       const lx = data.pos[j], ly = data.pos[j + 1], lz = data.pos[j + 2]
@@ -1252,14 +1443,16 @@ export default function CrystalBody({
         data.pos[j + 2] + data.facet[j + 2] * facetAmt + data.coil[j + 2] * coil,
       )
       ride(p)
-      p.addScaledVector(n, relief(j) - depth)
+      settle(p, j)
+      p.addScaledVector(n, -depth)
         .addScaledVector(t, c.offT * S)
         .addScaledVector(b, c.offB * S)
       a.copy(n).addScaledVector(t, c.tiltT).addScaledVector(b, c.tiltB).normalize()
       if (cm.flat) a.lerp(t, cm.flat).normalize()
       orientAlong(q, a, c.spin)
-      const len = depth * 0.97 + c.protrude * S * g * crystalStyle.len * cm.len
-      const w = (c.embed + c.protrude) * S * c.wr * (0.6 + 0.4 * g) * crystalStyle.width * cm.width
+      /* Emerging from the skin rather than spiking out of it. */
+      const len = depth * 0.97 + c.protrude * 0.6 * S * g * crystalStyle.len * cm.len
+      const w = (c.embed + c.protrude * 0.6) * S * c.wr * 1.15 * (0.6 + 0.4 * g) * crystalStyle.width * cm.width
       s.set(w, len / PRISM_HEIGHT, w)
       m.compose(p, q, s)
       crystals.setMatrixAt(i, m)
@@ -1267,7 +1460,12 @@ export default function CrystalBody({
     crystals.count = plan.crystals.length
     crystals.instanceMatrix.needsUpdate = true
 
-    /* Frost flowers: bead rosettes sitting on the membrane. */
+    /* Frost flowers: bead rosettes sitting on the membrane. Wet water grows
+       more of these translucent petals, not only crystallization; after
+       death they stay as they were. */
+    const unfState = unfoldRef.current
+    if (!life.dead) unfState.wet = layers?.frost === false ? 0 : smoothstep(0.5, 0.95, moisture) * 0.95 * (0.35 + 0.65 * smoothstep(0, 0.4, age))
+    const wetPetals = unfState.wet ?? 0
     for (let i = 0; i < plan.beads.length; i++) {
       const f = plan.beads[i]
       const j = frame(f.vertex)
@@ -1280,26 +1478,58 @@ export default function CrystalBody({
         data.pos[j + 2] + data.facet[j + 2] * facetAmt + data.coil[j + 2] * coil,
       )
       ride(p)
+      settle(p, j)
       p.addScaledVector(t, f.offT * S)
         .addScaledVector(b, f.offB * S)
-        .addScaledVector(n, plan.tent[f.vertex] * tentLift + f.lift * S * g - size * 0.2 + relief(j))
+        .addScaledVector(n, plan.tent[f.vertex] * tentLift + f.lift * S * g - size * 0.2)
       s.set(size, size, size)
       m.compose(p, q, s)
       frost.setMatrixAt(i, m)
     }
     frost.count = plan.beads.length
     frost.instanceMatrix.needsUpdate = true
+
+    /* Petals: translucent scales on the skin. A few always; wet water grows
+       many more. They sit exactly where the skin is (never apart from it). */
+    const petalsMesh = petalsRef.current
+    if (petalsMesh) {
+      const amount = Math.min(1, 0.12 + wetPetals)
+      for (let i = 0; i < plan.petals.length; i++) {
+        const f = plan.petals[i]
+        const j = frame(f.vertex)
+        const g = smoothstep(f.th, f.th + 0.08, amount) * (1 - 0.6 * level)
+        const size = f.size * S * g * (0.8 + 0.5 * wetPetals)
+        p.set(
+          data.pos[j] + data.facet[j] * facetAmt + data.coil[j] * coil,
+          data.pos[j + 1] + data.facet[j + 1] * facetAmt + data.coil[j + 1] * coil,
+          data.pos[j + 2] + data.facet[j + 2] * facetAmt + data.coil[j + 2] * coil,
+        )
+        ride(p)
+        settle(p, j)
+        p.addScaledVector(t, f.offT * S).addScaledVector(b, f.offB * S).addScaledVector(n, size * 0.05)
+        /* Lying on the skin, one edge lifted. */
+        a.copy(n).multiplyScalar(Math.cos(f.lift)).addScaledVector(t, Math.sin(f.lift) * Math.cos(f.spin)).addScaledVector(b, Math.sin(f.lift) * Math.sin(f.spin)).normalize()
+        orientAlong(q, a, f.spin)
+        s.set(size, size, size)
+        m.compose(p, q, s)
+        petalsMesh.setMatrixAt(i, m)
+      }
+      petalsMesh.count = plan.petals.length
+      petalsMesh.instanceMatrix.needsUpdate = true
+    }
   })
 
   return (
     <group ref={groupRef}>
-      <mesh geometry={resources.nucleusGeo} material={resources.nucleusMat} dispose={null} />
-      <lineSegments
-        geometry={resources.fibreGeo}
-        material={resources.fibreMat}
-        visible={layers?.fibres !== false}
-        dispose={null}
-      />
+      <group ref={innerRef}>
+        <mesh geometry={resources.nucleusGeo} material={resources.nucleusMat} dispose={null} />
+        <lineSegments
+          geometry={resources.fibreGeo}
+          material={resources.fibreMat}
+          visible={layers?.fibres !== false}
+          dispose={null}
+        />
+      </group>
       <instancedMesh
         ref={frostRef}
         args={[resources.beadGeo, resources.frostMat, BEAD_MAX]}
@@ -1308,6 +1538,14 @@ export default function CrystalBody({
         dispose={null}
       />
       <mesh geometry={resources.membraneGeo} material={resources.membraneMat} renderOrder={2} dispose={null} />
+      <instancedMesh
+        ref={petalsRef}
+        args={[resources.petalGeo, resources.petalMat, plan.petals.length]}
+        frustumCulled={false}
+        visible={layers?.petals !== false}
+        renderOrder={4}
+        dispose={null}
+      />
       <instancedMesh
         ref={crystalsRef}
         args={[resources.crystalGeo, resources.crystalMat, plan.crystals.length]}

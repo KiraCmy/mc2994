@@ -3,7 +3,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { patchMembrane, nucleusVertex, nucleusFragment, createEnvironmentScene } from '../src/playground/finalHabitat/habitatShaders.js'
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { createHistory, updateHistory, characterOf, bodyFactors } from '../src/playground/finalHabitat/unfoldForm.js'
-export function prev({ bubble = 0, strata = 0, shrink = 0, side = 0, wave = 0.6, seed = 7, spoken = true, grow = 1, open = 0.7, fold = 0.08, swirl = 0.2, az = 0.3, el = 0.25, dist = 3.2, bg = '#b3aec4' } = {}) {
+export function prev({ ridgeMode = 0, bubbleScale = 3.2, bubble = 0, strata = 0, shrink = 0, side = 0, wave = 0.6, seed = 7, spoken = true, grow = 1, open = 0.7, fold = 0.08, swirl = 0.2, az = 0.3, el = 0.25, dist = 3.2, bg = '#b3aec4' } = {}) {
   const c = document.createElement('canvas'); c.width = 800; c.height = 650
   const R = new THREE.WebGLRenderer({ canvas: c, antialias: true }); R.toneMapping = THREE.ACESFilmicToneMapping; R.outputColorSpace = THREE.SRGBColorSpace
   const errs = []; R.debug.onShaderError = (gl, prog, vs, fs) => errs.push((gl.getShaderInfoLog(vs) || '') + (gl.getShaderInfoLog(fs) || ''))
@@ -24,7 +24,7 @@ export function prev({ bubble = 0, strata = 0, shrink = 0, side = 0, wave = 0.6,
     uTime: { value: 3 }, uBreath: { value: 0.02 }, uBodyCentre: { value: new THREE.Vector3() }, uTent: { value: 0 }, uRime: { value: 0 }, uCore: { value: new THREE.Color('#ffd2c0') }, uCoreGlow: { value: 0.13 },
     uFilm: { value: 0.24 }, uFacet: { value: 0 }, uRim: { value: 0.32 }, uRimColor: { value: new THREE.Color('#e2f4ff') },
     uUnit: { value: 1 }, uFold: { value: fold }, uOpen: { value: open }, uOpenDir: { value: new THREE.Vector3(Math.sin(az), el, Math.cos(az)).normalize() },
-    uFlow: { value: 1 }, uFlowTime: { value: 4 }, uBubble: { value: bubble }, uStrata: { value: strata }, uShrink: { value: shrink }, uSwirl: { value: swirl }, uInnerLight: { value: new THREE.Color('#ffa24a') },
+    uFlow: { value: 1 }, uFlowTime: { value: 4 }, uBubble: { value: bubble }, uRidgeMode: { value: ridgeMode }, uBubbleScale: { value: bubbleScale }, uStrata: { value: strata }, uShrink: { value: shrink }, uSwirl: { value: swirl }, uInnerLight: { value: new THREE.Color('#ffa24a') },
   }
   const mat = new THREE.MeshPhysicalMaterial({ color: '#fbe9f0', roughness: 0.12, transmission: 0.5, thickness: 1.8, ior: 1.32, iridescence: 0.75, iridescenceIOR: 1.35, iridescenceThicknessRange: [100, 1000], attenuationColor: new THREE.Color('#f1aecd'), attenuationDistance: 0.9, specularIntensity: 0.7, clearcoat: 0.3, clearcoatRoughness: 0.12, sheen: 0.25, sheenColor: new THREE.Color('#ffd6ec'), envMapIntensity: 0.95 })
   patchMembrane(mat, u)
