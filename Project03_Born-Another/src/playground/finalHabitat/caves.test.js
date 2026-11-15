@@ -56,7 +56,10 @@ test('cavern druses: both surface kinds, on floor, walls and vault, clear of the
   const kinds = new Set(l.sites.map((s) => s.kind))
   assert.deepEqual([...kinds].sort(), ['floor', 'hang', 'wall'])
   assert.ok(l.lilac.length > 40 && l.ember.length > 40, `${l.lilac.length} / ${l.ember.length}`)
-  assert.ok(l.lilac.length + l.ember.length < 500)
+  assert.ok(l.lilac.length + l.ember.length < 1600)
+  /* Colonies, not an even spread: most druses share a patch with others. */
+  const crowded = l.sites.filter((s) => l.sites.some((o) => o !== s && Math.hypot(o.x - s.x, o.z - s.z) < 3.5))
+  assert.ok(crowded.length > l.sites.length * 0.7, `${crowded.length} / ${l.sites.length}`)
   const niches = remainNiches(40)
   for (const s of l.sites) {
     assert.ok(holeDistance(s.x, s.z) > UNDERWORLD.hole.r + 2)

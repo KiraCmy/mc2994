@@ -1,0 +1,108 @@
+
+/* Capture the world: under "Start a new world"; keeps the scene as it is now
+   (canvas only, no text) in the album (#archive/album). */
+.exp07-capture {
+  position: absolute;
+  top: calc(var(--site-header-h) + 6.8rem);
+  right: 3.4vw;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--exp07-line);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.55rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--exp07-ink-soft);
+  background: transparent;
+  opacity: 0.85;
+  cursor: pointer;
+  animation: exp07-reveal-in 1.6s ease both;
+  transition: opacity 0.3s ease, border-color 0.3s ease, color 0.3s ease, background 0.3s ease;
+}
+
+.exp07-capture:hover,
+.exp07-capture:focus-visible {
+  opacity: 1;
+  border-color: var(--exp07-line-strong);
+  color: var(--exp07-ink);
+  background: var(--exp07-glass);
+  outline: none;
+}
+
+.exp07-capture:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.exp07-capture__dot {
+  width: 0.62rem;
+  height: 0.62rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px transparent, inset 0 0 0 3.5px currentColor;
+}
+
+.is-world.is-focused .exp07-capture {
+  top: calc(var(--site-header-h) + 9.6rem);
+}
+
+/* A soft shutter: the frame whitens for an instant, then clears. */
+.exp07-capture-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #ffffff;
+  pointer-events: none;
+  animation: exp07-capture-flash 0.9s ease-out both;
+}
+
+@keyframes exp07-capture-flash {
+  from { opacity: 0.55; }
+  to { opacity: 0; }
+}
+
+.exp07-capture-toast {
+  position: absolute;
+  top: calc(var(--site-header-h) + 9.4rem);
+  right: 3.4vw;
+  z-index: 5;
+  margin: 0;
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--exp07-ink);
+  animation: exp07-capture-toast 4.2s ease both;
+}
+
+.exp07-capture-toast a {
+  color: inherit;
+  text-underline-offset: 0.25em;
+}
+
+.exp07-capture-toast.is-error {
+  color: var(--exp07-ink-soft);
+}
+
+.is-world.is-focused .exp07-capture-toast {
+  top: calc(var(--site-header-h) + 12.2rem);
+}
+
+@keyframes exp07-capture-toast {
+  0% { opacity: 0; transform: translateY(-0.3rem); }
+  8%, 82% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exp07-capture-flash {
+    animation: none;
+    opacity: 0;
+  }
+  .exp07-capture-toast {
+    animation: none;
+  }
+}

@@ -95,6 +95,8 @@ export function patchMembrane(material, uniforms) {
     shader.uniforms.uBubbleScale ??= { value: 3.2 }
     shader.uniforms.uLightView ??= { value: new THREE.Vector3(0.4, 0.6, 0.5).normalize() }
     shader.uniforms.uDeep ??= { value: new THREE.Color('#d98aa8') }
+    shader.uniforms.uSphere ??= { value: 0 }
+    shader.uniforms.uSphereR ??= { value: 1 }
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -126,6 +128,8 @@ export function patchMembrane(material, uniforms) {
         uniform float uShrink;
         uniform float uRidgeMode;
         uniform float uBubbleScale;
+        uniform float uSphere;
+        uniform float uSphereR;
         attribute float aCavity;
         varying float vCavity;
         varying float vBubble;
@@ -249,6 +253,16 @@ export function patchMembrane(material, uniforms) {
         }`,
       )
       .replace(
+        '#include <defaultnormal_vertex>',
+        `if (uSphere > 1e-4) {
+          vec3 sRel = position - uBodyCentre;
+          vec3 sN = dot(sRel, sRel) > 1e-10 ? normalize(sRel) : objectNormal;
+          vec3 sMix = mix(objectNormal, sN, uSphere);
+          objectNormal = dot(sMix, sMix) > 1e-10 ? normalize(sMix) : sN;
+        }
+        #include <defaultnormal_vertex>`,
+      )
+      .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
         transformed += aFacetOffset * uFacet + aCoilOffset * uCoil;
@@ -289,6 +303,14 @@ export function patchMembrane(material, uniforms) {
         if (uShrink > 1e-4) {
           transformed = uBodyCentre + (transformed - uBodyCentre) * (1.0 - 0.14 * uShrink);
           transformed += objectNormal * (bnNoise(fromCentre * 8.0 + 2.0) - 0.5) * uShrink * uUnit * 0.06;
+        }
+        /* Birth: the life is first a small round ball; the form grows out of
+           the sphere as uSphere falls 1 -> 0 (no bubble, no second skin). */
+        if (uSphere > 1e-4) {
+          vec3 bRel = transformed - uBodyCentre;
+          float bLen = length(bRel);
+          vec3 bDir = bLen > 1e-6 ? bRel / bLen : fromCentre;
+          transformed = mix(transformed, uBodyCentre + bDir * uSphereR, uSphere);
         }
         vFrost = aFrost;
         vLocal = position;

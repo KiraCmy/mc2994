@@ -7,7 +7,7 @@ import {
   orientAlong,
   styleMaterialParams,
 } from './crystalShapes.js'
-import { ALL_SPIRES, spireParts, frostParts, NEEDLE_SHOULDER } from './crystalSpires.js'
+import { ALL_SPIRES, spireParts, frostParts, spireFootParts, NEEDLE_SHOULDER } from './crystalSpires.js'
 
 /*
  * World Final: tall crystal spires grown out of ancient remains (see
@@ -131,7 +131,7 @@ export function buildSpireMeshes() {
   const groups = Object.fromEntries(MINERALS.map((m) => [m, []]))
   for (const spire of ALL_SPIRES) {
     const { mineral, parts, segs } = spireParts(spire)
-    groups[mineral].push(...parts)
+    groups[mineral].push(...parts, ...spireFootParts(spire))
     frost.push({ mineral, parts: frostParts(spire, segs) })
   }
   const m = new THREE.Matrix4()

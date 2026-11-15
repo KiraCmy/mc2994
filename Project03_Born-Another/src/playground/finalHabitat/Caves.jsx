@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
-import { cavePose, remainNiches, underworldDepth } from './caves.js'
+import { cavePose, centreDistance, remainNiches, underworldDepth } from './caves.js'
 import { habitatSurfaceHeight, holeShape, UNDERWORLD, underworldFloor } from './habitatField.js'
 import { createCaveResources } from './caveGeometry.js'
+import { cutOutPixels } from './snapshotCutout.js'
 
-const CAVE_FOG = new THREE.Color('#2b2735')
+const CAVE_FOG = new THREE.Color('#1c1924')
 const MAX_REMAINS = 40
 const NEAR = 6
 const _c = new THREE.Vector3()
@@ -234,6 +235,32 @@ function HoleBeacon() {
   return <primitive object={res.group} dispose={null} />
 }
 
+/** Picture of kept remains → transparent outside the body, soft round edge. */
+function cutOutRemains(img) {
+  const size = 256
+  const c = document.createElement('canvas')
+  c.width = size
+  c.height = size
+  const g = c.getContext('2d')
+  g.drawImage(img, 0, 0, size, size)
+  const px = g.getImageData(0, 0, size, size)
+  const d = px.data
+  /* Opaque corners: an old square snapshot — lift the body out of it. */
+  const corner = (d[3] + d[(size - 1) * 4 + 3] + d[(size * (size - 1)) * 4 + 3] + d[(size * size - 1) * 4 + 3]) / 4
+  if (corner > 200) cutOutPixels(d, size)
+  /* Round falloff over everything: the frame's edge can never show. */
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const r = Math.hypot(x - size / 2 + 0.5, y - size / 2 + 0.5) / (size / 2)
+      const t = Math.min(1, Math.max(0, (r - 0.62) / (0.96 - 0.62)))
+      const k = 1 - t * t * (3 - 2 * t)
+      d[(y * size + x) * 4 + 3] *= k
+    }
+  }
+  g.putImageData(px, 0, 0)
+  return c
+}
+
 function lastWords(entry) {
   const w = entry?.words ?? []
   return w.length ? w[w.length - 1].text : null
@@ -250,15 +277,24 @@ function KeptRemains({ entries }) {
   const shown = useMemo(() => entries.slice(0, MAX_REMAINS), [entries])
   const niches = useMemo(() => remainNiches(shown.length), [shown.length])
   const glow = useMemo(() => glowTexture(), [])
-  const textures = useMemo(() => {
-    const loader = new THREE.TextureLoader()
-    return shown.map((e) => {
-      if (!e.image) return null
-      const t = loader.load(e.image)
-      t.colorSpace = THREE.SRGBColorSpace
-      return t
-    })
-  }, [shown])
+  /* Each kept picture is lifted out of its square: the body's own outline
+     (cut-out), then a soft round fade so no frame edge can show. */
+  const textures = useMemo(
+    () =>
+      shown.map((e) => {
+        if (!e.image) return null
+        const t = new THREE.CanvasTexture(document.createElement('canvas'))
+        t.colorSpace = THREE.SRGBColorSpace
+        const img = new Image()
+        img.onload = () => {
+          t.image = cutOutRemains(img)
+          t.needsUpdate = true
+        }
+        img.src = e.image
+        return t
+      }),
+    [shown],
+  )
   useEffect(() => () => textures.forEach((t) => t?.dispose()), [textures])
   useEffect(() => () => glow.dispose(), [glow])
 
@@ -292,7 +328,10 @@ function KeptRemains({ entries }) {
     }
   })
 
-  const open = (entry) => window.open(`${window.location.pathname}#archive/${encodeURIComponent(entry.key)}`, '_blank', 'noopener')
+  /* Same tab: the world stays as it is while the archive is open. */
+  const open = (entry) => {
+    window.location.hash = `#archive/${encodeURIComponent(entry.key)}`
+  }
 
   return (
     <group>
@@ -302,11 +341,11 @@ function KeptRemains({ entries }) {
           <group key={entry.key} ref={(el) => (refs.current[i] = el)} position={p}>
             <mesh renderOrder={5}>
               <planeGeometry args={[3.4, 3.4]} />
-              <meshBasicMaterial map={glow} color="#b9a6e0" transparent opacity={0.35} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+              <meshBasicMaterial map={glow} color="#c7b6ee" transparent opacity={0.55} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
             </mesh>
             <mesh renderOrder={6} onClick={(ev) => { ev.stopPropagation(); open(entry) }}>
               <planeGeometry args={[1.9, 1.9]} />
-              <meshBasicMaterial map={textures[i] ?? glow} transparent depthWrite={false} toneMapped={false} opacity={0.95} />
+              <meshBasicMaterial map={textures[i] ?? glow} transparent depthWrite={false} toneMapped={false} opacity={1} />
             </mesh>
           </group>
         )
@@ -318,7 +357,7 @@ function KeptRemains({ entries }) {
             <span className="exp07-tag__dot" />
             <span className="exp07-tag__lead" />
             <span className="exp07-tag__run" />
-            <a className="exp07-tag__box" href={`#archive/${encodeURIComponent(shown[near].key)}`} target="_blank" rel="noopener">
+            <a className="exp07-tag__box" href={`#archive/${encodeURIComponent(shown[near].key)}`}>
               <span className="exp07-tag__name">{shown[near].name}</span>
               <span className="exp07-tag__words">{lastWords(shown[near]) ? `“${lastWords(shown[near])}”` : 'no words'}</span>
               <span className="exp07-tag__link">Archive ↗</span>
@@ -328,6 +367,135 @@ function KeptRemains({ entries }) {
       ) : null}
     </group>
   )
+}
+
+/* ---------------- way back up ---------------- */
+
+const LOOK_UP = 0.3 // sin of the pitch at which "looking up" begins (~17°)
+const LOOK_UP_OFF = 0.18 // hysteresis: hide again a little lower
+const RISE_SECONDS = 3.2
+
+/** Where you come out: on the sand at the rim, facing the clearing. */
+function surfacePose() {
+  const { hole } = UNDERWORLD
+  const toward = Math.atan2(-hole.z, -hole.x)
+  const x = hole.x + Math.cos(toward) * (hole.r + 7)
+  const z = hole.z + Math.sin(toward) * (hole.r + 7)
+  const tx = hole.x + Math.cos(toward) * (hole.r + 22)
+  const tz = hole.z + Math.sin(toward) * (hole.r + 22)
+  return {
+    position: new THREE.Vector3(x, habitatSurfaceHeight(x, z) + 3.2, z),
+    target: new THREE.Vector3(tx, habitatSurfaceHeight(tx, tz) + 2.4, tz),
+  }
+}
+
+/** Below the sand, inside the cavern's reach. */
+function underground(p) {
+  return centreDistance(p.x, p.z) < UNDERWORLD.radius && p.y < habitatSurfaceHeight(p.x, p.z) - 0.8
+}
+
+/**
+ * In the cavern, looking up: a small white hint at the top of the screen.
+ * Clicking it carries the camera to the opening, up through it, and out
+ * onto the sand at the rim, facing the clearing — no feeling around for
+ * the hole in the dark.
+ */
+function SurfaceReturn({ world = null }) {
+  const camera = useThree((s) => s.camera)
+  const controls = useThree((s) => s.controls)
+  const gl = useThree((s) => s.gl)
+  const rise = useRef(null)
+  const shown = useRef(false)
+  const hintRef = useRef(null)
+  const startRef = useRef(() => {})
+  const dir = useMemo(() => new THREE.Vector3(), [])
+  const look = useMemo(() => new THREE.Vector3(), [])
+
+  /* A plain DOM hint beside the canvas (no extra React root to unmount). */
+  useEffect(() => {
+    const host = gl.domElement.parentElement
+    if (!host) return undefined
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'exp07-ascend'
+    btn.tabIndex = -1
+    btn.setAttribute('aria-hidden', 'true')
+    btn.innerHTML = '<span class="exp07-ascend__arrow" aria-hidden="true"></span>Back to the surface'
+    btn.addEventListener('click', () => startRef.current())
+    host.appendChild(btn)
+    hintRef.current = btn
+    return () => {
+      btn.remove()
+      hintRef.current = null
+    }
+  }, [gl])
+
+  const setShown = (v) => {
+    shown.current = v
+    const el = hintRef.current
+    if (!el) return
+    el.classList.toggle('is-shown', v)
+    el.tabIndex = v ? 0 : -1
+    el.setAttribute('aria-hidden', v ? 'false' : 'true')
+  }
+
+  startRef.current = () => {
+    if (rise.current) return
+    const { hole } = UNDERWORLD
+    const end = surfacePose()
+    const below = new THREE.Vector3(hole.x, underworldFloor(hole.x, hole.z) + 2.2, hole.z)
+    const above = new THREE.Vector3(hole.x, habitatSurfaceHeight(hole.x, hole.z) + 4.5, hole.z)
+    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    setShown(false)
+    if (reduce) {
+      camera.position.copy(end.position)
+      controls?.target?.copy(end.target)
+      camera.lookAt(end.target)
+      controls?.update?.()
+      return
+    }
+    if (controls) controls.enabled = false
+    rise.current = {
+      t: 0,
+      path: new THREE.CatmullRomCurve3([camera.position.clone(), below, above, end.position], false, 'centripetal'),
+      from: (controls?.target ?? camera.position.clone().add(camera.getWorldDirection(dir))).clone(),
+      end,
+    }
+  }
+
+  useFrame((_, delta) => {
+    const r = rise.current
+    if (r) {
+      r.t = Math.min(1, r.t + Math.min(0.05, delta) / RISE_SECONDS)
+      const e = r.t * r.t * (3 - 2 * r.t)
+      camera.position.copy(r.path.getPointAt(e))
+      /* Look along the way (up the shaft), then settle onto the clearing. */
+      look.copy(r.path.getPointAt(Math.min(1, e + 0.08)))
+      const settle = THREE.MathUtils.smoothstep(e, 0.55, 1)
+      look.lerp(r.end.target, settle)
+      if (r.t < 0.15) look.lerp(r.from, 1 - r.t / 0.15)
+      camera.lookAt(look)
+      if (r.t >= 1) {
+        controls?.target?.copy(r.end.target)
+        camera.lookAt(r.end.target)
+        if (controls) controls.enabled = true
+        controls?.update?.()
+        rise.current = null
+      }
+      return
+    }
+    const w = world?.current
+    const busy = (w && (w.phase !== 'explore' || w.focusId)) || controls?.enabled === false
+    camera.getWorldDirection(dir)
+    const want = !busy && underground(camera.position) && dir.y > (shown.current ? LOOK_UP_OFF : LOOK_UP)
+    if (want !== shown.current) setShown(want)
+  })
+
+  useEffect(() => () => {
+    if (rise.current && controls) controls.enabled = true
+  }, [controls])
+
+  return null
 }
 
 /**
@@ -371,11 +539,11 @@ export default function Caves({ crystalRef, world = null, archive = [] }) {
       scene.fog.color.lerp(CAVE_FOG, 0.7 * m)
     }
     /* Underground darker; while a life is observed, a little darker too (FocusStudio). */
-    gl.toneMappingExposure = baseExposure.current * (1 - 0.3 * m) * (1 - 0.16 * (world?.current?.focusDim ?? 0))
+    gl.toneMappingExposure = baseExposure.current * (1 - 0.18 * m) * (1 - 0.16 * (world?.current?.focusDim ?? 0))
     const level = crystalRef?.current?.level ?? 0
     /* The cavern's druses glow a little more as the water freezes. */
-    res.emberMat.userData.uniforms.uEmberGlow.value = 1 + level * 0.5
-    res.lilacMat.emissiveIntensity = 0.06 + 0.06 * level
+    res.emberMat.userData.uniforms.uEmberGlow.value = 1.45 + level * 0.5
+    res.lilacMat.emissiveIntensity = 0.16 + 0.08 * level
     /* Oil-film skin: sparkles move with the light. */
     const t = state.clock.elapsedTime
     res.floorMat.userData.uniforms.uTime.value = t
@@ -390,6 +558,7 @@ export default function Caves({ crystalRef, world = null, archive = [] }) {
       <SandFall />
       <HoleBeacon />
       {archive?.length ? <KeptRemains entries={archive} /> : null}
+      {world ? <SurfaceReturn world={world} /> : null}
     </group>
   )
 }

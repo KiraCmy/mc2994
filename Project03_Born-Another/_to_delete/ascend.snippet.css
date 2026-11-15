@@ -1,0 +1,71 @@
+
+/* In the cavern, looking up: a quiet white hint to rise back to the sand. */
+.exp07-ascend {
+  position: absolute;
+  top: calc(var(--site-header-h, 6.5rem) + 1.6rem);
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.9rem;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #ffffff;
+  text-shadow: 0 0 12px rgba(20, 16, 30, 0.6);
+  cursor: pointer;
+  opacity: 0;
+  transform: translate(-50%, 0.4rem);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  pointer-events: none;
+}
+
+.exp07-ascend.is-shown {
+  opacity: 0.92;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+.exp07-ascend:hover,
+.exp07-ascend:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+.exp07-ascend__arrow {
+  width: 1px;
+  height: 1.6rem;
+  background: linear-gradient(to top, rgba(255, 255, 255, 0), #ffffff);
+  position: relative;
+  animation: exp07-ascend-drift 2.4s ease-in-out infinite;
+}
+
+.exp07-ascend__arrow::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -4px;
+  width: 7px;
+  height: 7px;
+  border-top: 1px solid #ffffff;
+  border-left: 1px solid #ffffff;
+  transform: rotate(45deg);
+}
+
+@keyframes exp07-ascend-drift {
+  0%, 100% { transform: translateY(0.2rem); }
+  50% { transform: translateY(-0.2rem); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exp07-ascend,
+  .exp07-ascend__arrow {
+    transition: none;
+    animation: none;
+  }
+}

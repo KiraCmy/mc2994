@@ -4,6 +4,8 @@ import SiteHud from '../SiteHud.jsx'
 import { useAutoHideHeader } from '../useAutoHideHeader.js'
 import FossilPlate from '../playground/finalHabitat/FossilPlate.jsx'
 import { loadArchive, removeSpecimen } from '../playground/finalHabitat/archive.js'
+import { ALBUM_EVENT, countCaptures } from '../playground/finalHabitat/album.js'
+import AlbumView from './AlbumView.jsx'
 import {
   clock,
   envSeries,
@@ -24,6 +26,22 @@ function keyFromHash() {
   return m ? decodeURIComponent(m[1]) : null
 }
 const hrefFor = (key) => `#archive/${encodeURIComponent(key)}`
+/** `#archive/album`: the album of captured moments (not a specimen key). */
+const ALBUM = 'album'
+
+/** Lives / Album: the two views of the archive. */
+function ArchiveTabs({ current, lives, moments }) {
+  return (
+    <nav className="arc-tabs" aria-label="Archive">
+      <a href="#archive" aria-current={current === 'lives' ? 'page' : undefined}>
+        Lives · {lives}
+      </a>
+      <a href={`#archive/${ALBUM}`} aria-current={current === 'album' ? 'page' : undefined}>
+        Album · {moments}
+      </a>
+    </nav>
+  )
+}
 
 /** A steady, per-specimen tilt and size so the grid reads as a collection. */
 function poseFor(key) {
@@ -64,7 +82,15 @@ export default function ArchivePage({ modeId, onSelectMode }) {
     }
   }, [])
 
-  const specimen = useMemo(() => entries.find((e) => e.key === selected) ?? null, [entries, selected])
+  const isAlbum = selected === ALBUM
+  const specimen = useMemo(() => (isAlbum ? null : entries.find((e) => e.key === selected) ?? null), [entries, selected, isAlbum])
+  const [moments, setMoments] = useState(0)
+  useEffect(() => {
+    const refresh = () => countCaptures().then(setMoments)
+    refresh()
+    window.addEventListener(ALBUM_EVENT, refresh)
+    return () => window.removeEventListener(ALBUM_EVENT, refresh)
+  }, [])
   useEffect(() => {
     document.querySelector('.archive-page__scroller')?.scrollTo?.(0, 0)
   }, [selected])
@@ -83,7 +109,10 @@ export default function ArchivePage({ modeId, onSelectMode }) {
         {specimen ? (
           <SpecimenView entry={specimen} number={specimenNumber(entries, specimen.key)} onRemove={remove} />
         ) : (
-          <Overview entries={entries} missing={Boolean(selected)} />
+          <>
+            <ArchiveTabs current={isAlbum ? 'album' : 'lives'} lives={entries.length} moments={moments} />
+            {isAlbum ? <AlbumView /> : <Overview entries={entries} missing={Boolean(selected)} />}
+          </>
         )}
       </main>
     </div>

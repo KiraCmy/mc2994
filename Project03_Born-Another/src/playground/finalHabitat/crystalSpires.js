@@ -204,7 +204,8 @@ export function spireParts(spire, groundAt = habitatHeight) {
 
   if (form === 'fork') {
     /* A short trunk, then two or three leaders leaning apart, each crowned. */
-    const forkAt = 0.38 + rnd() * 0.14
+    /* Fork low: a short bare trunk under the leaders. */
+    const forkAt = 0.22 + rnd() * 0.1
     const trunk = []
     column(out, rnd, [spire.x, g, spire.z], h * forkAt, w, lean, 4, { ...habit, segs: trunk })
     segs.push(...trunk.map((x) => ({ ...x, crown: false })))
@@ -232,12 +233,14 @@ export function spireParts(spire, groundAt = habitatHeight) {
   const trunkSegs = []
   column(out, rnd, [spire.x, g, spire.z], h, w, lean, (form === 'column' ? 8 : 7) + Math.floor(rnd() * 3), { ...habit, segs: trunkSegs })
   segs.push(...trunkSegs.map((sg) => ({ ...sg, crown: false })))
+  /* Branching starts low (about a fifth to a quarter up), so the bare
+     trunk under the crown stays short. */
   const spec =
     form === 'column'
-      ? { n: 8 + Math.floor(rnd() * 4), from: 0.3, to: 0.95, len: [0.06, 0.06], out: 0.38, up: 1, twigs: 0.4 }
+      ? { n: 10 + Math.floor(rnd() * 4), from: 0.16, to: 0.95, len: [0.06, 0.06], out: 0.38, up: 1, twigs: 0.4 }
       : form === 'broad'
-        ? { n: 6 + Math.floor(rnd() * 3), from: 0.4, to: 0.85, len: [0.22, 0.1], out: 1, up: 0.5, twigs: 2.2 }
-        : { n: 5 + Math.floor(rnd() * 4), from: 0.45, to: 0.92, len: [0.14, 0.16], out: 0.8, up: 0.9, twigs: 1.5 }
+        ? { n: 8 + Math.floor(rnd() * 3), from: 0.24, to: 0.85, len: [0.22, 0.1], out: 1, up: 0.5, twigs: 2.2 }
+        : { n: 7 + Math.floor(rnd() * 4), from: 0.26, to: 0.92, len: [0.14, 0.16], out: 0.8, up: 0.9, twigs: 1.5 }
   for (let b = 0; b < spec.n; b++) {
     const at = spec.from + (b / spec.n) * (spec.to - spec.from) + rnd() * 0.05
     const a = la + b * 2.4 + (rnd() - 0.5) * 0.7
@@ -311,23 +314,60 @@ export function frostParts(spire, segs, groundAt = habitatHeight) {
       }
     }
   }
-  /* Frost tufts on the sand: fans of blades around the foot. */
-  const tufts = spire.far ? 2 + Math.floor(rnd() * 3) : 5 + Math.floor(rnd() * 7)
+  /* A little hoarfrost on the sand around the foot: small, low tufts (the
+     crystal clusters there come from spireFootParts). */
+  const tufts = spire.far ? 0 : 4 + Math.floor(rnd() * 5)
   const w = spireWidth(h)
   for (let t = 0; t < tufts; t++) {
     const a = rnd() * Math.PI * 2
-    const r = w * (0.8 + rnd() * 3.2)
+    const r = w * (0.7 + rnd() * 2.6)
     const cx = spire.x + Math.cos(a) * r
     const cz = spire.z + Math.sin(a) * r
-    const size = scale * (0.4 + rnd() * 0.9)
-    const blades = 8 + Math.floor(rnd() * 10)
-    const gy = groundAt(cx, cz) - 0.05
+    const size = 0.1 + rnd() * 0.2
+    const blades = 5 + Math.floor(rnd() * 5)
+    const gy = groundAt(cx, cz) - 0.02
     for (let k = 0; k < blades; k++) {
       const ba = rnd() * Math.PI * 2
-      const spread = 0.15 + rnd() * 0.7
+      const spread = 0.3 + rnd() * 0.8
       const dir = norm([Math.cos(ba) * spread, 1, Math.sin(ba) * spread])
-      const len = size * (0.35 + rnd() * 0.9)
-      out.push({ p: [cx + Math.cos(ba) * 0.05, gy, cz + Math.sin(ba) * 0.05], dir, spin: rnd() * Math.PI, s: [len * 0.08, len, len * 0.08], tone: rnd() })
+      const len = size * (0.4 + rnd() * 0.7)
+      out.push({ p: [cx, gy, cz], dir, spin: rnd() * Math.PI, s: [len * 0.11, len, len * 0.11], tone: rnd() })
+    }
+  }
+  return out
+}
+
+/**
+ * Small crystal clusters of the spire's own mineral on the sand around its
+ * foot (glass, like the spire; replaces the old big frost blades). Parts in
+ * the mineral's habit units, for the same instanced mesh as the spire.
+ */
+export function spireFootParts(spire, groundAt = habitatHeight) {
+  if (spire.far) return []
+  const rnd = habitatRng(spire.seed + 4421)
+  const mineral = SPIRE_MINERAL[spire.species] ?? 'quartz'
+  const habit =
+    mineral === 'selenite' ? { unit: 1.5, flat: 1.6 } : mineral === 'calcite' ? { unit: 0.9, flat: 0 } : { unit: 1, flat: 0 }
+  const out = []
+  const w = spireWidth(spire.height)
+  const clusters = 2 + Math.floor(rnd() * 3)
+  for (let c = 0; c < clusters; c++) {
+    const a = rnd() * Math.PI * 2
+    const r = w * (0.9 + rnd() * 2.4)
+    const cx = spire.x + Math.cos(a) * r
+    const cz = spire.z + Math.sin(a) * r
+    const size = 0.22 + rnd() * 0.38
+    const n = 3 + Math.floor(rnd() * 4)
+    for (let k = 0; k < n; k++) {
+      const ba = rnd() * Math.PI * 2
+      const off = k === 0 ? 0 : size * (0.15 + rnd() * 0.35)
+      const x = cx + Math.cos(ba) * off
+      const z = cz + Math.sin(ba) * off
+      const len = size * (k === 0 ? 1 : 0.35 + rnd() * 0.5)
+      const lean = k === 0 ? 0.1 : 0.3 + rnd() * 0.6
+      const dir = norm([Math.cos(ba) * lean, 1, Math.sin(ba) * lean])
+      const wd = len * (0.22 + rnd() * 0.1)
+      out.push({ p: [x, groundAt(x, z) - len * 0.12, z], dir, spin: rnd() * Math.PI * 2, s: [wd * (habit.flat || 1), len / habit.unit, wd] })
     }
   }
   return out

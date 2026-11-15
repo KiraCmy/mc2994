@@ -7,6 +7,7 @@ import {
   HABITAT_RADIUS,
   HABITAT_SEED,
   HABITAT_VEIL_RADIUS,
+  GROUND_GRID,
   habitatColor,
   habitatHeight,
   habitatNormal,
@@ -56,8 +57,8 @@ export function buildPolarGrid(radius, rings, segments, power, inner = 0) {
   return geo
 }
 
-export function buildGroundGeometry({ rings = 300, segments = 420 } = {}) {
-  const geo = buildPolarGrid(HABITAT_RADIUS, rings, segments, 2.4)
+export function buildGroundGeometry({ rings = GROUND_GRID.rings, segments = GROUND_GRID.segments } = {}) {
+  const geo = buildPolarGrid(HABITAT_RADIUS, rings, segments, GROUND_GRID.power)
   const pos = geo.attributes.position.array
   for (let i = 0; i < pos.length; i += 3) pos[i + 1] = habitatSurfaceHeight(pos[i], pos[i + 2])
   /* The underworld's opening: the throat mesh takes over inside THROAT.cut. */

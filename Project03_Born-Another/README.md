@@ -1,20 +1,131 @@
-å# Born Another
+# Born Another
 
-**MC2994 Procedural World Building — Project 03**
-Semester start through midterm (September–mid-October 2026)
+*A procedural world of lost and possible lives.*
 
-This file is the project README. The course folder also contains **Noise Lab** (`../Project02`), which came first. Both are described here so the work can be understood without opening every other note.
+Born Another is an underwater world of artificial lives. You don't sculpt them. You set the water they live in, and you can change it by speaking to it. Each life grows, takes on the shape of what it went through, crystallizes, dies and leaves remains on the sand. You choose which remains to keep. The kept ones go into an archive and a cavern under the dunes.
 
-The semester moved from **noise as an instrument** to **life as a finite procedural system**.
+**[Live site → born-another.web.app](https://born-another.web.app)** *(to be updated: it currently shows an earlier build and will move to the final version at the same address)* · [Run it locally](#run-it-locally) · [Language interpreter](#the-language-interpreter) · [Past progress](#progress-recap)
 
-1. **Noise Lab** — one curl-noise field drives a map, a terrain, simulations, and a voxel volume.
-2. **Born Another** — the user sets conditions for an artificial digital life that develops, dies, and can leave a trace.
-
-The course-level map (folder tree, both run commands, both file maps) is also in the [repository README](../README.md).
+![World Final: arrival in the habitat](../docs/assets/image/final/world-final-hero.gif)
+<sub>World Final, `#world-final`. The descent: from the light at the surface down to the dunes, where three lives share one body of water.</sub>
 
 ---
 
-## Run this project
+## The piece: World Final
+
+World Final (`#world-final`) is the finished work. The rest of the site shows how it was reached. It follows one chain from start to finish:
+
+**Language → Environment → Form → Crystallization → Death & Remains → Archive**
+
+and a cavern under the dunes at the end of it.
+
+### 1 · Arrival
+
+You descend into an underwater habitat of dunes, drifting veils, crystal outcrops and frost-crystal trees. Three lives share the water. You meet the central one young, at AGE 0.14, and it has about 3.7 minutes to live. New lives never pop into view: each one grows in from a small pearl bud.
+
+![Arrival: three lives in one water](../docs/assets/image/final/01-arrival.jpg)
+<sub>Arrival: three young lives over the dunes, with crystal outcrops, ember druses and frost-crystal trees around them.</sub>
+
+### 2 · Language → Environment
+
+You write to the water instead of moving sliders. An AI interpreter reads each message as a change in **temperature**, **moisture** and **turbulence**, along with an **intensity** and a **confidence**. "A cold, still night" and "a hot storm" push the water in different directions. A message can move each value by at most **±0.6** on top of the base settings, and the effect fades over time, so what you say works like weather rather than a permanent setting.
+
+<!-- TODO (manual screenshot, Cmd+Shift+4): the language field with a typed sentence plus the environment panel showing the Δ readout. Save as docs/assets/image/final/02-language.png -->
+![Language panel and environment readout](../docs/assets/image/final/02-language.png)
+<sub>A sentence is read as Δtemperature, Δmoisture and Δturbulence. Each change is capped at ±0.6 and then fades.</sub>
+
+### 3 · Environment → Form
+
+Each body records the water it lived in:
+
+- **Warm** water raises ridges along the fibres. **Cold** water contracts the body.
+- **Wet** water swells blisters and adds petals.
+- **Turbulence** splits the body into bands.
+- Every shift in the water leaves a mark that stays.
+
+There are three species, each with its own sensitivities and morph logic: **spiral** (ammonite), **segmented** and **trilobite**. The same weather produces a different body in each.
+
+![One life under cold, warm and wet water](../docs/assets/image/final/03-form-triptych.jpg)
+<sub>The same life as its water turns cold (left), warm (centre) and wet (right). Cold draws the body in, warmth raises ridges along the fibres, and wet water swells it and opens petals. The first crystals are already showing.</sub>
+
+### 4 · Crystallization
+
+As a life ages it turns to crystal. The target level is roughly **cold × wet × calm**, and dry water crystallizes faster.
+
+- The **habit** depends on species: druse prisms, satin plates or iridescent blocks.
+- The **cut** depends on the body's dominant shape: prism, faceted, stubby or tabular.
+- The form **freezes** somewhere between 35% and 60% of the crystallization level. After that the shape no longer changes.
+
+![A life crystallizing in cold, wet, calm water](../docs/assets/image/final/04-crystallizing.jpg)
+<sub>Late in life, in cold, wet, calm water: the body has unfolded and its crystals are setting.</sub>
+
+<!-- TODO (manual): export the "Language → Environment → Crystallization" mapping sheet (Design artifact) as an image. Save as docs/assets/image/final/04-mapping-sheet.png -->
+![Language → Environment → Crystallization mapping sheet](../docs/assets/image/final/04-mapping-sheet.png)
+<sub>The full mapping on one sheet: what language changes in the water, and what the water changes in the body and its crystal.</sub>
+
+### 5 · Death, remains and the Archive
+
+At death the body stops changing shape. It sinks, settles on the sand and petrifies. Then the remains are **identified**: a card names the real extinct creature whose form this life followed (an ammonite, a trilobite…), when it appeared and vanished, and why. You can keep the remains: they are given a name and saved to the **Life Archive** in your browser (`#archive`). Each kept life gets its own card at `#archive/<key>`.
+
+![Remains after death](../docs/assets/image/final/05-remains.jpg)
+<sub>The moment after death: the water darkens and the body, now frozen in its last form, turns to stone. This one was identified as an ammonite.</sub>
+
+<!-- TODO (manual screenshot): the matching Archive card. Save as docs/assets/image/final/05-archive-card.png -->
+
+![An Archive card](../docs/assets/image/final/05-archive-card.png)
+<sub>The same life in the Archive: its name, its record and a cut-out of its remains.</sub>
+
+### 6 · The Underworld
+
+A hole in the dunes leads down into a dark, iridescent cavern. Light from the hole falls as a pool on the floor. Lilac quartz and amber ember druses grow from the floor, walls and ceiling. The remains you kept are shown here as cut-out images. Walk toward one and a thin white leader line draws out to a small tag that links to its Archive card.
+
+![The Underworld cavern](../docs/assets/image/final/06-underworld-cave.jpg)
+<sub>Under the dunes: two kept lives rest as cut-outs under the iridescent cavern roof, among lilac quartz clusters and amber ember druses.</sub>
+
+### 7 · A world that keeps going
+
+The world keeps running while you visit other pages of the site. It restarts only when you press **Start a new world ↺** and confirm. Reloading the page also starts it over. Kept remains stay in the Archive either way.
+
+| You… | The world… |
+|---|---|
+| write a sentence | shifts temperature, moisture and turbulence by up to ±0.6, then lets them fade |
+| keep the water cold, wet and calm | crystallizes the life further |
+| change the water while the life is young | leaves marks on its body that stay |
+| wait | the life freezes, dies and sinks to the sand |
+| keep its remains | names them and adds them to the Archive and the cavern |
+
+---
+
+## The rest of the site
+
+The site is organised as an exhibition. World Final is the main work, and the other sections show how it was made.
+
+| Section | Address | What you'll find |
+|---|---|---|
+| Concept | `#concept` | The statement of intent: artificial life with a built-in end |
+| Studies | `#shader` `#scatter` `#path` `#particle` `#explore` `#lsystem` `#material` | Technical studies, all run on one shared organism |
+| System | `#system` | Architecture and crystal-growth diagrams |
+| World | `#world` | World V2: the organism as an explorable world, driven by the Life Engine |
+| Playground | `#playground` | Experiments 01–07, the route to World Final |
+| **World Final** | `#world-final` | **The final piece** |
+| Memory Lab | `#memory-lab` | A memory text turned into a signature that sets world parameters |
+| Archive | `#archive`, `#archive/<key>` | The Life Archive of kept remains |
+
+The Playground experiments, in order:
+
+1. **Language as Environment**: can language change the conditions a life grows in?
+2. **Independent Life B**: two lives with their own clocks in one scene
+3. **Morphology Lab**: flattened, spiral and segmented rest shapes
+4. **Final Form Lab**: the body's look and material
+5. **Agent Behaviors**: crystal agents growing on the membrane
+6. **Crystal Form Lab**: cold, moisture, warmth and turbulence acting on crystal growth
+7. **Final Habitat**: the version that became World Final
+
+---
+
+## Run it locally
+
+You need Node.js (a current LTS release) and npm.
 
 ```bash
 cd Project03_Born-Another
@@ -22,290 +133,182 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL (usually `http://localhost:5173` or `5174`).
-
-| Section | Hash | What it is |
-| --- | --- | --- |
-| **Concept** | `#concept` | Editorial statement of intent |
-| **Studies** | `#shader`, `#scatter`, `#path`, `#particle`, `#explore`, `#lsystem`, `#material` | Technical studies on one shared organism |
-| **System** | `#system` | Architecture and crystal-growth diagrams |
-| **World** | `#world` | Explorable organism-world with a Life Engine |
-
-`+ Parameters` opens the overlay. **Animate** / Space advances AGE. **Seed** locks identity.
-
-To run Noise Lab instead: `cd ../Project02 && npm install && npm run dev`, then `#/2d`, `#/3d`, `#/sim`, `#/voxel`.
-
----
-
-# 1. Noise Lab (what came first)
-
-**Folder:** `Project02/`
-
-Noise Lab is a **curl-noise instrument**. A single 2D field is generated from noise; that same field is read as a height map, as flow arrows, as a simulation domain, and later as a density volume. The UI is a technical poster: black field, white type, sparse accent (`../STYLE-GUIDE.md`).
-
-### Research
-
-The first half of the semester treated procedural form as a **map**, not as a finished sculpture.
-
-**Noise as a function of position.** Simplex, Perlin, Worley, value noise, and FBM are interchangeable sources. They are not painted textures; they are sampled at every grid cell.
-
-**Shaping after the sample.** Power, bias, gain, clamp, absolute, smoothstep, and sine remap the raw field so ridges, terraces, or cells can appear without writing a new noise type.
-
-**Curl of a scalar potential.** A potential \(\psi\) is sampled; finite differences produce \((\partial\psi/\partial y,\; -\partial\psi/\partial x)\). That vector field is divergence-free, so it can be drawn as ticks and used as wind or particle advection.
-
-**One field, several readings.** Height blends curl magnitude with remapped potential. The 2D viewport, the 3D mesh, and the simulation all consume the same arrays. SCALE, OCTAVES, STRENGTH, EVOLVE, resolution, and shaping update every view together.
-
-**Simulation on the field.** Wind evolves the potential in time. Particles follow curl. Raindrop erosion carves a copy of the height. These are readings of the map, not a second world.
-
-**Volume versus heightfield.** A height map cannot make caves or overhangs. The Voxel tab samples a 3D density function (ground / island / planet modes, CSG, meshing) so the same ideas — noise, threshold, combination — move from a surface into a solid.
-
-**Shaders as a way of seeing.** Terrain studies practiced flat color, height gradients, interpolation, slope, Fresnel, and GPU vertex displacement. Those GLSL habits later shade the living membrane.
-
-### Features that were built
-
-| Route | What it does |
-| --- | --- |
-| `#/` Home | Enter screen: “A shared 2D field drives the map, the terrain, and the simulation.” |
-| `#/2d` 2D MAP | Magnitude, potential, flow ticks, equation panel, shared noise / shaping / grid sliders |
-| `#/3d` 3D WORLD | Same map sampled onto a plane (height + lateral curl). SOLID / WIREFRAME / SOLID + WIREFRAME. Optional floating 2D map |
-| `#/sim` SIMULATION | Wind, particles (trails, 2D/3D), erosion. Start / pause / reset. Noise parameters stay live |
-| `#/voxel` VOXEL | Density grid, threshold, FBM, CSG presets, meshers — independently tunable from the curl heightfield |
-
-Also: terrain export (PNG / OBJ / GLTF / GLB), and optional Firebase (auth, save/load of the parameter set, Storage for exports). Runtime arrays and particles are rebuilt from saved settings, not stored.
-
-### Main files
-
-| Path | Role |
-| --- | --- |
-| `Project02/src/App.jsx` | Routing, shared params, noise map, simulation loop |
-| `src/noise/generateNoiseMap.js` | Potential → shaping → curl → height |
-| `src/noise/noiseTypes.js`, `shaping.js` | Kernels and remap ops |
-| `src/pages/Map2DPage.jsx`, `Grid3DPage.jsx`, `SimulationPage.jsx`, `VoxelPage.jsx` | The four instruments |
-| `src/simulation/` | Particles, raindrops, erosion, rAF |
-| `src/voxel/` | Density, chunks, CSG, mesh |
-| `src/export/exportTerrain.js` | Downloads |
-| `src/firebase.js`, `src/services/` | Auth and saved configs |
-
-### What carried forward
-
-- A parameterized field is the identity of the world.
-- Rest / 2D data can drive 3D form (later: scatter, paths, veins on a sphere).
-- Particles and curl are readings of a field (later: currents on the organism).
-- Shaders displace and color from uniforms rather than baking a look.
-
-Noise Lab still produces a **world you keep adjusting**. Born Another changes the contract: the user no longer owns a terrain; they observe a life that will end.
-
----
-
-# 2. Born Another (current project)
-
-![Lifecycle concept](../docs/assets/image/concept_diagram02.png)
-
-### Concept
-
-Most generative tools ask for a preferred output: set parameters, generate an object, keep the one you like.
-
-Born Another treats the generated form as a **temporary entity**. The user chooses **initial conditions**. The system develops a body over a finite lifespan. Death is designed in from the start. The user cannot make the life permanent, but can watch it, stimulate it, and (in the concept) decide which moment is worth remembering.
-
-The origin is the replicant condition in *Blade Runner* (1982): artificial life with a built-in end. The project does not copy the film’s look. It asks:
-
-> If something begins from inherited information, when does it become itself?
-> If an artificial life is designed to disappear, which moment of its existence is worth preserving?
-
-The intended cycle:
-
-**Creation → Inheritance → Individuality → Life → Death → Memory → New Life**
-
-A single life reads as:
-
-**Birth → Development → Maturity → Instability → Decay → Death → Trace**
-
-Two ideas structure everything that was built:
-
-1. **Conditions, not sculpture.** Seed and stimulus matter more than vertex sculpting.
-2. **Two clocks.** `uAge` (0→1) is mortality. `uTime` is breath and noise motion. Scrubbing age is not scrubbing a loop.
-
-Through midterm, lineage across generations and a full “preserve this moment” archive are still conceptual. What is built is one repeatable individual (locked by seed), a complete birth-to-death clock, a trace after death, and a World in which a touch can change later crystal growth.
-
----
-
-## Studies — what each tab is for
-
-Studies share one Canvas, one AGE clock, and one seed. They are not a gallery of unrelated demos. Each tab asks a different technical question of the **same life**.
-
-### Shader Studies 01–09 — one mesh, one life
-
-A pale sphere on a cool gray field becomes a membrane, then an individual, then a developing body, then a failing one, then a residue.
-
-**01 Surface.** How can a sphere read as matter? Vertical gradient, Fresnel rim, translucency. No identity noise yet — a clean membrane.
-
-**02 Individuality.** What makes this one *this* one? Seed-locked object-space noise markings ride the surface. Geometry is still a sphere; the pattern is identity.
-
-**03 Development.** How does form change over life? AGE envelopes stretch pattern and color. Low-frequency **macro morphology** changes the silhouette (lobes, dents) so different seeds are structurally different bodies, not the same sphere with different texture. Micro displacement is breath (`uTime`), quieter at birth and late age.
-
-**04 Decay.** How does it fail without fading as a whole? A seed-locked discard field is compared with an age threshold: regions thin, hole, and warp. Mortality is in the material and the mesh, not a global dissolve.
-
-**05 Trace.** What remains after death? Frozen residue. Breathing stops. The leftover is a record of that seed, not a new object.
-
-**06 Lifecycle.** Can one clock tell the whole story? Animate from AGE 0 to 1. Death is irreversible until New Life.
-
-**07 Material.** Same life, different substance: membrane / crystalline / hybrid families on the same aging pipeline.
-
-**08 Behavior.** Does substance change *how* it dies? Family bias on the same decay field — different failure character, same clock.
-
-**09 Layered.** Can depth exist without nested shells? One mesh: interior glow plus a foil-like fracture. Extra nested meshes were rejected so AGE cannot desync between layers.
-
-![Study 01 — surface](../docs/assets/image/born-another-study-01-surface.png)
-
-![Study 03 — development](../docs/assets/image/born-another-study-03-development.jpg)
-
-![Study 06 — decay in the lifecycle](../docs/assets/image/born-another-study-06-lifecycle-decay.jpg)
-
-![Study 09 — layered depth](../docs/assets/image/born-another-study-09-layered.jpg)
-
-**Files:** `src/surfaceShader.js`, `src/surfaceParams.js`, `src/Specimen.jsx`, `src/App.jsx`, `src/AdjustBar.jsx`, `src/Hud.jsx`
-
-### Scatter — growths that belong to the membrane
-
-Scatter samples the **unit sphere in rest space**, then deforms each instance with the same displace field as the body. Growths ride the living surface instead of floating in world space. Types: Membrane, Plume, Pod.
-
-This is the Noise Lab lesson (a rest field driving 3D) applied to a closed organism.
-
-![Scatter](../docs/assets/image/born-another-scatter-growth-clusters.jpg)
-
-**Files:** `src/scatter/` — `ScatterField.jsx`, `sampleSurface.js`, `MembraneAsset.js`, `PlumeAsset.js`, `PodAsset.js`, `GrowthClusterAsset.js`
-
-### Path — drawing as growth, not decoration
-
-Strokes are drawn on the membrane in rest space. A closed stroke does not sit as a tube on top of the body; it **swells the surface along the trail**, so the organism’s form changes because of the mark.
-
-![Path](../docs/assets/image/born-another-spline-path-growth.jpg)
-
-**Files:** `src/path/` — `PathField.jsx`, `pathSpline.js`, `pathGrowth.js`, `pathExtend.js`, `surfaceDisplace.js`
-
-### Particle — a life field around the skin
-
-Particles occupy a near-surface field: grit on the membrane, then volume, then vector currents and optional trails, all deformed with the host as AGE and breath run. They are a reading of the living surface, not a separate VFX pass.
-
-![Particle](../docs/assets/image/born-another-particle-living-currents.jpg)
-
-**Files:** `src/particle/` — `ParticleField.jsx`, `particleTrails.js`, `particleParams.js`
-
-### Explore — camera as landscape scale
-
-The same specimen, approached as a place rather than an object on a stand.
-
-**Files:** `src/explore/`
-
-### L-System — vascular grammar on the living surface
-
-First a standalone 3D branching study, then a vascular web on the organism: hubs on the rest sphere, radial primaries, contact-aware stopping so territories do not cross, thickness hierarchy, GPU deformation with the body’s shader, AGE-driven growth and late fragmentation.
-
-![L-System](../docs/assets/image/born-another-lsystem-surface-web.jpg)
-
-**Files:** `src/lsystem/` — `generateLSystem.js`, `attachLSystemToSurface.js`, `veinShader.js`, `LSystemField.jsx`, `lsystemLifecycle.js`
-
-### Material — the same life, a different substance
-
-A dedicated Studies tab (distinct from Shader Study 07). Geometry, AGE, seed, and Animate stay shared; only shading changes (core opacity, shell transmission, roughness, IOR, reflective glass).
-
-![Material](../docs/assets/image/born-another-material-reflective-glass.jpg)
-
-**Files:** `src/material/` — `organismMaterial.js`, `organismPhysicalMaterial.js`, shaders, `OrganismStudio.jsx`, `materialParams.js`
-
----
-
-## Concept and System pages
-
-The app is also a site, not only a lab.
-
-- **Concept** (`src/concept/`) — Anybody type, Blade Runner still, written intent, lifecycle diagrams.
-- **System** (`src/system/`) — how Studies and World relate; crystal-growth grammar.
-
-![Architectural design](../docs/assets/image/architectural%20design.png)
-
-![Crystal growth grammar](../docs/assets/image/crystal%20diagram.png)
-
-**Also:** `src/SiteHeader.jsx`, `src/SiteHud.jsx`, `src/useAutoHideHeader.js`
-
----
-
-## World V2 — the organism as a world
-
-Studies keep the shader specimen. World is a separate scene: one seeded body you can orbit, enter, and fly through.
-
-- Exterior and interior are the two sides of one surface.
-- Fly camera: WASD, **Q/E elevate**, drag to look, scroll to dolly, R to reset.
-- A **Life Engine** steps at 30 Hz through a 36-second life. AGE goes 0→1 and stops. Seed + intervention history + step replay the same state.
-- The surface is a 48-region mineral field. Crossing a threshold nucleates a persistent site (maximum ten). A click records a stimulus that raises mineral over time; it does not spawn a crystal instantly.
-- **Primary crystals** grow step-by-step from those sites: closed faceted prisms, roots under the membrane. Baked clusters remain as a visual fallback.
-
-![World V2 — dark rim light, living specimen near death](../docs/assets/image/born-another-world-v2-dark-rim.jpg)
-
-**Files:** `src/worldv2/WorldV2.jsx`, `worldGeometry.js`, `primaryCrystalGeometry.js`, `life/lifeEngine.js`, `life/worldLifeAdapter.js`, `life/useLifeEngine.js`, `life/*.test.js`
-
----
-
-## Source map (this project)
-
-```
-Project03_Born-Another/src/
-├── App.jsx, modes.js, main.jsx     Routing, shared AGE / seed, study Canvas
-├── Specimen.jsx                    Shared living body
-├── surfaceShader.js                GLSL form, decay, families, breath
-├── surfaceParams.js                Study defaults
-├── AdjustBar.jsx, Hud.jsx          Parameters and Studies HUD
-├── SiteHeader.jsx, SiteHud.jsx     Site chrome
-├── concept/  system/               Editorial pages
-├── scatter/  path/  particle/
-├── explore/  lsystem/  material/
-└── worldv2/                        Scene + Life Engine + primary crystals
+The dev server runs at **http://127.0.0.1:5173**. It binds to IPv4 on purpose, because on some Windows setups `localhost` resolves to an address the server isn't listening on.
+
+| Page | Local address |
+|---|---|
+| Concept | http://127.0.0.1:5173/#concept |
+| Studies | http://127.0.0.1:5173/#shader (also `#scatter`, `#path`, `#particle`, `#explore`, `#lsystem`, `#material`) |
+| System | http://127.0.0.1:5173/#system |
+| World V2 | http://127.0.0.1:5173/#world |
+| Playground | http://127.0.0.1:5173/#playground |
+| **World Final** | **http://127.0.0.1:5173/#world-final** |
+| Memory Lab | http://127.0.0.1:5173/#memory-lab |
+| Archive | http://127.0.0.1:5173/#archive (one life: `#archive/<key>`) |
+
+Other scripts:
+
+```bash
+npm run build     # production build into dist/
+npm run preview   # serve dist/ locally (the interpreter route works here too)
+npm run lint      # oxlint
 ```
 
-| File | Role |
-| --- | --- |
-| `src/App.jsx` | Mode hash, individuality, AGE playback, study Canvas |
-| `src/modes.js` | Concept / Studies / System / World IDs |
-| `src/Specimen.jsx` | Host mesh; optional organism material |
-| `src/surfaceShader.js` | Macro morphology, micro breath, decay, trace |
-| `src/path/surfaceDisplace.js` | CPU displace matching the shader |
-| `worldv2/life/lifeEngine.js` | Fixed-step AGE, mineral, sites, crystal records |
-| `worldv2/primaryCrystalGeometry.js` | Closed faceted hull |
-| `worldv2/life/worldLifeAdapter.js` | Attach crystals to the deformed surface |
+### Tests
+
+Tests use Node's built-in test runner, so there is nothing extra to install.
+
+```bash
+# World Final systems: body, crystals, terrain, caves, kin, remains, archive (58 tests)
+node --test src/playground/finalHabitat/*.test.js
+
+# Language interpreter
+node --test server/interpret/*.test.js
+
+# Everything
+node --test $(find src server -name '*.test.js')
+```
 
 ---
 
-## Rules that keep the project coherent
+## The language interpreter
 
-1. The user sets conditions; the system grows form.
-2. `uAge` is life. `uTime` is breath. They must not be mixed.
-3. Seed locks identity across Studies.
-4. Scatter, Path, Particle, and L-System veins store **rest-space** samples and deform with the host.
-5. Material family changes *how* failure looks, not *when* the clock runs.
-6. World and Studies share the concept, not the mesh.
+The interpreter runs only on the server. `server/interpret` is mounted into Vite by `server/vitePlugin.js` at `/api/interpret`, for both `npm run dev` and `npm run preview`. The browser sends text to that route and gets an interpretation back. **API keys never reach the browser.**
+
+If the route can't be reached (for example on static hosting), times out or fails, the client switches to an offline, rule-based parser, so the world still responds to language.
+
+### Setup
+
+```bash
+cp .env.example .env.local
+```
+
+Open `.env.local`, choose a provider, fill in the key for that provider only, and restart `npm run dev`. The terminal shows which provider and model are active, and says when it is using a fallback.
+
+| Variable | What it does |
+|---|---|
+| `BA_AI_PROVIDER` | `openai`, `anthropic`, `gemini`, `mock` or `local` |
+| `BA_AI_MODEL` | Model id. Leave empty to use the provider's default (listed in `.env.example`) |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | Only the key for the chosen provider is needed |
+| `BA_AI_TIMEOUT_MS` | Request timeout (default `8000`) |
+| `BA_AI_MAX_INPUT_CHARS` | Longest message accepted (default `500`) |
+| `BA_AI_FALLBACK` | What to use when the provider fails: `local` (rule-based parser) or `neutral` (no change) |
+| `BA_AI_REASONING_EFFORT` | Optional, OpenAI reasoning models only |
+
+Two providers don't need a key:
+
+- **`mock`** returns fixed answers for the test sentences. It uses no network and costs nothing.
+- **`local`** uses the rule-based keyword parser and works offline.
+
+> [!IMPORTANT]
+> **Keep keys out of the repository.**
+> - Put API keys **only** in `.env.local`. It is git-ignored, and so is every `.env.*` file except `.env.example`.
+> - **Never prefix a key with `VITE_`.** Vite bundles `VITE_*` variables into the browser, where anyone can read them.
+> - **Never put a real key in `.env.example`**, in this README or anywhere else that gets committed. `.env.example` keeps the key lines empty (`OPENAI_API_KEY=`).
 
 ---
 
-## Midterm status
+## How it's built
 
-**Noise Lab — done.** Shared curl field; 2D / 3D / simulation / voxel; shaping and noise types; export; optional Firebase; terrain shader studies 01–06.
+React 19 · @react-three/fiber 9 · drei 10 · three r186 · Vite 8 · oxlint · Firebase Hosting (serves `dist/` with an SPA rewrite). Routing is hash-based (`src/modes.js`, `src/App.jsx`).
 
-**Born Another — done through midterm.** Concept page; Shader Studies 01–09; Scatter, Path, Particle, Explore, L-System, Material on one life; System diagrams; World V2 with Life Engine, surface intervention, and primary crystal growth.
+World Final is `src/worldFinal/WorldFinalPage.jsx`, which renders `src/playground/Experiment07.jsx` and the systems in `src/playground/finalHabitat/`:
 
-**Not yet.** Secondary crystal branching; lineage / memory inheritance across generations; unifying World and Studies into one simulation; a full preserve-moment archive.
+| Area | Files |
+|---|---|
+| Body, morphs, crystals | `CrystalBody.jsx`, `unfoldForm.js`, `crystalShapes.js`, `habitatShaders.js` |
+| Terrain | `habitatField.js`, `habitatTerrainBuild.js`, `HabitatTerrain.jsx` |
+| Ground growths | `habitatGrowthBuild.js`, `emberCrystals.js`, `HabitatGrowth.jsx` |
+| Crystal trees | `crystalSpires.js`, `CrystalSpires.jsx` |
+| Underworld | `caves.js`, `caveGeometry.js`, `Caves.jsx` |
+| Other lives (kin) | `habitatKin.js`, `useHabitatKin.js`, `HabitatKin.jsx` |
+| Death, remains, archive | `habitatFossil.js`, `Remains.jsx`, `archive.js`, `lifeLog.js`, `snapshotCutout.js` |
+| Scene, light, opening | `HabitatScene.jsx`, `FocusStudio.jsx`, `HabitatAtmosphere.jsx`, `worldOpening.js` |
+
+```
+Project03_Born-Another/
+├── server/
+│   ├── vitePlugin.js            /api/interpret route (dev + preview)
+│   └── interpret/               providers, prompt, schema, config
+├── src/
+│   ├── App.jsx, modes.js        hash routing, shared AGE / seed
+│   ├── concept/  system/        editorial pages
+│   ├── scatter/ path/ particle/ explore/ lsystem/ material/   Studies
+│   ├── worldv2/                 World V2 + Life Engine
+│   ├── playground/              Experiments 01–07
+│   │   └── finalHabitat/        World Final systems
+│   ├── worldFinal/              World Final page
+│   ├── memoryLab/               Memory Lab
+│   └── archive/                 Life Archive pages
+└── .env.example                 interpreter settings, no keys
+```
 
 ---
 
-## Written notes (optional)
+## Course context
 
-The sections above are meant to stand alone. These files add dates, stills, and longer arguments:
+Born Another is **Project 03** for **MC2994 Procedural World Building** (Cornell, Fall 2026).
 
-| Document | Path |
-| --- | --- |
-| Course README (Noise Lab + Born Another) | [`../README.md`](../README.md) |
-| Concept essay | [`../docs/concept/born-another-concept.md`](../docs/concept/born-another-concept.md) |
-| Design decisions | [`../docs/planning/Born-Another-Planning-Steps.md`](../docs/planning/Born-Another-Planning-Steps.md) |
-| Visual progress log | [`../docs/Progress-Recording/Born-Another.md`](../docs/Progress-Recording/Born-Another.md) |
-| Shader studies (Noise Lab) | [`../docs/tutorials/Shader/02-shader-studies_noised_lab.md`](../docs/tutorials/Shader/02-shader-studies_noised_lab.md) |
-| Shader studies (Born Another) | [`../docs/tutorials/Shader/03-born-another-shader-studies.md`](../docs/tutorials/Shader/03-born-another-shader-studies.md) |
-| Screenshots | `../docs/assets/image/` |
+It follows **[Noise Lab](../Project02)** (Project 02). Noise Lab treated one curl-noise field as an instrument and read it as a map, a terrain, a simulation and a voxel volume. Born Another keeps that idea of one procedural field read in many ways, but changes what the viewer is doing. In Noise Lab you kept adjusting a terrain you owned. Here you look after lives that will end. The overview of the whole course repository is in the [course README](../README.md).
+
+---
+
+## Progress recap
+
+These are the stages that led to World Final. Each one links to its progress log.
+
+### Concept: life with a built-in end
+The starting point was the replicant condition in *Blade Runner* (1982): artificial life with a designed end. The questions were when something born from inherited information becomes itself, and which moments of a life designed to disappear are worth keeping.
+→ [Concept essay](../docs/concept/born-another-concept.md) · [Concept notes](../docs/concept/BORN_ANOTHER_Concept.md) · [References](../docs/concept/project_reference.md)
+
+![Concept translation](../docs/assets/image/image%2011.png)
+<sub>From film to principles: themes from <i>Blade Runner</i> turned into a procedural organism, a finite life cycle, persistent memory and preserving the moment.</sub>
+
+![User experience flow](../docs/assets/image/roadmap.png)
+<sub>The planned experience: arrival, encounter, exploration, coexistence, death and revelation, and a world that continues. World Final carries this plan out.</sub>
+
+### Studies: one organism, many questions (Sept – Oct)
+Shader Studies 01–09 took one sphere from membrane to individual, development, decay and trace. Scatter, Path, Particle, L-System and Material then asked new questions of the same life, all locked to one seed and one AGE clock.
+→ [Visual progress log: Shader, Scatter, Spline, Particle, L-System, Material](../docs/Progress-Recording/Born-Another.md) · [Shader studies tutorial](../docs/tutorials/Shader/03-born-another-shader-studies.md)
+
+![Study 06: lifecycle decay](../docs/assets/image/born-another-study-06-lifecycle-decay.jpg)
+<sub>Shader Study 06: decay runs through the material and the mesh instead of a global fade.</sub>
+
+![L-System vascular web](../docs/assets/image/born-another-lsystem-surface-web.jpg)
+<sub>L-System: a vascular web attached to the living surface, growing and breaking up with AGE.</sub>
+
+### System: how the parts fit
+The System page sets out how Studies and World relate, and the grammar for crystal growth.
+→ [Planning steps](../docs/planning/Born-Another-Planning-Steps.md) · [Technical log](../docs/planning/Born-Another-Technic-Log.md) · [Website organization](../docs/planning/Website-Organization.md)
+
+![Lifecycle and two spatial experiences](../docs/assets/image/concept_diagram02.png)
+<sub>One Life Engine and two views of it: the exterior form and the interior landscape, across birth, growth, maturity, transition and decay.</sub>
+
+![Interaction loop](../docs/assets/image/system%20section5.png)
+<sub>The proposed care-and-consequence loop: observe, act, see the immediate response, then the long-term effects, until death and preservation.</sub>
+
+### World V2: the organism as a world (midterm)
+A body you can orbit, enter and fly through. A deterministic Life Engine runs a 36-second life at 30 Hz. Touching the surface raises mineral levels over time, and primary crystals grow from the sites that cross a threshold.
+→ [World V2 section of the progress log](../docs/Progress-Recording/Born-Another.md#born-another--world-v2) · [Midterm feedback](../docs/planning/BORN%20ANOTHER%20%E2%80%94%20Midterm%20Feedback%20Summary.md)
+
+![World V2](../docs/assets/image/born-another-world-v2-shader-milky.jpg)
+<sub>World V2, shader background: primary crystals grown from surface sites late in life (AGE 0.77).</sub>
+
+### Playground: the route to World Final (Oct – Nov)
+Seven isolated experiments tested the final piece one idea at a time: language as weather, a second independent life, rest shapes, body material, crystal agents and crystal form. Experiment 07 combined them into the habitat that became World Final.
+→ [Playground progress log](../docs/Progress-Recording/Born-Another_Playground.md)
+
+![Experiment 01: language driving the Life Engine](../docs/assets/image/born-another-playground-exp01-language-life-sync.jpg)
+<sub>Experiment 01, Language as Environment: typed sentences drive temperature, moisture and turbulence in the Life Engine, shown with an A/B comparison.</sub>
+
+![Experiment 05: Final Form Lab](../docs/assets/image/born-another-playground-exp05-life-explore.jpg)
+<sub>Experiment 05, Final Form Lab: the body with its petals and particle field, before the move under water.</sub>
+
+### Other notes
+
+| Document | Link |
+|---|---|
+| Course README (Noise Lab + Born Another) | [../README.md](../README.md) |
+| Shader studies (Noise Lab) | [02-shader-studies_noised_lab.md](../docs/tutorials/Shader/02-shader-studies_noised_lab.md) |
+| World build guide | [World Build Guide (three.js)](../docs/planning/Born%20Another%20%E2%80%94%20World%20Build%20Guide%20%28three.js%29.md) |
+| All screenshots | `../docs/assets/image/` |

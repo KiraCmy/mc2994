@@ -26,60 +26,63 @@ export default function FossilReveal({ fossil = FOSSIL_AMMONITE, onBornAnother, 
     <section className="exp07-reveal" aria-labelledby="exp07-reveal-name">
       <span className="exp07-reveal__leader" aria-hidden="true" />
       <div className="exp07-reveal__card">
-        <figure className={`exp07-reveal__figure${showPhoto ? ' is-photo' : ''}`}>
-          {canFlip ? (
-            <button
-              type="button"
-              className="exp07-reveal__flip"
-              aria-pressed={showPhoto}
-              aria-label={showPhoto ? 'Show the drawing' : `Show a photograph of a ${fossil.name} fossil`}
-              onClick={flip}
-            />
+        {/* The record scrolls; the choices below it stay put. */}
+        <div className="exp07-reveal__scroll">
+          <figure className={`exp07-reveal__figure${showPhoto ? ' is-photo' : ''}`}>
+            {canFlip ? (
+              <button
+                type="button"
+                className="exp07-reveal__flip"
+                aria-pressed={showPhoto}
+                aria-label={showPhoto ? 'Show the drawing' : `Show a photograph of a ${fossil.name} fossil`}
+                onClick={flip}
+              />
+            ) : null}
+            <FossilPlate id={fossil.id} />
+            {photo && photoState !== 'idle' && photoState !== 'failed' ? (
+              <img
+                className={`exp07-reveal__photo${photoState === 'ready' ? ' is-ready' : ''}`}
+                src={photo.src}
+                alt={photo.caption}
+                decoding="async"
+                onLoad={() => setPhotoState('ready')}
+                onError={() => {
+                  setPhotoState('failed')
+                  setSide('plate')
+                }}
+              />
+            ) : null}
+            <span className="exp07-reveal__mark" aria-hidden="true" />
+            {canFlip ? (
+              <figcaption className="exp07-reveal__flipcap">
+                {showPhoto ? (photoState === 'ready' ? 'Drawing' : 'Loading photograph…') : 'Photograph'}
+              </figcaption>
+            ) : null}
+          </figure>
+          {showPhoto && photoState === 'ready' ? (
+            <p className="exp07-reveal__credit">
+              {photo.caption}.{' '}
+              <a href={photo.page} target="_blank" rel="noreferrer">
+                {photo.credit}
+              </a>
+            </p>
           ) : null}
-          <FossilPlate id={fossil.id} />
-          {photo && photoState !== 'idle' && photoState !== 'failed' ? (
-            <img
-              className={`exp07-reveal__photo${photoState === 'ready' ? ' is-ready' : ''}`}
-              src={photo.src}
-              alt={photo.caption}
-              decoding="async"
-              onLoad={() => setPhotoState('ready')}
-              onError={() => {
-                setPhotoState('failed')
-                setSide('plate')
-              }}
-            />
-          ) : null}
-          <span className="exp07-reveal__mark" aria-hidden="true" />
-          {canFlip ? (
-            <figcaption className="exp07-reveal__flipcap">
-              {showPhoto ? (photoState === 'ready' ? 'Drawing' : 'Loading photograph…') : 'Photograph'}
-            </figcaption>
-          ) : null}
-        </figure>
-        {showPhoto && photoState === 'ready' ? (
-          <p className="exp07-reveal__credit">
-            {photo.caption}.{' '}
-            <a href={photo.page} target="_blank" rel="noreferrer">
-              {photo.credit}
-            </a>
+          <p className="exp07-reveal__eyebrow">Remains identified</p>
+          <h2 id="exp07-reveal-name" className="exp07-reveal__name">
+            “{fossil.name}”
+            <span>{fossil.latin} · {fossil.epithet}</span>
+          </h2>
+          <ul className="exp07-reveal__facts">
+            <li>{fossil.appeared}</li>
+            <li>{fossil.vanished}</li>
+            <li>{fossil.span}</li>
+          </ul>
+          <p className="exp07-reveal__cause">
+            <b>Why it vanished</b>
+            {fossil.cause}
           </p>
-        ) : null}
-        <p className="exp07-reveal__eyebrow">Remains identified</p>
-        <h2 id="exp07-reveal-name" className="exp07-reveal__name">
-          “{fossil.name}”
-          <span>{fossil.latin} · {fossil.epithet}</span>
-        </h2>
-        <ul className="exp07-reveal__facts">
-          <li>{fossil.appeared}</li>
-          <li>{fossil.vanished}</li>
-          <li>{fossil.span}</li>
-        </ul>
-        <p className="exp07-reveal__cause">
-          <b>Why it vanished</b>
-          {fossil.cause}
-        </p>
-        <p className="exp07-reveal__echo">{fossil.echo}</p>
+          <p className="exp07-reveal__echo">{fossil.echo}</p>
+        </div>
         <div className="exp07-reveal__actions">
           {onSave ? (
             saved ? (

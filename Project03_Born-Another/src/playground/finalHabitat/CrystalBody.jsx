@@ -57,6 +57,36 @@ const BEAD_MAX = 650
 const MEMBRANE_TRANSMISSION = 0.5
 /** Stone-lilac the husk clouds toward. */
 const HUSK_TINT = new THREE.Color('#d6cfda')
+
+/*
+ * Each species wears its own skin, so lives (and remains) of different kinds
+ * read apart at a glance; the individual tint (KIN_TINTS) only nudges it.
+ *  spiral    nacre      cool pearl, lavender-blue depth, strong oil-film play
+ *  segmented satin      warm ivory, honey-amber depth, soft silky sheen
+ *  trilobite sea glass  clear aqua depth, glassy and bright, blue-green flash
+ *  world     the original rose membrane
+ */
+const SPECIES_SKIN = Object.freeze({
+  spiral: { color: '#f3f1fb', deep: '#b3a2ef', sheen: '#e0eeff', core: '#ffb3a8', petal: '#e7e4ff', roughness: 0.08, iridescence: 1, range: [260, 1250], sheen_: 0.35, clearcoat: 0.55, reach: 0.75 },
+  segmented: { color: '#fff2e6', deep: '#efa673', sheen: '#ffdab4', core: '#ff9658', petal: '#ffe7d3', roughness: 0.3, iridescence: 0.3, range: [120, 520], sheen_: 0.9, clearcoat: 0.12, reach: 0.68 },
+  trilobite: { color: '#edf7f6', deep: '#69adbd', sheen: '#cdeaff', core: '#ffc6a6', petal: '#dcf4f4', roughness: 0.06, iridescence: 0.9, range: [420, 960], sheen_: 0.18, clearcoat: 0.85, reach: 1 },
+  world: { color: '#fbe9f0', deep: '#f1aecd', sheen: '#ffd6ec', core: '#ffae92', petal: '#fdf8ff', roughness: 0.12, iridescence: 0.75, range: [100, 1000], sheen_: 0.25, clearcoat: 0.3, reach: 0.9 },
+})
+
+/** This life's skin: its species' material, nudged by its individual tint. */
+function skinFor(species, tint) {
+  const k = SPECIES_SKIN[species] ?? SPECIES_SKIN.world
+  const nudge = species in SPECIES_SKIN && species !== 'world' ? 0.2 : 1
+  const mix = (base, own) => new THREE.Color(base).lerp(new THREE.Color(own ?? base), nudge)
+  return {
+    ...k,
+    color: new THREE.Color(k.color),
+    petal: new THREE.Color(k.petal),
+    deep: mix(k.deep, tint.attenuation),
+    sheen: mix(k.sheen, tint.sheen),
+    core: mix(k.core, tint.core),
+  }
+}
 /** Nucleus colours (alive) and the fossil grey they fade to in the husk. */
 const NUCLEUS_ALIVE = { uGold: new THREE.Color('#ffd2ad'), uPink: new THREE.Color('#f5b3cf'), uBlue: new THREE.Color('#cfe0ff') }
 const NUCLEUS_FOSSIL = new THREE.Color('#bdb4bf')
@@ -369,7 +399,7 @@ function buildPlan(base, seed, siteDirections, habit = 'prisms') {
 
   /* Petals: translucent scales lying on the skin; wet water grows more. */
   const petals = []
-  for (let i = 0; i < 320; i++) {
+  for (let i = 0; i < 560; i++) {
     const vertex = Math.floor(r() * base.count)
     petals.push({
       vertex,
@@ -386,6 +416,9 @@ function buildPlan(base, seed, siteDirections, habit = 'prisms') {
 }
 
 /* ---------- shaders ---------- */
+
+/** How long a new life takes to grow in from its bud (seconds). */
+const BIRTH_SECONDS = 9
 
 export default function CrystalBody({
   life,
@@ -479,6 +512,8 @@ export default function CrystalBody({
       uBubbleScale: { value: 3.2 },
       uLightView: { value: new THREE.Vector3(0.4, 0.6, 0.5) },
       uDeep: { value: new THREE.Color('#d98aa8') },
+      uSphere: { value: 0 },
+      uSphereR: { value: 1 },
     }),
     [],
   )
@@ -619,10 +654,34 @@ export default function CrystalBody({
     [resources],
   )
 
-  const tintAttenuation = useMemo(() => new THREE.Color(tint.attenuation), [tint])
+  const skin = useMemo(() => skinFor(morphType, tint), [morphType, tint])
+  const tintAttenuation = skin.deep
   const coreLightRef = useRef(null)
   const glowRef = useRef(null)
   const pickRef = useRef(null)
+  /* A new life starts as a small pearl bud that swells, then the body grows
+     out of it while the bud's skin thins away (no pop-in). */
+  const budRef = useRef(null)
+  const budMaterial = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: '#f6eefb',
+        roughness: 0.18,
+        metalness: 0,
+        sheen: 0.8,
+        sheenColor: new THREE.Color(tint.sheen ?? '#ffd6ec'),
+        iridescence: 1,
+        iridescenceIOR: 1.35,
+        iridescenceThicknessRange: [220, 720],
+        emissive: new THREE.Color(tint.core ?? '#ffae92'),
+        emissiveIntensity: 0.12,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      }),
+    [tint],
+  )
+  useEffect(() => () => budMaterial.dispose(), [budMaterial])
   const respRef = useRef({ t0: -100, kind: 'still', strength: 0, pendingAt: -1, cooldownUntil: 0, hover: 0, radius: 1.4, dist: undefined })
   const glowMaterial = useMemo(
     () =>
@@ -651,18 +710,25 @@ export default function CrystalBody({
   const historyRef = useRef({ seed: null, history: null, character: null, at: -99, marks: 0, pulse: 0, waves: [0, 0, 0], axis: new THREE.Vector3(0, 1, 0) })
   const effLobeRef = useRef(lobeAmplitude)
 
-  /* Individual palette shift (same material family, small hue moves). */
+  /* The species' skin, nudged by this individual's tint. */
   useEffect(() => {
-    resources.membraneMat.attenuationColor.set(tint.attenuation)
-    resources.membraneMat.sheenColor.set(tint.sheen)
-    uniforms.uCore.value.set(tint.core)
-    uniforms.uInnerLight.value.set('#ffa24a').lerp(new THREE.Color(tint.core), 0.2)
-    uniforms.uDeep.value.set(tint.attenuation)
+    const mm = resources.membraneMat
+    mm.color.copy(skin.color)
+    mm.attenuationColor.copy(skin.deep)
+    mm.attenuationDistance = skin.reach
+    mm.sheenColor.copy(skin.sheen)
+    mm.iridescenceThicknessRange = [...skin.range]
+    mm.clearcoat = skin.clearcoat
+    uniforms.uCore.value.copy(skin.core)
+    uniforms.uInnerLight.value.set('#ffa24a').lerp(skin.core, 0.2)
+    uniforms.uDeep.value.copy(skin.deep)
     /* The body's crystals: clear, faintly tinted by the life, rooted in its skin. */
     const cmat = resources.crystalMat
-    cmat.attenuationColor.set('#ece2f4').lerp(new THREE.Color(tint.attenuation), 0.35)
-    cmat.userData.uniforms.uSkin.value.set(tint.sheen).lerp(new THREE.Color(tint.attenuation), 0.35)
-  }, [resources, tint, uniforms, crystalStyle, morphType])
+    cmat.attenuationColor.set('#ece2f4').lerp(skin.deep, 0.35)
+    cmat.userData.uniforms.uSkin.value.copy(skin.sheen).lerp(skin.deep, 0.35)
+    resources.petalMat.color.copy(skin.petal)
+    resources.petalMat.sheenColor.copy(skin.petal).lerp(new THREE.Color('#ffffff'), 0.6)
+  }, [resources, skin, uniforms, crystalStyle, morphType])
 
   const groupRef = useRef(null)
   const crystalsRef = useRef(null)
@@ -1010,6 +1076,7 @@ export default function CrystalBody({
         morphRef.current = createMorph()
         unfoldRef.current.rime = undefined
         unfoldRef.current.wet = 0
+        unfoldRef.current.petalWet = 0
       }
       if (!life.dead && now - hist.at > 4) {
         hist.at = now
@@ -1192,13 +1259,36 @@ export default function CrystalBody({
       resp.seed = life.seed
       resp.bornAt = now
     }
-    const birth = resp.bornAt === undefined ? 1 : smoothstep(0, 4.5, now - resp.bornAt)
+    /* Birth (≈ 9 s): the life starts as a small round ball of its own skin
+       that grows, and while it grows its form slowly comes out of the sphere
+       (uSphere 1 → 0). No bubble around it. b = 0 → 1; 1 for a life that was
+       already there. */
+    const bornK = resp.bornAt === undefined ? 1 : Math.min(1, (now - resp.bornAt) / BIRTH_SECONDS)
+    const bodyGrow = bornK >= 1 ? 1 : 0.1 + 0.9 * smoothstep(0, 0.9, bornK)
+    const sphereK = bornK >= 1 ? 0 : 1 - smoothstep(0.18, 0.95, bornK)
+    /* What grows on the skin (crystals, frost, petals) only follows the form. */
+    const formK = 1 - sphereK
+    uniforms.uSphere.value = sphereK
+    uniforms.uSphereR.value = 0.82 * data.rmax
+    const budAlpha = 0
     if (!place) {
-      const kb = k * fade * Math.max(0.0001, birth)
+      const kb = k * fade * bodyGrow
       group.scale.set(kb * (1 + 0.07 * sq), kb * (1 - 0.035 * sq), kb * (1 + 0.07 * sq))
-      group.visible = fade > 0.01 && birth > 0.005
-    } else if (sq) {
-      group.scale.set(k * (1 + 0.07 * sq), k * (1 - 0.035 * sq), k * (1 + 0.07 * sq))
+      group.visible = fade > 0.01
+    } else if (sq || bodyGrow < 1) {
+      const kb = k * bodyGrow
+      group.scale.set(kb * (1 + 0.07 * sq), kb * (1 - 0.035 * sq), kb * (1 + 0.07 * sq))
+    }
+    const bud = budRef.current
+    if (bud) {
+      bud.visible = budAlpha > 0.003
+      if (bud.visible) {
+        bud.position.set(data.center[0], data.center[1], data.center[2])
+        /* Radius in world terms is budFrac × the grown body; the group is at bodyGrow. */
+        bud.scale.setScalar(bodyRadius / bodyGrow)
+        budMaterial.opacity = budAlpha * fade
+        budMaterial.emissiveIntensity = 0.1 + 0.25 * (1 - bornK)
+      }
     }
     if (pickRef.current) {
       pickRef.current.position.set(data.center[0], data.center[1], data.center[2])
@@ -1230,9 +1320,9 @@ export default function CrystalBody({
     /* The husk: clouded, stony crystal; the warm core and the film go out. */
     const mm = resources.membraneMat
     mm.transmission = MEMBRANE_TRANSMISSION * (1 - 0.45 * wither)
-    mm.roughness = 0.12 + 0.2 * wither
-    mm.iridescence = 0.75 - 0.45 * wither
-    mm.sheen = 0.25 * (1 - 0.6 * wither)
+    mm.roughness = skin.roughness + 0.2 * wither
+    mm.iridescence = skin.iridescence * (1 - 0.6 * wither)
+    mm.sheen = skin.sheen_ * (1 - 0.6 * wither)
     mm.attenuationColor.copy(tintAttenuation).lerp(HUSK_TINT, wither)
     const shimmer = resp.kind === 'shimmer' ? re : 0
     uniforms.uCoreGlow.value = 0.13 * (1 - wither) + 0.12 * shimmer
@@ -1249,7 +1339,7 @@ export default function CrystalBody({
       const far = 0.35 + 0.65 * smoothstep(5, 24, dist)
       const fadeFar = 1 - smoothstep(80, 150, dist)
       gm.material.uniforms.uAlpha.value =
-        (0.34 * breath * far * fadeFar + 0.18 * resp.hover + 0.24 * shimmer + 0.45 * (1 - birth)) * (1 - wither) * fade
+        (0.34 * breath * far * fadeFar + 0.18 * resp.hover + 0.24 * shimmer + 0.45 * (1 - bornK)) * (1 - wither) * fade
       gm.position.set(data.center[0], data.center[1], data.center[2])
       gm.scale.setScalar(bodyRadius * 6)
       gm.quaternion.copy(group.quaternion).invert().multiply(state.camera.quaternion)
@@ -1339,7 +1429,8 @@ export default function CrystalBody({
       uniforms.uStrata.value = S * 0.11 * sh.strata * (0.4 + 0.6 * grown)
       uniforms.uShrink.value = sh.shrink
       if (innerRef.current) {
-        const k = 1 - 0.14 * sh.shrink
+        /* Kept inside the newborn's sphere too. */
+        const k = (1 - 0.14 * sh.shrink) * (1 - 0.3 * sphereK)
         const [cx, cy, cz] = data.center
         innerRef.current.scale.setScalar(k)
         innerRef.current.position.set(cx * (1 - k), cy * (1 - k), cz * (1 - k))
@@ -1453,7 +1544,7 @@ export default function CrystalBody({
       /* Emerging from the skin rather than spiking out of it. */
       const len = depth * 0.97 + c.protrude * 0.6 * S * g * crystalStyle.len * cm.len
       const w = (c.embed + c.protrude * 0.6) * S * c.wr * 1.15 * (0.6 + 0.4 * g) * crystalStyle.width * cm.width
-      s.set(w, len / PRISM_HEIGHT, w)
+      s.set(w * formK, (len / PRISM_HEIGHT) * formK, w * formK)
       m.compose(p, q, s)
       crystals.setMatrixAt(i, m)
     }
@@ -1465,12 +1556,14 @@ export default function CrystalBody({
        death they stay as they were. */
     const unfState = unfoldRef.current
     if (!life.dead) unfState.wet = layers?.frost === false ? 0 : smoothstep(0.5, 0.95, moisture) * 0.95 * (0.35 + 0.65 * smoothstep(0, 0.4, age))
-    const wetPetals = unfState.wet ?? 0
+    /* Petals answer moisture sooner and more strongly than the blisters. */
+    if (!life.dead) unfState.petalWet = layers?.frost === false ? 0 : smoothstep(0.32, 0.88, moisture) * (0.4 + 0.6 * smoothstep(0, 0.35, age))
+    const wetPetals = unfState.petalWet ?? 0
     for (let i = 0; i < plan.beads.length; i++) {
       const f = plan.beads[i]
       const j = frame(f.vertex)
       const g = smoothstep(f.th, f.th + 0.14, rime * 1.05)
-      const size = f.size * S * g
+      const size = f.size * S * g * formK
       orientAlong(q, n, 0)
       p.set(
         data.pos[j] + data.facet[j] * facetAmt + data.coil[j] * coil,
@@ -1493,12 +1586,14 @@ export default function CrystalBody({
        many more. They sit exactly where the skin is (never apart from it). */
     const petalsMesh = petalsRef.current
     if (petalsMesh) {
-      const amount = Math.min(1, 0.12 + wetPetals)
+      /* Dry: a scattering. Wet: the skin grows a veil of them. */
+      const amount = Math.min(1, 0.06 + wetPetals * 1.05)
+      resources.petalMat.opacity = 0.42 + 0.3 * wetPetals
       for (let i = 0; i < plan.petals.length; i++) {
         const f = plan.petals[i]
         const j = frame(f.vertex)
         const g = smoothstep(f.th, f.th + 0.08, amount) * (1 - 0.6 * level)
-        const size = f.size * S * g * (0.8 + 0.5 * wetPetals)
+        const size = f.size * S * g * (0.75 + 0.85 * wetPetals) * formK
         p.set(
           data.pos[j] + data.facet[j] * facetAmt + data.coil[j] * coil,
           data.pos[j + 1] + data.facet[j + 1] * facetAmt + data.coil[j + 1] * coil,
@@ -1538,6 +1633,9 @@ export default function CrystalBody({
         dispose={null}
       />
       <mesh geometry={resources.membraneGeo} material={resources.membraneMat} renderOrder={2} dispose={null} />
+      <mesh ref={budRef} material={budMaterial} renderOrder={6} visible={false}>
+        <sphereGeometry args={[1, 48, 32]} />
+      </mesh>
       <instancedMesh
         ref={petalsRef}
         args={[resources.petalGeo, resources.petalMat, plan.petals.length]}

@@ -11,6 +11,7 @@
 import * as THREE from 'three'
 import {
   HABITAT_SEED,
+  groundMeshHeight,
   habitatHeight,
   habitatNormal,
   habitatRng,
@@ -49,19 +50,23 @@ export function buildOutcrops() {
   const crystals = []
   const beads = []
   /* The clearing's own outcrops, then the places scattered for exploring. */
-  const clusters = [...OUTCROPS, ...EXPLORE_SITES.filter((site) => site.outcrop && site.outcrop.style !== 'ember').map((site) => site.outcrop)]
+  /* Looser than packed: the clearing's a little, the explore sites more. */
+  const clusters = [
+    ...OUTCROPS.map((o) => ({ ...o, loose: 1.15 })),
+    ...EXPLORE_SITES.filter((site) => site.outcrop && site.outcrop.style !== 'ember').map((site) => ({ ...site.outcrop, loose: 1.45 })),
+  ]
   for (const o of clusters) {
     const n = habitatNormal(o.x, o.z)
-    const count = Math.round(o.count * 1.4)
+    const count = Math.round((o.count * 1.4) / Math.sqrt(o.loose))
     for (let i = 0; i < count; i++) {
       const main = i === 0
       const ang = r() * Math.PI * 2
-      const rad = main ? 0 : Math.pow(r(), 0.7) * o.spread
+      const rad = main ? 0 : Math.pow(r(), 0.7) * o.spread * o.loose
       const x = o.x + Math.cos(ang) * rad
       const z = o.z + Math.sin(ang) * rad
       const big = main ? 1 : Math.pow(r(), 1.3)
       const height = o.scale * (0.28 + big * 0.85)
-      const lean = main ? 0.12 : 0.3 + (rad / Math.max(o.spread, 1e-3)) * 0.7
+      const lean = main ? 0.12 : 0.3 + (rad / Math.max(o.spread * o.loose, 1e-3)) * 0.7
       crystals.push({
         x, z,
         y: habitatHeight(x, z) - height * 0.14,
@@ -107,7 +112,7 @@ export function buildOutcrops() {
         const bx = cx + Math.cos(ba) * ring * radius
         const bz = cz + Math.sin(ba) * ring * radius
         const size = radius * (b === 0 ? 0.5 : 0.22 + (1 - ring) * 0.25 + r() * 0.12)
-        beads.push({ x: bx, z: bz, y: habitatHeight(bx, bz) + size * 0.35, size })
+        beads.push({ x: bx, z: bz, y: groundMeshHeight(bx, bz) + size * 0.35, size })
       }
     }
   }
@@ -198,7 +203,24 @@ export function createResidueResources() {
   }
 
   /* Pearl blobs: flattened, half-sunk drops of the body's membrane. */
-  const blobGeo = new THREE.SphereGeometry(1, 32, 20)
+  /* A smooth drop: round crown, a soft shoulder, and a foot that flares a
+     little into the sand (no hard cut where it meets the ground). */
+  const blobGeo = (() => {
+    const pts = []
+    const n = 40
+    for (let i = 0; i <= n; i++) {
+      const t = i / n
+      const a = t * Math.PI * 0.5
+      /* superellipse profile: fuller shoulder than a sphere */
+      const x = Math.pow(Math.cos(a), 0.8)
+      const y = Math.pow(Math.sin(a), 1.15)
+      pts.push(new THREE.Vector2(Math.max(1e-4, x), y))
+    }
+    pts.unshift(new THREE.Vector2(1.08, -0.12))
+    const g = new THREE.LatheGeometry(pts, 72)
+    g.computeVertexNormals()
+    return g
+  })()
   const blobMat = new THREE.MeshPhysicalMaterial({
     color: '#f3ecf8',
     metalness: 0,
@@ -232,8 +254,8 @@ export function createResidueResources() {
   }
   const blobs = instanced(blobGeo, blobMat, blobList, (b) => {
     _q.identity()
-    _p.set(b.x, habitatHeight(b.x, b.z) + b.size * b.squash * 0.35, b.z)
-    _s.set(b.size, b.size * b.squash, b.size)
+    _p.set(b.x, groundMeshHeight(b.x, b.z) - 0.01, b.z)
+    _s.set(b.size, b.size * b.squash * 1.3, b.size)
   })
 
   /* Bead clusters: little frost-flowers scattered thinly over the dunes. */
@@ -264,11 +286,11 @@ export function createResidueResources() {
       }
     }
   }
-  const beadGeo = createBeadGeometry()
+  const beadGeo = createBeadGeometry(3)
   const beadMat = createBeadMaterial({ color: '#efe3ee', emissiveIntensity: 0.02, envMapIntensity: 1.1 })
   const beads = instanced(beadGeo, beadMat, beadList, (b) => {
     _q.identity()
-    _p.set(b.x, habitatHeight(b.x, b.z) + b.size * 0.3, b.z)
+    _p.set(b.x, groundMeshHeight(b.x, b.z) + b.size * 0.3, b.z)
     _s.set(b.size, b.size, b.size)
   })
 
@@ -301,12 +323,12 @@ export function createResidueResources() {
   const flakeList = []
   for (let i = 0; i < 140; i++) {
     const [x, z, rad] = near(1.8, 36)
-    flakeList.push({ x, z, size: (0.05 + Math.pow(r(), 2) * 0.2) * (1 + rad * 0.03), yaw: r() * Math.PI * 2, tilt: (r() - 0.5) * 0.5 })
+    flakeList.push({ x, z, size: (0.05 + Math.pow(r(), 2) * 0.2) * (1 + rad * 0.03), yaw: r() * Math.PI * 2, tilt: (r() - 0.5) * 0.16 })
   }
   for (const site of EXPLORE_SITES) {
     for (let i = 0; i < site.residue.flakes; i++) {
       const [x, z] = around(site)
-      flakeList.push({ x, z, size: (0.08 + Math.pow(r(), 2) * 0.3) * site.residue.size, yaw: r() * Math.PI * 2, tilt: (r() - 0.5) * 0.5 })
+      flakeList.push({ x, z, size: (0.08 + Math.pow(r(), 2) * 0.3) * site.residue.size, yaw: r() * Math.PI * 2, tilt: (r() - 0.5) * 0.16 })
     }
   }
   const euler = new THREE.Euler()
@@ -315,7 +337,8 @@ export function createResidueResources() {
     _a.set(n[0], n[1], n[2])
     orientAlong(_q, _a, f.yaw)
     _q.multiply(new THREE.Quaternion().setFromEuler(euler.set(f.tilt, 0, 0)))
-    _p.set(f.x, habitatHeight(f.x, f.z) + 0.006, f.z)
+    /* Lies on the meshed sand, lifted by its own tilt so no edge cuts in. */
+    _p.set(f.x, groundMeshHeight(f.x, f.z) + 0.012 + f.size * Math.abs(f.tilt) * 0.6, f.z)
     _s.set(f.size, f.size, f.size * 0.7)
   })
   flakes.renderOrder = 3

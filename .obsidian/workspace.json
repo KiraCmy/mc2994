@@ -4,21 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "468aee6dcb9cb1a4",
+        "id": "f6cd6ef7170b8fb6",
         "type": "tabs",
         "children": [
           {
-            "id": "6961be4248116655",
+            "id": "28e22367938052a4",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "Project03_Born-Another/README.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "README"
+              "title": "New tab"
             }
           }
         ]
@@ -188,35 +184,36 @@
       "bases:Create new base": false
     }
   },
-  "active": "6961be4248116655",
+  "active": "28e22367938052a4",
   "lastOpenFiles": [
-    "Project03_Born-Another/src/playground/finalForm/populationContact.test.js",
-    "Project03_Born-Another/src/playground/finalForm/populationContact.js",
-    "Project03_Born-Another/src/playground/finalForm/PopulationScene.jsx",
-    "Project03_Born-Another/src/playground/finalForm/PopulationOrganism.jsx",
-    "Project03_Born-Another/src/playground/finalForm/usePopulationSim.js",
-    "Project03_Born-Another/src/playground/finalForm/populationSim.test.js",
-    "Project03_Born-Another/src/playground/finalForm/populationSim.js",
-    "Project03_Born-Another/src/playground/agentBehaviors/competition.test.js",
-    "Project03_Born-Another/src/playground/agentBehaviors/CompetitionFlows.jsx",
-    "Project03_Born-Another/src/playground/agentBehaviors/multiClusterAgents.test.js",
-    "Project03_Born-Another/src/playground/agentBehaviors/crystalMoistureField.js",
-    "docs/assets/image/userjounery02.png",
-    "docs/assets/image/userjounery.png",
-    "docs/assets/image/roadmap.png",
-    "docs/assets/image/born-another-playground-exp05-pearlescent-ab.jpg",
-    "docs/assets/image/born-another-playground-exp05-biological-membrane.jpg",
-    "Project03_Born-Another/src/assets/concept-user-journey.png",
+    "Project03_Born-Another/README.md",
+    "Project03_Born-Another/src/playground/finalHabitat/album.test.js",
+    "Project03_Born-Another/_to_delete/Caves.before-plainhint.jsx",
+    "Project03_Born-Another/_to_delete/sr2.snippet.jsx",
+    "Project03_Born-Another/_to_delete/ArchivePage.before-album.jsx",
+    "Project03_Born-Another/_to_delete/capture.snippet.css",
+    "Project03_Born-Another/src/archive/album.css",
+    "Project03_Born-Another/src/archive/AlbumView.jsx",
+    "Project03_Born-Another/_to_delete/Experiment07.before-capture.jsx",
+    "Project03_Born-Another/src/playground/finalHabitat/album.js",
+    "Project03_Born-Another/_to_delete/HabitatScene.before-capture.jsx",
+    "Project03_Born-Another/_to_delete/06-underworld.old.jpg",
+    "docs/assets/image/final/06-underworld-cave.jpg",
+    "Project03_Born-Another/_to_delete/readme-screenshots-raw/g/062.jpg",
+    "Project03_Born-Another/_to_delete/readme-screenshots-raw/g/061.jpg",
+    "Project03_Born-Another/_to_delete/readme-screenshots-raw/g/060.jpg",
+    "Project03_Born-Another/_to_delete/readme-screenshots-raw/g/059.jpg",
+    "Project03_Born-Another/_to_delete/readme-screenshots-raw/g/058.jpg",
+    "Project03_Born-Another/_to_delete/readme-screenshots-raw/g/057.jpg",
+    "Project03_Born-Another/_to_delete/readme-screenshots-raw/g/056.jpg",
+    "Project03_Born-Another/_to_delete/readme-screenshots-raw/g/055.jpg",
+    "docs/Progress-Recording/Born-Another.md",
+    "docs/concept/project_reference.md",
     "docs/tutorials/Web_Page_Design_Method.md",
     "docs/planning/Website-Organization.md",
     "docs/planning/Born-Another-Technic-Log.md",
     "docs/concept/BORN_ANOTHER_Concept.md",
-    "docs/assets/image/roy.jpg",
-    "docs/assets/image/rachel.jpg",
-    "docs/assets/image/morality.jpg",
-    "docs/assets/image/memory.jpg",
     "docs/Progress-Recording/Born-Another_Playground.md",
-    "docs/concept/project_reference.md",
     "Project03_Born-Another/node_modules/rc/node_modules/ini/README.md",
     "Project03_Born-Another/node_modules/rc/README.md",
     "Project03_Born-Another/node_modules/config-chain/node_modules/ini/README.md",
@@ -234,8 +231,6 @@
     "Project03_Born-Another/node_modules/restore-cursor/node_modules/signal-exit/README.md",
     "Project03_Born-Another/node_modules/restore-cursor/readme.md",
     "Project03_Born-Another/node_modules/log-symbols/node_modules/chalk/readme.md",
-    "Project03_Born-Another/node_modules/log-symbols/readme.md",
-    "Project03_Born-Another/node_modules/basic-auth/node_modules/safe-buffer/README.md",
     "Untitled.canvas",
     "未命名.canvas"
   ]

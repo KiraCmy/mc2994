@@ -7,6 +7,7 @@ import { ENTRANCE_LINES, HERO_HOME, INITIAL_SPECIES, pickHome, speciesFor } from
 import { freshRemainsPoints } from './finalHabitat/Remains.jsx'
 import ArchiveDrawer from './finalHabitat/ArchiveDrawer.jsx'
 import { createSpecimen, loadArchive, removeSpecimen, saveSpecimen } from './finalHabitat/archive.js'
+import { addCapture, createCapture } from './finalHabitat/album.js'
 import { createLifeLog, lifeEntry, logWords, sampleLife, SAMPLE_EVERY, setStage, summarizeLife } from './finalHabitat/lifeLog.js'
 import {
   CRYSTAL_PRESETS,
@@ -34,13 +35,15 @@ const HERO_AGE_RATE = (1 - START_AGE) / 150
 /** World Final opens held, then grows through the rest of its life in ~50s. */
 const OPENING_HOLD_MS = 2200
 const OPENING_GROW_RATE = (1 - START_AGE) / 50
-/** World Final: the hero is met mid-life and ends ~2.5 min after arrival. */
-const WORLD_START_AGE = 0.42
-const WORLD_AGE_RATE = (1 - WORLD_START_AGE) / 150
+/** World Final: the hero is met young (a bud just past birth) and lives ~3.7 min. */
+const WORLD_START_AGE = 0.14
+/* Same pace of ageing as before (0.42 → 1 in 150 s): starting younger gives
+   the viewer about 1.5 minutes more with it. */
+const WORLD_AGE_RATE = (1 - 0.42) / 150
 /** An unwitnessed hero rests as a husk this long, then a new life begins. */
 const UNWITNESSED_REBIRTH_MS = 8000
 /** A new life starts young. */
-const REBORN_AGE = 0.2
+const REBORN_AGE = 0.14
 /** Seconds after death until the remains are identified. */
 const REVEAL_AFTER = 6.5
 
@@ -286,6 +289,28 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   const activeRef = useRef(active)
   activeRef.current = active
   const [confirmRestart, setConfirmRestart] = useState(false)
+  /* Capture the world: the scene as it is now, kept in the album. */
+  const [capture, setCapture] = useState({ state: 'idle', n: 0 })
+  const captureTimer = useRef(0)
+  useEffect(() => () => clearTimeout(captureTimer.current), [])
+  const captureWorld = useCallback(async () => {
+    const w = worldRef.current
+    if (!w?.requestFrame || capture.state === 'saving') return
+    clearTimeout(captureTimer.current)
+    setCapture((c) => ({ state: 'saving', n: c.n }))
+    const shot = await w.requestFrame()
+    let ok = false
+    if (shot) {
+      try {
+        await addCapture(createCapture({ ...shot, environment: envRef.current, crystallization: crystalRef.current?.level }))
+        ok = true
+      } catch {
+        ok = false
+      }
+    }
+    setCapture((c) => ({ state: ok ? 'saved' : 'error', n: c.n + 1 }))
+    captureTimer.current = setTimeout(() => setCapture((c) => ({ state: 'idle', n: c.n })), ok ? 4200 : 3200)
+  }, [capture.state])
   useEffect(() => {
     if (!confirmRestart) return undefined
     const id = window.setTimeout(() => setConfirmRestart(false), 3500)
@@ -801,8 +826,26 @@ export default function Experiment07({ title, description, autoGrow = false, ope
             className={`exp07-restart${confirmRestart ? ' is-confirming' : ''}`}
             onClick={() => (confirmRestart ? onRestart() : setConfirmRestart(true))}
           >
-            {confirmRestart ? 'Restart? · click again' : 'Restart the world'}
+            {confirmRestart ? 'Begin again? · click to confirm' : 'Start a new world ↺'}
           </button>
+        ) : null}
+        {opening && phase !== 'descent' && !(revealed && !lingering) ? (
+          <button type="button" className="exp07-capture" onClick={captureWorld} disabled={capture.state === 'saving'}>
+            <span className="exp07-capture__dot" aria-hidden="true" />
+            Capture the world
+          </button>
+        ) : null}
+        {capture.state === 'saved' ? <div key={`flash-${capture.n}`} className="exp07-capture-flash" aria-hidden="true" /> : null}
+        {capture.state === 'saved' || capture.state === 'error' ? (
+          <p key={`toast-${capture.n}`} className={`exp07-capture-toast is-${capture.state}`} role="status">
+            {capture.state === 'saved' ? (
+              <>
+                Moment kept · <a href="#archive/album">Open the album ↗</a>
+              </>
+            ) : (
+              'This moment could not be kept (browser storage unavailable)'
+            )}
+          </p>
         ) : null}
         {archiveOpen ? (
           <ArchiveDrawer

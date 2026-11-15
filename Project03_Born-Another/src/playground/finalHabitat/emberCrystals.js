@@ -9,7 +9,7 @@
  * shallow glassy pools and loose shards stuck in the ground around it.
  */
 import * as THREE from 'three'
-import { habitatColor, habitatHeight, habitatNormal, habitatRng, HABITAT_SEED } from './habitatField.js'
+import { groundMeshHeight, habitatColor, habitatHeight, habitatNormal, habitatRng, HABITAT_SEED } from './habitatField.js'
 import { orientAlong } from './crystalShapes.js'
 import { EXPLORE_SITES } from './exploreSites.js'
 
@@ -135,12 +135,13 @@ export function buildEmberLayout(druses = EMBER_DRUSES, seed = HABITAT_SEED + 71
     }
     const fan = r() * Math.PI * 2
     /* Main druse: one dominant column, a few tall companions, then a spray. */
-    const roots = Math.round(o.count * 1.5)
+    /* Looser druses: fewer roots, spread wider. */
+    const roots = Math.round(o.count * 1.2)
     for (let i = 0; i < roots; i++) {
       const main = i === 0
       const tall = i < 4
       const ang = r() * Math.PI * 2
-      const rad = main ? 0 : Math.pow(r(), 0.7) * o.spread * (tall ? 0.18 : 0.32)
+      const rad = main ? 0 : Math.pow(r(), 0.7) * o.spread * (tall ? 0.26 : 0.46)
       const h = o.scale * (main ? 1.3 : tall ? 0.7 + r() * 0.4 : 0.22 + Math.pow(r(), 1.5) * 0.6)
       const lean = main ? 0.04 + r() * 0.06 : tall ? 0.08 + r() * 0.22 : 0.3 + r() * 0.75
       /* Splay away from the centre, with some crossing back over it. */
@@ -151,14 +152,14 @@ export function buildEmberLayout(druses = EMBER_DRUSES, seed = HABITAT_SEED + 71
     const sats = 2 + Math.floor(r() * 3)
     for (let s2 = 0; s2 < sats; s2++) {
       const sa = fan + (s2 / sats) * Math.PI * 2 + (r() - 0.5) * 0.9
-      const sr = o.spread * (0.7 + r() * 0.6)
+      const sr = o.spread * (0.95 + r() * 0.8)
       const sx = o.x + Math.cos(sa) * sr
       const sz = o.z + Math.sin(sa) * sr
       const k = 3 + Math.floor(r() * 5)
       const size = 0.28 + r() * 0.32
       for (let i = 0; i < k; i++) {
         const ang = r() * Math.PI * 2
-        const rad = Math.sqrt(r()) * o.spread * 0.12
+        const rad = Math.sqrt(r()) * o.spread * 0.18
         const h = o.scale * size * (i === 0 ? 1 : 0.35 + r() * 0.6)
         add(sx + Math.cos(ang) * rad, sz + Math.sin(ang) * rad, h, i === 0 ? 0.1 + r() * 0.2 : 0.25 + r() * 0.7, ang + (r() - 0.5) * 1.2)
       }
@@ -355,7 +356,7 @@ function buildMoundGeometry(mounds, rings = 14, segments = 48) {
   const c = new THREE.Color()
   for (const m of mounds) {
     const base = pos.length / 3
-    pos.push(m.x, emberGround(m, m.x, m.z), m.z)
+    pos.push(m.x, groundMeshHeight(m.x, m.z) + m.height * moundBump(m, m.x, m.z) + 0.025, m.z)
     for (let i = 1; i <= rings; i++) {
       const t = i / rings
       for (let j = 0; j < segments; j++) {
@@ -365,7 +366,9 @@ function buildMoundGeometry(mounds, rings = 14, segments = 48) {
         const z = m.z + Math.sin(a) * rr
         const bump = moundBump(m, x, z)
         /* Edges tuck under the sand so the seam disappears. */
-        pos.push(x, habitatHeight(x, z) + m.height * bump - 0.05 * (1 - smooth(0, 0.25, bump)), z)
+        /* On the meshed sand (not the exact field), a hair above it inside and
+           tucked under at the rim: one clean seam, no torn patches. */
+        pos.push(x, groundMeshHeight(x, z) + m.height * bump + 0.025 * smooth(0.08, 0.3, bump) - 0.12 * (1 - smooth(0, 0.08, bump)), z)
       }
     }
     for (let j = 0; j < segments; j++) idx.push(base, base + 1 + ((j + 1) % segments), base + 1 + j)

@@ -205,8 +205,8 @@ export function createBodyCrystalMaterial(habit = 'prisms', overrides = {}) {
 }
 
 /** Rounded frost bead (frost-flower rosettes are built from these). */
-export function createBeadGeometry() {
-  const geo = new THREE.IcosahedronGeometry(1, 2)
+export function createBeadGeometry(detail = 2) {
+  const geo = new THREE.IcosahedronGeometry(1, detail)
   geo.scale(1, 0.78, 1)
   geo.computeVertexNormals()
   return geo

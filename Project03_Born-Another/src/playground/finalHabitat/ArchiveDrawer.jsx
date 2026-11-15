@@ -45,8 +45,8 @@ export default function ArchiveDrawer({ entries, onClose, onRemove }) {
       )}
       <p className="exp07-archive__note">
         Kept in this browser.{' '}
-        <a href="#archive" target="_blank" rel="noopener">
-          Open the Life Archive ↗
+        <a href="#archive">
+          Open the Life Archive →
         </a>
       </p>
     </aside>

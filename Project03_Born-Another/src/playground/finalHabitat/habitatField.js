@@ -182,12 +182,70 @@ export function habitatVeil(x, z, seed = HABITAT_SEED, layer = 0) {
   )
 }
 
+/** The ground mesh's polar grid (habitatTerrainBuild.buildGroundGeometry). */
+export const GROUND_GRID = Object.freeze({ rings: 300, segments: 420, power: 2.4 })
+
+/**
+ * Height of the ground AS MESHED: the polar grid's triangles interpolate the
+ * field linearly, which far out (coarse triangles) differs from the exact
+ * field by up to ~0.25. Anything resting on the sand or sheeted over it
+ * (residue, mounds, veils) sits on this, so it neither floats nor cuts
+ * through the triangles (no torn, jagged patches).
+ */
+export function groundMeshHeight(x, z, seed = HABITAT_SEED) {
+  const { rings, segments, power } = GROUND_GRID
+  const R = HABITAT_RADIUS
+  const r = Math.hypot(x, z)
+  const t = Math.pow(Math.min(r, R * 0.9999) / R, 1 / power) * rings
+  const i = Math.floor(t)
+  const step = (Math.PI * 2) / segments
+  const theta = Math.atan2(z, x)
+  const vert = (ring, j) => {
+    if (ring === 0) return [0, 0]
+    const rr = R * Math.pow(ring / rings, power)
+    const a = j * step + (ring % 2) * (step / 2)
+    return [Math.cos(a) * rr, Math.sin(a) * rr]
+  }
+  const tris = []
+  const j0 = Math.floor((theta - (i % 2) * (step / 2)) / step)
+  if (i === 0) {
+    for (const j of [j0 - 1, j0, j0 + 1]) tris.push([vert(0, 0), vert(1, j), vert(1, j + 1)])
+  } else {
+    for (const j of [j0 - 1, j0, j0 + 1]) {
+      tris.push([vert(i, j), vert(i, j + 1), vert(i + 1, j)])
+      tris.push([vert(i, j + 1), vert(i + 1, j + 1), vert(i + 1, j)])
+    }
+  }
+  let best = null
+  let bestOut = Infinity
+  for (const [A, B, C] of tris) {
+    const d = (B[1] - C[1]) * (A[0] - C[0]) + (C[0] - B[0]) * (A[1] - C[1])
+    if (Math.abs(d) < 1e-12) continue
+    const l1 = ((B[1] - C[1]) * (x - C[0]) + (C[0] - B[0]) * (z - C[1])) / d
+    const l2 = ((C[1] - A[1]) * (x - C[0]) + (A[0] - C[0]) * (z - C[1])) / d
+    const l3 = 1 - l1 - l2
+    const out = Math.max(0, -l1, -l2, -l3)
+    if (out < bestOut) {
+      bestOut = out
+      best = [A, B, C, l1, l2, l3]
+      if (out === 0) break
+    }
+  }
+  if (!best) return habitatSurfaceHeight(x, z, seed)
+  const [A, B, C, l1, l2, l3] = best
+  return (
+    l1 * habitatSurfaceHeight(A[0], A[1], seed) + l2 * habitatSurfaceHeight(B[0], B[1], seed) + l3 * habitatSurfaceHeight(C[0], C[1], seed)
+  )
+}
+
 /** Veil sheet height: lies on crests, bridges troughs above the base field. */
 export function habitatVeilHeight(x, z, seed = HABITAT_SEED, layer = 0) {
   const r = Math.hypot(x, z)
   const swell = 0.5 + 0.5 * fbm2(seed + 91 + layer * 7, x * 0.25, z * 0.25, { octaves: 2 })
   const lift = ((layer ? 0.16 : 0.06) + swell * (layer ? 0.32 : 0.18)) * (1 + r * 0.025)
-  return Math.max(habitatSurfaceHeight(x, z, seed) + 0.02 + layer * 0.02, habitatHeightBase(x, z, seed) + lift)
+  /* Never under the meshed sand (the veil's own triangles interpolate too). */
+  const floor = groundMeshHeight(x, z, seed) + 0.03 + layer * 0.02 + r * 0.0009
+  return Math.max(floor, habitatSurfaceHeight(x, z, seed) + 0.02 + layer * 0.02, habitatHeightBase(x, z, seed) + lift)
 }
 
 /** Normal by central differences (for placing growths upright-ish). */

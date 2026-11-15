@@ -41,6 +41,11 @@ import { habitatHeight } from './habitatField.js'
 const GROUND_Y = habitatHeight(0, 0)
 const UP = new THREE.Vector3(0, 1, 0)
 const LOOK_SPEED = 0.0032
+/* How far the World Final view may tilt: down to nearly straight at the
+   ground, up to the cavern vault. The orbit limits below match these, so
+   OrbitControls never snaps a right-drag look back toward the horizon. */
+const LOOK_PITCH_MIN = -1.4
+const LOOK_PITCH_MAX = 0.95
 const WORLD_LIMIT = 300
 /* World Final: the explore camera walks around the crystal spires, not through. */
 const SPIRE_COLLIDERS = spireColliders()
@@ -118,7 +123,8 @@ function ExploreKeys({ world = null }) {
       dir.applyAxisAngle(UP, -dx * LOOK_SPEED)
       side.crossVectors(dir, UP).normalize()
       const pitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1))
-      const next = THREE.MathUtils.clamp(pitch - dy * LOOK_SPEED, -1.0, 0.42)
+      /* Wide enough to look down at the sand under you and up at the vault. */
+      const next = THREE.MathUtils.clamp(pitch - dy * LOOK_SPEED, LOOK_PITCH_MIN, LOOK_PITCH_MAX)
       dir.applyAxisAngle(side, next - pitch).normalize()
       controls.target.copy(camera.position).addScaledVector(dir, dist)
       controls.update()
@@ -285,10 +291,13 @@ function SnapshotTaker({ world }) {
     const w = world.current
     w.snapshotQueue = []
     w.requestSnapshot = (id, px = 360) => new Promise((resolve) => w.snapshotQueue.push({ id, px, resolve }))
+    /* The whole scene as it is this frame (the 3D canvas only: no page text). */
+    w.requestFrame = (maxW = 2400) => new Promise((resolve) => w.snapshotQueue.push({ frame: true, maxW, resolve }))
     return () => {
       for (const job of w.snapshotQueue ?? []) job.resolve(null)
       w.snapshotQueue = []
       w.requestSnapshot = null
+      w.requestFrame = null
     }
   }, [world])
   /* Priority 2: after HabitatPost has drawn this frame (priority 1), while the
@@ -298,6 +307,21 @@ function SnapshotTaker({ world }) {
     if (!w.snapshotQueue?.length) return
     const src = gl.domElement
     for (const job of w.snapshotQueue.splice(0)) {
+      if (job.frame) {
+        /* Copied now, while the drawing buffer holds this frame. */
+        try {
+          const k = Math.min(1, job.maxW / src.width)
+          const out = document.createElement('canvas')
+          out.width = Math.round(src.width * k)
+          out.height = Math.round(src.height * k)
+          out.getContext('2d').drawImage(src, 0, 0, out.width, out.height)
+          const done = (blob) => job.resolve(blob ? { blob, width: out.width, height: out.height } : null)
+          out.toBlob((b) => (b ? done(b) : out.toBlob(done, 'image/jpeg', 0.9)), 'image/webp', 0.9)
+        } catch {
+          job.resolve(null)
+        }
+        continue
+      }
       try {
         const body = w.bodies.get(job.id)
         if (!body || !Number.isFinite(body.x)) {
@@ -531,8 +555,8 @@ function HabitatScene({
         zoomSpeed={0.8}
         minDistance={1.5}
         maxDistance={40}
-        minPolarAngle={world ? 1.42 : 0.5}
-        maxPolarAngle={world ? 1.85 : 2.0}
+        minPolarAngle={world ? Math.PI / 2 + LOOK_PITCH_MIN + 0.02 : 0.5}
+        maxPolarAngle={world ? Math.PI / 2 + LOOK_PITCH_MAX - 0.02 : 2.0}
       />
       <ExploreKeys world={world} />
       {world ? <DescentCamera world={world} groundY={GROUND_Y} overlayRef={overlayRef} /> : null}
