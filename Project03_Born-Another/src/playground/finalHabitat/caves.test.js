@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { centreDistance, clearance, remainNiches, underworldCeiling, underworldDepth, underworldFloor, underworldSpan, UNDERWORLD } from './caves.js'
+import { centreDistance, clearance, nearUnderworld, remainNiches, underworldCeiling, underworldDepth, underworldFloor, underworldSpan, UNDERWORLD } from './caves.js'
 import { habitatHeight, habitatSurfaceHeight, holeDistance } from './habitatField.js'
 import { SPIRE_CLEARING, SPIRES, spireWidth } from './crystalSpires.js'
 
@@ -27,6 +27,17 @@ test('ceiling stays between floor and sand everywhere', () => {
     assert.ok(c >= underworldFloor(x, z) - 1e-9)
     assert.ok(c <= habitatSurfaceHeight(x, z) - 1.39)
   }
+})
+
+test('the opening is near the underworld; the clearing is not', () => {
+  assert.equal(nearUnderworld([0, 4, 0]), false)
+  assert.equal(nearUnderworld(null), false)
+  const x = hole.x + hole.r + 3
+  const z = hole.z
+  assert.equal(nearUnderworld([x, underworldFloor(x, z) + 1.5, z]), true)
+  assert.equal(nearUnderworld([hole.x, habitatSurfaceHeight(hole.x, hole.z) + 2, hole.z]), true)
+  const far = hole.x + hole.rim + 10
+  assert.equal(nearUnderworld([far, habitatSurfaceHeight(far, hole.z) + 2, hole.z]), false)
 })
 
 test('underground span, depth, and niches', () => {

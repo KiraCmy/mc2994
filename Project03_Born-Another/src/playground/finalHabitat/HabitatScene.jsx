@@ -383,6 +383,29 @@ function PixelScale({ children }) {
    (visible as flicker while typing). */
 export default memo(HabitatScene)
 
+/** Samples the renderer twice a second. Mounted only while System View is open. */
+function FrameProbe({ probeRef }) {
+  const gl = useThree((s) => s.gl)
+  const acc = useRef({ frames: 0, t: 0 })
+  useFrame((_, delta) => {
+    /* A backgrounded tab delivers one huge delta. That is not the frame rate. */
+    if (delta > 0.25) return
+    const a = acc.current
+    a.frames += 1
+    a.t += delta
+    if (a.t < 0.5) return
+    const info = gl.info.render
+    probeRef.current = {
+      fps: a.frames / a.t,
+      calls: info.calls,
+      triangles: info.triangles,
+    }
+    a.frames = 0
+    a.t = 0
+  })
+  return null
+}
+
 function HabitatScene({
   life,
   crystalRef,
@@ -407,6 +430,11 @@ function HabitatScene({
   className = 'exp07-viewport',
   /** False while another page is open: the world is paused, not unmounted. */
   active = true,
+  /** System View. Both stay null/false while it is closed, so this scene does not re-render for it. */
+  systemOpen = false,
+  inspectMode = null,
+  inspectId = null,
+  probeRef = null,
 }) {
   const dpr = useDpr()
   /* The hero's collision body, shared with the kin physics (contacts back). */
@@ -454,6 +482,7 @@ function HabitatScene({
       }}
     >
       <fogExp2 attach="fog" args={[HABITAT_FOG, 0.0105]} />
+      {systemOpen && probeRef ? <FrameProbe probeRef={probeRef} /> : null}
       <HabitatClock timeRef={timeRef} runningRef={runningRef} age={life?.age ?? 0} />
       <HabitatEnvironment />
       <DeathClock dead={Boolean(life?.dead)} deathRef={deathRef} />
@@ -493,6 +522,8 @@ function HabitatScene({
           running={running}
           layers={layers}
           crystalLevel={crystalLevel}
+          inspectMode={inspectMode}
+          inspectId={inspectId}
         />
       ) : null}
       {life ? (
@@ -514,6 +545,7 @@ function HabitatScene({
           bodyScale={world ? worldBodyScale(life?.age ?? 0) : 1}
           responsive={Boolean(world)}
           glow={Boolean(world)}
+          inspect={inspectMode && inspectId === 'hero' ? inspectMode : null}
         >
           {showPetals ? (
             <ExploreLifeScatter

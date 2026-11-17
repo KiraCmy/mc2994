@@ -81,7 +81,7 @@ export default function AlbumView() {
           {shots.map((s, i) => (
             <li key={s.key}>
               <button type="button" className="arc-album__cell" onClick={() => setOpen(i)} aria-label={`Open the moment from ${when(s.savedAt)}`}>
-                <img src={urls[i]} alt="" loading="lazy" style={{ aspectRatio: `${s.width} / ${s.height}` }} />
+                <img src={urls[i]} alt="" loading="lazy" />
                 <span className="arc-album__time">{when(s.savedAt)}</span>
               </button>
             </li>

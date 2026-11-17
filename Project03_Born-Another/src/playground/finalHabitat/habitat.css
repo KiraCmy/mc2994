@@ -431,6 +431,38 @@
   border-color: var(--exp07-ink);
 }
 
+.exp07-say__field.is-listening {
+  border-color: rgba(159, 216, 230, 0.85);
+}
+
+.exp07-say__mic.is-listening {
+  color: #9fd8e6;
+  background: rgba(159, 216, 230, 0.16);
+}
+
+.exp07-say__mic.is-unavailable {
+  opacity: 0.45;
+}
+
+.exp07-say__note {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--exp07-ink-soft);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .exp07-say__mic.is-listening {
+    animation: exp07-say-listen 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes exp07-say-listen {
+  50% {
+    box-shadow: 0 0 0 6px rgba(159, 216, 230, 0);
+  }
+}
+
 .exp07-say__field button {
   display: grid;
   place-items: center;
@@ -1425,6 +1457,135 @@
   text-decoration: none;
 }
 
+/* System View: a DOM panel. It does not cover the right-hand controls. */
+.exp07-system-toggle {
+  position: absolute;
+  top: calc(var(--site-header-h) + 12.2rem);
+  left: 3.4vw;
+  z-index: 4;
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--exp07-line);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.55rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--exp07-ink-soft);
+  background: transparent;
+  cursor: pointer;
+}
+
+.exp07-system-toggle.is-open,
+.exp07-system-toggle:hover {
+  color: var(--exp07-ink);
+  border-color: var(--exp07-line-strong);
+}
+
+.exp07-system {
+  position: absolute;
+  top: calc(var(--site-header-h) + 15rem);
+  left: 3.4vw;
+  z-index: 4;
+  display: grid;
+  gap: 1rem;
+  width: min(18rem, 36vw);
+  max-height: min(32rem, calc(100dvh - var(--site-header-h) - 16.4rem));
+  overflow: auto;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--exp07-line);
+  border-radius: 1rem;
+  background: rgba(86, 94, 112, 0.82);
+  color: var(--exp07-ink-soft);
+}
+
+.exp07-system__label {
+  margin: 0 0 0.35rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--exp07-ink);
+}
+
+.exp07-system__note {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.exp07-system__modes {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+.exp07-system__modes button {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--exp07-line);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.exp07-system__modes button.is-on {
+  color: var(--exp07-ink);
+  border-color: rgba(159, 216, 230, 0.85);
+}
+
+.exp07-system__modes button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.exp07-system__rows {
+  display: grid;
+  grid-template-columns: 6.2rem 1fr;
+  gap: 0.28rem 0.5rem;
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.exp07-system__rows dt {
+  margin: 0;
+  color: var(--exp07-ink-faint);
+}
+
+.exp07-system__rows dd {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--exp07-ink);
+}
+
+.exp07-system__rows em {
+  flex: none;
+  font-style: normal;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--exp07-ink-faint);
+}
+
+.exp07-system__rows em.is-ai {
+  color: #d7c4a4;
+}
+
+.exp07-system__refresh {
+  margin-top: 0.65rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--exp07-ink-faint);
+  font: inherit;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
 /* Restart the world: the only thing that resets World Final. */
 .exp07-restart {
   position: absolute;
@@ -1743,5 +1904,38 @@
   }
   .exp07-capture-toast {
     animation: none;
+  }
+}
+
+/* Once, after the first remains are kept: a quiet line, not a dialog. */
+.exp07-underworld-hint {
+  position: absolute;
+  top: calc(var(--site-header-h, 6.5rem) + 1.6rem);
+  left: 50%;
+  z-index: 4;
+  margin: 0;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--exp07-ink-soft);
+  text-shadow: 0 0 12px rgba(20, 16, 30, 0.45);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: exp07-underworld-hint 6.6s ease both;
+}
+
+@keyframes exp07-underworld-hint {
+  0% { opacity: 0; }
+  11% { opacity: 1; }
+  86% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exp07-underworld-hint {
+    animation: exp07-underworld-hint 6.6s linear both;
   }
 }

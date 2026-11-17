@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createPopulation, STAGE } from '../finalForm/populationSim.js'
-import { ageKin, KIN_LIFESPAN, KIN_MAX_RADIUS, KIN_MIN_RADIUS, kinCrystalLevel, kinPlacement, kinScale, kinTempo, kinTint, KIN_TINTS, liftForAge, stepKinPhysics } from './habitatKin.js'
+import { ageKin, crystalForLogic, KIN_LIFESPAN, KIN_MAX_RADIUS, KIN_MIN_RADIUS, kinCrystalLevel, kinPlacement, kinScale, kinTempo, kinTint, KIN_TINTS, liftForAge, placeByLogic, stepKinPhysics } from './habitatKin.js'
 
 test('kin never sit inside the hero and stay in the habitat', () => {
   const pop = createPopulation({ count: 6, seed: 1 })
@@ -87,6 +87,27 @@ test('the hero is an obstacle and dents recover after parting', () => {
   let last = 1
   for (let k = 0; k < 600; k++) last = stepKinPhysics([a], hero, dents, 1 / 60).get('a')?.[0]?.amount ?? 0
   assert.ok(last < 0.02)
+})
+
+test('rooted stays put and hardens; a column life circles high and stays soft', () => {
+  const org = { phase: 0.4, age: 0.5, position: [3, 0, -2], archetypeSeed: 7, generation: 0 }
+  const anchor = [-8, 14]
+  const home = [3, 0, -2]
+  const rooted = [0, 8, 20].map((t) => placeByLogic('rooted', org, anchor, home, t, 3.6))
+  for (const p of rooted) {
+    assert.equal(p.x, anchor[0])
+    assert.equal(p.z, anchor[1])
+    assert.ok(p.lift < 0.4)
+  }
+  const column = [0, 10, 26].map((t) => placeByLogic('column', org, anchor, home, t, 3.6))
+  const span = Math.hypot(column[0].x - column[2].x, column[0].z - column[2].z)
+  assert.ok(span > 0.4 && span < 3, `column travel ${span}`)
+  for (const p of column) assert.ok(p.lift > 2.2)
+  const roam = placeByLogic('roam', org, anchor, home, 12, 3.6)
+  assert.ok(Math.hypot(roam.x - anchor[0], roam.z - anchor[1]) > 0.3)
+  assert.ok(crystalForLogic('rooted', 0) > crystalForLogic('roam', 0))
+  assert.ok(crystalForLogic('column', 1) < crystalForLogic('roam', 1))
+  assert.ok(crystalForLogic('column', 1) <= 0.4)
 })
 
 test('kin get their own tint from the palette, never the hero rose', () => {

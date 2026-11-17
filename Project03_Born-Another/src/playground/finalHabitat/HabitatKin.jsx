@@ -6,8 +6,8 @@ import { mapLifeToExploreVisual } from '../finalForm/exploreLifeAdapter.js'
 import { EXP05_LAB_DEFAULTS } from '../finalForm/exp05LabParams.js'
 import { useHabitatKin } from './useHabitatKin.js'
 import { habitatHeight } from './habitatField.js'
-import { formEmergence, worldBodyScale, WORLD_KIN_AGES, kinCrystalLevel, kinPlacement, kinPlacementAround, kinScale, kinScaleHeld, kinTempo, kinTint, stepKinPhysics } from './habitatKin.js'
-import { KIN_ANCHORS, KIN_ROAM, pickHome, speciesFor, UNWITNESSED_HUSK_SECONDS, WORLD_KIN_COUNT } from './worldOpening.js'
+import { crystalForLogic, formEmergence, placeByLogic, worldBodyScale, WORLD_KIN_AGES, kinCrystalLevel, kinPlacement, kinScale, kinScaleHeld, kinTempo, kinTint, stepKinPhysics } from './habitatKin.js'
+import { KIN_ANCHORS, KIN_ROAM, kinLogic, pickHome, speciesFor, UNWITNESSED_HUSK_SECONDS, WORLD_KIN_COUNT } from './worldOpening.js'
 import { freshRemainsPoints } from './Remains.jsx'
 
 /** Population size incl. the hero (organism 0 is not drawn here). */
@@ -26,7 +26,7 @@ function newSlot() {
   }
 }
 
-const KinBody = memo(function KinBody({ org, life, slot, envRef, temperature, layers, timeRef, crystalLevel, world, ended, morphologyType }) {
+const KinBody = memo(function KinBody({ org, life, slot, envRef, temperature, layers, timeRef, crystalLevel, world, ended, morphologyType, inspect = null }) {
   const tint = useMemo(() => kinTint(org.archetypeSeed, org.generation), [org.archetypeSeed, org.generation])
   /* Body and petals share one surface: the same morphology amplitude, which
      (World Final) emerges with age so young lives look alike. */
@@ -69,6 +69,7 @@ const KinBody = memo(function KinBody({ org, life, slot, envRef, temperature, la
       selfId={org.id}
       responsive={Boolean(world)}
       glow={Boolean(world)}
+      inspect={inspect}
     >
       {showPetals ? (
         <ExploreLifeScatter
@@ -107,7 +108,7 @@ const KinBody = memo(function KinBody({ org, life, slot, envRef, temperature, la
  * bud is born at the rim ("born another"). Each lives on its own clock
  * (kinTempo) and wanders around its sim seat, so they drift past each other.
  */
-export default function HabitatKin({ world = null, crystalRef, envRef, timeRef, heroRef, toneRef = null, temperature, moisture, turbulence, running, layers, crystalLevel }) {
+export default function HabitatKin({ world = null, crystalRef, envRef, timeRef, heroRef, toneRef = null, temperature, moisture, turbulence, running, layers, crystalLevel, inspectMode = null, inspectId = null }) {
   const environment = useMemo(() => ({ temperature, moisture, turbulence }), [temperature, moisture, turbulence])
   const controlRef = useRef({ hold: new Set(), release: new Set(), setAge: new Map() })
   if (world?.current) world.current.kinControl = controlRef.current
@@ -187,10 +188,11 @@ export default function HabitatKin({ world = null, crystalRef, envRef, timeRef, 
       p.spin = org.spin
       p.phase = org.phase
       p.pulse = kinTempo(org.archetypeSeed, org.generation).pulse
-      s.crystal.current.level = kinCrystalLevel(global, org.age)
+      const logic = w ? kinLogic(org.id) : 'roam'
+      s.crystal.current.level = crystalForLogic(logic, kinCrystalLevel(global, org.age))
 
       const anchor = w ? s.anchor : null
-      const at = anchor ? kinPlacementAround(org, anchor, s.home, t, KIN_ROAM) : kinPlacement(org, null, t)
+      const at = anchor ? placeByLogic(logic, org, anchor, s.home, t, KIN_ROAM) : kinPlacement(org, null, t)
       const info = p.body ?? { centre: 3.3, radius: 1.35 }
       const sc = Math.max(0.05, p.scale)
       const ty = habitatHeight(at.x, at.z) + info.centre * sc + at.lift
@@ -251,6 +253,7 @@ export default function HabitatKin({ world = null, crystalRef, envRef, timeRef, 
           crystalLevel={crystalLevel}
           world={world}
           ended={Boolean(org.ended)}
+          inspect={inspectMode && inspectId === org.id ? inspectMode : null}
         />
       ))}
     </group>

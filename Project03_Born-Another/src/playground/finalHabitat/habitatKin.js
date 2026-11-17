@@ -278,10 +278,9 @@ export function stepKinPhysics(bodies, hero, dents, dt, P = KIN_PHYSICS) {
 }
 
 /**
- * World Final placement: a kin lives around its own anchor in the terrain.
- * The sim still moves it (relative to where it started, `home`), clamped to
- * `roam`, plus its own wander loop and float height — so the three lives
- * stay in different parts of the world but never stand still.
+ * World Final placement for a roaming kin: around its own anchor. The sim
+ * still moves it (relative to where it started, `home`), clamped to `roam`,
+ * plus its own wander loop and float height.
  */
 export function kinPlacementAround(org, anchor, home, t = 0, roam = 5) {
   const tempo = kinTempo(org.archetypeSeed ?? org.seed ?? 1, org.generation ?? 0)
@@ -322,8 +321,48 @@ export function formEmergence(age) {
   return Math.round(e * 20) / 20
 }
 
-/** World Final: the two kin are met young and mid-life (sizes differ). */
-export const WORLD_KIN_AGES = Object.freeze({ o1: 0.24, o2: 0.5 })
+/**
+ * Where a kin actually sits, by its logic.
+ *  roam   — kinPlacementAround.
+ *  rooted — the anchor itself; only a slow breath, no drift.
+ *  column — a small circle around the anchor, held up in the water.
+ */
+export function placeByLogic(logic, org, anchor, home, t = 0, roam = 5) {
+  if (logic === 'rooted') return rootedPlacement(anchor, org, t)
+  if (logic === 'column') return columnPlacement(anchor, org, t)
+  return kinPlacementAround(org, anchor, home, t, roam)
+}
+
+function rootedPlacement(anchor, org, t) {
+  const phase = org?.phase ?? 0
+  const breath = Math.sin(t * 0.35 + phase) * 0.12
+  return { x: anchor[0], z: anchor[1], lift: Math.max(0, 0.16 + breath) }
+}
+
+function columnPlacement(anchor, org, t) {
+  const phase = org?.phase ?? 0
+  const orbit = t * 0.12 + phase
+  return {
+    x: anchor[0] + Math.cos(orbit) * 1.15,
+    z: anchor[1] + Math.sin(orbit) * 0.9,
+    lift: 3.4 + Math.sin(t * 0.22 + phase) * 1.1,
+  }
+}
+
+/**
+ * Crystallization under a logic. Roaming lives follow the shared medium.
+ * A rooted life is already partly mineral. A column life stays mostly soft.
+ */
+export function crystalForLogic(logic, level) {
+  const v = Math.min(1, Math.max(0, Number(level) || 0))
+  if (logic === 'rooted') return Math.min(1, 0.22 + v * 0.78)
+  if (logic === 'column') return v * 0.4
+  return v
+}
+
+/** World Final: the clearing pair are young and mid-life; the rooted life is
+ *  older, the column life is still a bud. */
+export const WORLD_KIN_AGES = Object.freeze({ o1: 0.24, o2: 0.5, o3: 0.58, o4: 0.2 })
 
 /**
  * World Final: one size law for every life (hero and kin alike), so species

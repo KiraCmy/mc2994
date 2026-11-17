@@ -2,7 +2,7 @@
  * World Final opening experience (pure, no three.js / React):
  *  - descent: a slow sink from the lit water surface to the seabed, ending in
  *    the forward-looking exploration pose (skippable);
- *  - discovery: three lives placed in different parts of the terrain;
+ *  - discovery: the clearing's three lives, and two more off the landing path;
  *  - encounter: a delicate, slightly unpredictable response when approached;
  *  - focus: a comfortable observation pose that never clips the body.
  * Vectors are [x, y, z] arrays; the ground height function is passed in.
@@ -25,15 +25,32 @@ const lerp = (a, b, t) => a + (b - a) * t
 
 /* ---------------------------------------------------------------- places */
 
-/** Where the three lives live (world x, z). Close enough that their wander
- *  brings them into contact — they can press on one another. The hero sits
- *  just ahead of the landing gaze; the other two flank it. */
+/** Where the lives live (world x, z). The clearing three sit close enough
+ *  that their wander brings them into contact. Two more live off the landing
+ *  path, one to each side, and do not share that wander (see KIN_LOGIC). */
 export const HERO_HOME = Object.freeze([0.2, -6])
-export const KIN_ANCHORS = Object.freeze({ o1: Object.freeze([-4.2, -3.2]), o2: Object.freeze([4.6, -4.4]) })
-/** How far a kin may wander from its anchor. Wide enough to meet the others. */
+export const KIN_ANCHORS = Object.freeze({
+  o1: Object.freeze([-4.2, -3.2]),
+  o2: Object.freeze([4.6, -4.4]),
+  /* Left of the approach, on a low dune. */
+  o3: Object.freeze([-8, 14]),
+  /* Right of the approach, in open water. */
+  o4: Object.freeze([11, 18]),
+})
+/** How far a roaming kin may wander from its anchor. */
 export const KIN_ROAM = 3.6
-/** World Final keeps three lives in the habitat (hero + two kin). */
-export const WORLD_KIN_COUNT = 3
+/**
+ * How each kin occupies its place.
+ *  roam   — drifts around the anchor and can meet the others (the clearing).
+ *  rooted — stays on the anchor, a breath above the sand, and hardens.
+ *  column — circles the anchor in the water and stays soft.
+ */
+export const KIN_LOGIC = Object.freeze({ o1: 'roam', o2: 'roam', o3: 'rooted', o4: 'column' })
+export function kinLogic(id) {
+  return KIN_LOGIC[id] ?? 'roam'
+}
+/** World Final roster: the hero slot plus the kin (clearing pair and two others). */
+export const WORLD_KIN_COUNT = 5
 
 /* --------------------------------------------------------------- descent */
 
@@ -226,8 +243,14 @@ export function easeInOut(t) {
 
 /** The species a life can be born as (morphology → mineral → fossil). */
 export const SPECIES = Object.freeze(['spiral', 'segmented', 'trilobite'])
-/** The first three lives (generation 0). */
-export const INITIAL_SPECIES = Object.freeze({ hero: 'spiral', o1: 'segmented', o2: 'trilobite' })
+/** Generation 0. The two off the path repeat a family, and live it differently. */
+export const INITIAL_SPECIES = Object.freeze({
+  hero: 'spiral',
+  o1: 'segmented',
+  o2: 'trilobite',
+  o3: 'trilobite',
+  o4: 'spiral',
+})
 
 function hash01(...keys) {
   let h = 2166136261 >>> 0

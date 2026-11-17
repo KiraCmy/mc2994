@@ -111,19 +111,42 @@ function SandFall() {
 }
 
 /**
- * A quiet hint of the opening from afar: a pale column of light breathing up
- * out of the hole, and a few motes drifting in it. It thins out as you come
- * close (and underground), so it never stands in the way.
+ * Light spilling up out of the hole. One place to tune it:
+ * intensity — how bright the additive spill is
+ * radius — how far the glow reaches past the throat, in world units
+ * pulsePeriod — seconds for one breath (about 4–6)
+ * pulseAmount — how much the breath moves the brightness (0–1)
+ * Lilac is the quartz, amber the ember. No other hue belongs here.
  */
-const BEACON_HEIGHT = 42
+const HOLE_GLOW = Object.freeze({
+  intensity: 0.36,
+  radius: 9.5,
+  pulsePeriod: 5,
+  pulseAmount: 0.16,
+  height: 6.4,
+  lilac: '#d7c6f2',
+  amber: '#e8b48a',
+  motes: 12,
+})
 
-function createBeacon() {
+function createHoleGlow() {
   const { hole } = UNDERWORLD
-  const base = underworldFloor(hole.x, hole.z)
-  const shaft = new THREE.CylinderGeometry(5.4, 3.6, BEACON_HEIGHT, 64, 1, true)
-  shaft.translate(0, BEACON_HEIGHT / 2, 0)
-  const uniforms = { uTime: { value: 0 }, uStrength: { value: 0 }, uColor: { value: new THREE.Color('#efe6ff') } }
-  const shaftMat = new THREE.ShaderMaterial({
+  const g = HOLE_GLOW
+  const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  const mouth = habitatSurfaceHeight(hole.x, hole.z)
+  /* Open shell: the centre stays the dark throat; the light is the rim. */
+  const shell = new THREE.CylinderGeometry(g.radius, hole.r * 0.92, g.height, 40, 1, true)
+  shell.translate(0, g.height / 2, 0)
+  const uniforms = {
+    uTime: { value: 0 },
+    uIntensity: { value: g.intensity },
+    uPeriod: { value: g.pulsePeriod },
+    uPulse: { value: reduce ? 0 : g.pulseAmount },
+    uRadius: { value: g.radius },
+    uLilac: { value: new THREE.Color(g.lilac) },
+    uAmber: { value: new THREE.Color(g.amber) },
+  }
+  const shellMat = new THREE.ShaderMaterial({
     uniforms,
     transparent: true,
     depthWrite: false,
@@ -132,50 +155,59 @@ function createBeacon() {
     toneMapped: false,
     vertexShader: `
       varying float vY;
+      varying float vRad;
       varying float vAng;
-      varying vec3 vN;
-      varying vec3 vV;
       void main() {
-        vY = position.y / ${BEACON_HEIGHT.toFixed(1)};
+        vY = position.y / ${g.height.toFixed(1)};
+        vRad = length(position.xz) / ${g.radius.toFixed(1)};
         vAng = atan(position.z, position.x);
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        vN = normalize(normalMatrix * normal);
-        vV = normalize(-mv.xyz);
-        gl_Position = projectionMatrix * mv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
     fragmentShader: `
       uniform float uTime;
-      uniform float uStrength;
-      uniform vec3 uColor;
+      uniform float uIntensity;
+      uniform float uPeriod;
+      uniform float uPulse;
+      uniform vec3 uLilac;
+      uniform vec3 uAmber;
       varying float vY;
+      varying float vRad;
       varying float vAng;
-      varying vec3 vN;
-      varying vec3 vV;
       void main() {
-        float facing = pow(abs(dot(vN, vV)), 2.4);
-        float rise = smoothstep(0.12, 0.3, vY) * (1.0 - smoothstep(0.32, 1.0, vY));
-        float drift = 0.7 + 0.3 * sin(vY * 11.0 - uTime * 0.7 + sin(vAng * 3.0) * 1.5);
-        float breathe = 0.85 + 0.15 * sin(uTime * 0.45);
-        gl_FragColor = vec4(uColor, facing * rise * drift * breathe * uStrength);
+        float ring = smoothstep(0.18, 0.46, vRad) * (1.0 - smoothstep(0.62, 1.0, vRad));
+        float lift = (1.0 - smoothstep(0.08, 0.92, vY));
+        float shaft = 0.0;
+        shaft = max(shaft, exp(-pow(sin(vAng - 0.4), 2.0) * 22.0));
+        shaft = max(shaft, exp(-pow(sin(vAng - 1.7), 2.0) * 22.0));
+        shaft = max(shaft, exp(-pow(sin(vAng - 2.9), 2.0) * 26.0));
+        shaft = max(shaft, exp(-pow(sin(vAng - 4.3), 2.0) * 22.0));
+        shaft = max(shaft, exp(-pow(sin(vAng - 5.5), 2.0) * 26.0));
+        float rise = smoothstep(0.05, 0.28, vY) * (1.0 - smoothstep(0.55, 1.0, vY));
+        float pulse = 1.0 + uPulse * sin(uTime * 6.2831853 / max(uPeriod, 0.01));
+        vec3 col = mix(uLilac, uAmber, clamp(shaft * 1.15, 0.0, 1.0));
+        float alpha = (ring * lift * 0.55 + shaft * rise * 0.42) * uIntensity * pulse;
+        if (alpha < 0.004) discard;
+        gl_FragColor = vec4(col, alpha);
       }`,
   })
-  const count = 90
-  const seeds = new Float32Array(count * 3)
-  const start = new Float32Array(count * 3)
-  for (let i = 0; i < count; i++) {
-    const a = Math.random() * Math.PI * 2
-    const rr = Math.sqrt(Math.random()) * 3.4
+  /* The water's motes stay around the clearing. These few are only the ones
+     that slip down into the mouth — slow, and the same two colours. */
+  const n = g.motes
+  const start = new Float32Array(n * 3)
+  const seeds = new Float32Array(n * 3)
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + 0.4
+    const rr = hole.r * (0.28 + (i % 3) * 0.16)
     start[i * 3] = Math.cos(a) * rr
-    start[i * 3 + 1] = 0
+    start[i * 3 + 1] = 1.4
     start[i * 3 + 2] = Math.sin(a) * rr
-    seeds[i * 3] = Math.random()
-    seeds[i * 3 + 1] = 0.6 + Math.random() * 0.8
-    seeds[i * 3 + 2] = Math.random() * Math.PI * 2
+    seeds[i * 3] = i / n
+    seeds[i * 3 + 1] = 0.65 + (i % 4) * 0.1
+    seeds[i * 3 + 2] = a
   }
   const motes = new THREE.BufferGeometry()
   motes.setAttribute('position', new THREE.BufferAttribute(start, 3))
   motes.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 3))
-  motes.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, BEACON_HEIGHT / 2, 0), BEACON_HEIGHT)
   const moteMat = new THREE.ShaderMaterial({
     uniforms,
     transparent: true,
@@ -186,51 +218,61 @@ function createBeacon() {
       attribute vec3 aSeed;
       uniform float uTime;
       varying float vA;
+      varying float vWarm;
       void main() {
-        float f = fract(uTime * 0.025 * aSeed.y + aSeed.x);
+        float f = fract(uTime * 0.065 * aSeed.y + aSeed.x);
         vec3 p = position;
-        p.y = 6.0 + f * ${(BEACON_HEIGHT * 0.6).toFixed(1)};
-        p.x += sin(uTime * 0.3 + aSeed.z) * 0.4;
-        p.z += cos(uTime * 0.27 + aSeed.z) * 0.4;
-        vA = smoothstep(0.0, 0.15, f) * (1.0 - smoothstep(0.6, 1.0, f));
+        p.y = 4.0 - f * 5.6;
+        p.x += sin(uTime * 0.22 + aSeed.z) * 0.12;
+        p.z += cos(uTime * 0.18 + aSeed.z) * 0.12;
+        vA = smoothstep(0.0, 0.14, f) * (1.0 - smoothstep(0.76, 1.0, f));
+        vWarm = step(0.5, fract(aSeed.x * 3.0));
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_PointSize = clamp(90.0 / -mv.z, 1.5, 3.5);
+        gl_PointSize = clamp(70.0 / -mv.z, 1.2, 3.2);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
-      uniform vec3 uColor;
-      uniform float uStrength;
+      uniform vec3 uLilac;
+      uniform vec3 uAmber;
+      uniform float uIntensity;
       varying float vA;
+      varying float vWarm;
       void main() {
         float r = length(gl_PointCoord - 0.5);
         if (r > 0.5) discard;
-        gl_FragColor = vec4(uColor, vA * (1.0 - r * 2.0) * min(1.0, uStrength * 6.0));
+        vec3 col = mix(uLilac, uAmber, vWarm);
+        gl_FragColor = vec4(col, vA * (1.0 - r * 2.0) * uIntensity * 0.85);
       }`,
   })
   const group = new THREE.Group()
-  group.position.set(hole.x, base, hole.z)
-  group.add(new THREE.Mesh(shaft, shaftMat), new THREE.Points(motes, moteMat))
+  group.position.set(hole.x, mouth - 0.35, hole.z)
+  const shellMesh = new THREE.Mesh(shell, shellMat)
+  shellMesh.frustumCulled = false
+  shellMesh.renderOrder = 3
+  const motePoints = new THREE.Points(motes, moteMat)
+  motePoints.frustumCulled = false
+  motePoints.renderOrder = 3
+  group.add(shellMesh, motePoints)
   return {
     group,
     uniforms,
     dispose() {
-      for (const d of [shaft, shaftMat, motes, moteMat]) d.dispose()
+      for (const d of [shell, shellMat, motes, moteMat]) d.dispose()
     },
   }
 }
 
-function HoleBeacon() {
-  const res = useMemo(() => createBeacon(), [])
+function HoleGlow() {
+  const res = useMemo(() => createHoleGlow(), [])
   useEffect(() => () => res.dispose(), [res])
   const { hole } = UNDERWORLD
   useFrame((state) => {
     const cam = state.camera.position
-    const d = Math.hypot(cam.x - hole.x, cam.z - hole.z)
-    const below = cam.y < habitatSurfaceHeight(cam.x, cam.z) - 0.5
-    /* Faint from afar, gone up close; a soft shaft seen from below. */
-    const k = below ? 0.35 : 0.15 + 0.85 * Math.min(1, Math.max(0, (d - 9) / 26))
+    const below = cam.y < habitatSurfaceHeight(cam.x, cam.z) - 1.4
+    const inMouth = Math.hypot(cam.x - hole.x, cam.z - hole.z) < HOLE_GLOW.radius
+    /* Full spill on the dunes. Quieter once you are down in the mouth. */
+    res.uniforms.uIntensity.value = HOLE_GLOW.intensity * (below && inMouth ? 0.4 : 1)
     res.uniforms.uTime.value = state.clock.elapsedTime
-    res.uniforms.uStrength.value += (0.11 * k - res.uniforms.uStrength.value) * 0.05
   })
   return <primitive object={res.group} dispose={null} />
 }
@@ -540,6 +582,16 @@ export default function Caves({ crystalRef, world = null, archive = [] }) {
     }
     /* Underground darker; while a life is observed, a little darker too (FocusStudio). */
     gl.toneMappingExposure = baseExposure.current * (1 - 0.18 * m) * (1 - 0.16 * (world?.current?.focusDim ?? 0))
+    if (world?.current) {
+      const eye = world.current.eye
+      if (eye) {
+        eye[0] = camera.position.x
+        eye[1] = camera.position.y
+        eye[2] = camera.position.z
+      } else {
+        world.current.eye = [camera.position.x, camera.position.y, camera.position.z]
+      }
+    }
     const level = crystalRef?.current?.level ?? 0
     /* The cavern's druses glow a little more as the water freezes. */
     res.emberMat.userData.uniforms.uEmberGlow.value = 1.45 + level * 0.5
@@ -556,7 +608,7 @@ export default function Caves({ crystalRef, world = null, archive = [] }) {
         <primitive key={o.uuid} object={o} dispose={null} />
       ))}
       <SandFall />
-      <HoleBeacon />
+      <HoleGlow />
       {archive?.length ? <KeptRemains entries={archive} /> : null}
       {world ? <SurfaceReturn world={world} /> : null}
     </group>

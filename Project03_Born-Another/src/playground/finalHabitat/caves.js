@@ -70,6 +70,17 @@ export function underworldSpan(x, y, z, seed = HABITAT_SEED) {
   return { floor: underworldFloor(x, z, seed), ceiling: underworldCeiling(x, z, seed) }
 }
 
+/**
+ * The camera is already in the cavern, or standing at the opening.
+ * The clearing is not near: the hint belongs to people who have not found it.
+ */
+export function nearUnderworld(eye) {
+  if (!eye || eye.length < 3) return false
+  const [x, y, z] = eye
+  if (underworldDepth(eye) > 0.02) return true
+  return holeDistance(x, z) < UNDERWORLD.hole.r + 6 && y < habitatSurfaceHeight(x, z) + 6
+}
+
 /** 0 on the surface … 1 deep in the cavern, far from the light of the hole. */
 export function underworldDepth([x, y, z], seed = HABITAT_SEED) {
   const dh = holeDistance(x, z)

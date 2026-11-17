@@ -452,6 +452,12 @@ export default function CrystalBody({
   responsive = false,
   /** Faint light signal visible through the haze (World Final). */
   glow = false,
+  /**
+   * System View, this life only. null draws the world as usual.
+   *  geometry — wireframe of this membrane (the mesh that is already drawn).
+   *  deform   — rest silhouette vs seated surface, from the same seat().
+   */
+  inspect = null,
   children = null,
 }) {
   const seed = life?.seed
@@ -733,6 +739,8 @@ export default function CrystalBody({
   const groupRef = useRef(null)
   const crystalsRef = useRef(null)
   const frostRef = useRef(null)
+  /* Filled only while Deformation is on. seat() writes both buffers. */
+  const captureRef = useRef(null)
   /* Nucleus + fibres: contract with the skin so nothing pokes through. */
   const innerRef = useRef(null)
   const petalsRef = useRef(null)
@@ -823,6 +831,65 @@ export default function CrystalBody({
     if (frostRef.current) frostRef.current.count = 0
   }, [resources])
 
+  /* Geometry: the membrane that is already on screen, drawn as its own wireframe. */
+  useLayoutEffect(() => {
+    const mat = resources.membraneMat
+    mat.wireframe = inspect === 'geometry'
+    return () => {
+      mat.wireframe = false
+    }
+  }, [inspect, resources])
+
+  /* Deformation: two line meshes. Positions are written inside seat(), from
+     that call's restRadius and from the seated buffer after history marks. */
+  const deformView = useMemo(() => {
+    if (inspect !== 'deform') return null
+    const restGeo = new THREE.BufferGeometry()
+    restGeo.setIndex(new THREE.BufferAttribute(base.index, 1))
+    const restAttr = new THREE.BufferAttribute(new Float32Array(base.count * 3), 3)
+    restGeo.setAttribute('position', restAttr)
+    restGeo.setDrawRange(0, 0)
+    const deformedGeo = new THREE.BufferGeometry()
+    deformedGeo.setIndex(new THREE.BufferAttribute(base.index, 1))
+    const deformedAttr = new THREE.BufferAttribute(new Float32Array(base.count * 3), 3)
+    deformedGeo.setAttribute('position', deformedAttr)
+    deformedGeo.setDrawRange(0, 0)
+    const line = (color) => new THREE.MeshBasicMaterial({
+      color,
+      wireframe: true,
+      fog: false,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+    })
+    return {
+      restGeo,
+      deformedGeo,
+      restMat: line('#7ec8e8'),
+      deformedMat: line('#f7f4ff'),
+      rest: restAttr.array,
+      deformed: deformedAttr.array,
+      restAttr,
+      deformedAttr,
+      count: base.index.length,
+    }
+  }, [inspect, base])
+
+  useLayoutEffect(() => {
+    captureRef.current = deformView
+    if (!deformView) return undefined
+    const seatState = seatRef.current
+    seatState.key = null
+    seatState.at = -999
+    return () => {
+      if (captureRef.current === deformView) captureRef.current = null
+      deformView.restGeo.dispose()
+      deformView.deformedGeo.dispose()
+      deformView.restMat.dispose()
+      deformView.deformedMat.dispose()
+    }
+  }, [deformView])
+
   /** Evaluates the surface into the target buffers (not the visible skin). */
   function seat() {
     const seated = evaluator.evaluateMany(base.dirList, life, {
@@ -831,12 +898,31 @@ export default function CrystalBody({
       temperature: tempValue,
     })
     const pos = resources.targetGeo.attributes.position.array
+    const cap = captureRef.current
+    const restPos = cap?.rest
     let cx = 0, cy = 0, cz = 0
     for (let i = 0; i < base.count; i++) {
-      const p = seated[i]?.position ?? base.dirList[i]
-      pos[i * 3] = p[0]
-      pos[i * 3 + 1] = p[1]
-      pos[i * 3 + 2] = p[2]
+      const s = seated[i]
+      const p = s?.position ?? base.dirList[i]
+      const j = i * 3
+      pos[j] = p[0]
+      pos[j + 1] = p[1]
+      pos[j + 2] = p[2]
+      /* Rest silhouette from this same evaluation: direction × restRadius,
+         before life radial deformation and before history marks. */
+      if (restPos) {
+        const d = base.dirList[i]
+        const r = s?.restRadius
+        if (Number.isFinite(r)) {
+          restPos[j] = d[0] * r
+          restPos[j + 1] = d[1] * r
+          restPos[j + 2] = d[2] * r
+        } else {
+          restPos[j] = p[0]
+          restPos[j + 1] = p[1]
+          restPos[j + 2] = p[2]
+        }
+      }
       cx += p[0]; cy += p[1]; cz += p[2]
     }
     cx /= base.count; cy /= base.count; cz /= base.count
@@ -855,6 +941,15 @@ export default function CrystalBody({
         ax += pos[j]; ay += pos[j + 1]; az += pos[j + 2]
       }
       cx = ax / base.count; cy = ay / base.count; cz = az / base.count
+    }
+    /* Deformed lines: the seated surface after history marks. Copied here,
+       not every frame. The membrane keeps easing toward this same buffer. */
+    if (cap) {
+      cap.deformed.set(pos)
+      cap.restAttr.needsUpdate = true
+      cap.deformedAttr.needsUpdate = true
+      cap.restGeo.setDrawRange(0, cap.count)
+      cap.deformedGeo.setDrawRange(0, cap.count)
     }
     let unit = 0
     let minY = Infinity
@@ -1632,7 +1727,19 @@ export default function CrystalBody({
         visible={layers?.frost !== false}
         dispose={null}
       />
-      <mesh geometry={resources.membraneGeo} material={resources.membraneMat} renderOrder={2} dispose={null} />
+      <mesh
+        geometry={resources.membraneGeo}
+        material={resources.membraneMat}
+        renderOrder={2}
+        dispose={null}
+        visible={inspect !== 'deform'}
+      />
+      {deformView ? (
+        <group renderOrder={7}>
+          <mesh geometry={deformView.restGeo} material={deformView.restMat} frustumCulled={false} dispose={null} />
+          <mesh geometry={deformView.deformedGeo} material={deformView.deformedMat} frustumCulled={false} dispose={null} />
+        </group>
+      ) : null}
       <mesh ref={budRef} material={budMaterial} renderOrder={6} visible={false}>
         <sphereGeometry args={[1, 48, 32]} />
       </mesh>

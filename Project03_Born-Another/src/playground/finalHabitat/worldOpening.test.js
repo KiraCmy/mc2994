@@ -70,7 +70,7 @@ test('the haze is thick while sinking and clears after arrival', () => {
   assert.equal(openingHaze(DESCENT_SECONDS + 60), 0)
 })
 
-test('the three lives sit near enough to meet, and the landing gaze is level', () => {
+test('the clearing lives sit near enough to meet, and the landing gaze is level', () => {
   const pts = [HERO_HOME, KIN_ANCHORS.o1, KIN_ANCHORS.o2]
   for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) {
     const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1])
@@ -104,7 +104,24 @@ test('focus pose sits on the viewer side, outside the body, above the sand', () 
   assert.ok(pose.position[1] >= 4.5 + 1.1)
 })
 
-import { BIRTH_SPACING, INITIAL_SPECIES, MAX_REMAINS, pickHome, remainsPhase, SPECIES, speciesFor } from './worldOpening.js'
+import { BIRTH_SPACING, INITIAL_SPECIES, KIN_LOGIC, MAX_REMAINS, kinLogic, pickHome, remainsPhase, SPECIES, speciesFor } from './worldOpening.js'
+
+test('two other lives sit off the clearing, on opposite sides, with their own logic', () => {
+  const clearing = [HERO_HOME, KIN_ANCHORS.o1, KIN_ANCHORS.o2]
+  for (const id of ['o3', 'o4']) {
+    const p = KIN_ANCHORS[id]
+    for (const q of clearing) {
+      const d = Math.hypot(p[0] - q[0], p[1] - q[1])
+      assert.ok(d > 14, `${id} is ${d} from a clearing life`)
+    }
+  }
+  assert.ok(Math.hypot(KIN_ANCHORS.o3[0] - KIN_ANCHORS.o4[0], KIN_ANCHORS.o3[1] - KIN_ANCHORS.o4[1]) > 16)
+  assert.equal(kinLogic('o3'), 'rooted')
+  assert.equal(kinLogic('o4'), 'column')
+  assert.equal(KIN_LOGIC.o1, 'roam')
+  assert.equal(speciesFor('o3', 0, 1), 'trilobite')
+  assert.equal(speciesFor('o4', 0, 1), 'spiral')
+})
 
 test('first lives keep their species; later births vary across all species', () => {
   assert.equal(speciesFor('hero', 0, 1), INITIAL_SPECIES.hero)

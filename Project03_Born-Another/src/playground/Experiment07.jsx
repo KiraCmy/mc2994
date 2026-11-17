@@ -25,6 +25,9 @@ import {
 } from './languageAsEnvironment/languageInfluence.js'
 import { EXP05_LIFE_SEED } from './finalForm/exploreLifeAdapter.js'
 import { kinCrystalLevel } from './finalHabitat/habitatKin.js'
+import { nearUnderworld } from './finalHabitat/caves.js'
+import SystemView from './finalHabitat/SystemView.jsx'
+import { openSpeechSession, speechErrorText, speechRecognitionCtor } from './finalHabitat/speechInput.js'
 import './finalHabitat/habitat.css'
 
 const START_AGE = 0.64
@@ -143,8 +146,14 @@ function createWorld() {
     kinControl: null,
     dimming: { id: null, dusk: 0 },
     opening: { t: 0, skip: false, skipping: null, haze: 1, depth: 1, veil: 1 },
+    /* Written by the cavern each frame: where the camera is, for the hint. */
+    eye: [0, 0, 0],
   }
 }
+
+/** Shown once, the first time remains are kept. Change the sentence here. */
+const UNDERWORLD_HINT = 'Your kept remains rest in the underworld ↓'
+const UNDERWORLD_HINT_MS = 6600
 
 /** A few slow specks — the sense of sinking, not a particle system. */
 const ENTRANCE_MOTES = Object.freeze([
@@ -181,10 +190,53 @@ function EntranceVeil() {
  */
 function SayForm({ reply, onSend }) {
   const [message, setMessage] = useState('')
+  const [listening, setListening] = useState(false)
+  const [speechNote, setSpeechNote] = useState('')
+  const sessionRef = useRef(null)
+  const canSpeak = useMemo(() => Boolean(speechRecognitionCtor()), [])
+
+  useEffect(() => () => sessionRef.current?.cancel(), [])
+
   const onSubmit = (event) => {
     event.preventDefault()
+    sessionRef.current?.cancel()
+    sessionRef.current = null
+    setListening(false)
+    setSpeechNote('')
     if (onSend(message)) setMessage('')
   }
+
+  const startListening = () => {
+    setSpeechNote('')
+    const session = openSpeechSession({
+      onUpdate: (text) => setMessage(text),
+      onEnd: (text) => {
+        sessionRef.current = null
+        setListening(false)
+        if (text && onSend(text)) setMessage('')
+      },
+      onError: (code) => setSpeechNote(speechErrorText(code)),
+    })
+    if (!session) {
+      setSpeechNote('This browser cannot hear speech. Type instead.')
+      return
+    }
+    sessionRef.current = session
+    setListening(true)
+    try {
+      session.start()
+    } catch {
+      sessionRef.current = null
+      setListening(false)
+      setSpeechNote('The microphone could not start. Try again, or type.')
+    }
+  }
+
+  const onMic = () => {
+    if (sessionRef.current) sessionRef.current.stop()
+    else startListening()
+  }
+
   return (
     <form className="exp07-say" onSubmit={onSubmit}>
       {reply ? (
@@ -193,7 +245,8 @@ function SayForm({ reply, onSend }) {
           {reply.source ? <span className="exp07-say__source">via {reply.source}</span> : null}
         </p>
       ) : null}
-      <div className="exp07-say__field">
+      {speechNote ? <p className="exp07-say__note" role="status">{speechNote}</p> : null}
+      <div className={`exp07-say__field${listening ? ' is-listening' : ''}`}>
         <svg className="exp07-say__icon" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" />
         </svg>
@@ -202,10 +255,40 @@ function SayForm({ reply, onSend }) {
           id="exp07-say-input"
           type="text"
           autoComplete="off"
-          placeholder="Tell it something…"
+          placeholder={listening ? 'Listening…' : 'Tell it something, or tap the mic…'}
           value={message}
-          onChange={(event) => setMessage(event.target.value)}
+          onChange={(event) => {
+            if (sessionRef.current) {
+              sessionRef.current.cancel()
+              sessionRef.current = null
+              setListening(false)
+            }
+            setSpeechNote('')
+            setMessage(event.target.value)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && sessionRef.current) {
+              event.preventDefault()
+              sessionRef.current.cancel()
+              sessionRef.current = null
+              setListening(false)
+              setMessage('')
+            }
+          }}
         />
+        <button
+          type="button"
+          className={`exp07-say__mic${listening ? ' is-listening' : ''}${canSpeak ? '' : ' is-unavailable'}`}
+          aria-pressed={listening}
+          aria-label={listening ? 'Stop and send' : 'Speak to it'}
+          title={canSpeak ? (listening ? 'Stop and send' : 'Speak to it') : 'This browser cannot hear speech'}
+          onClick={onMic}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9" y="3" width="6" height="11" rx="3" />
+            <path d="M6 11a6 6 0 0 0 12 0M12 17v4" />
+          </svg>
+        </button>
         <button type="submit" aria-label="Send">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 12L20 4l-6 16-2.5-6.5L4 12z" />
@@ -289,6 +372,9 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   const activeRef = useRef(active)
   activeRef.current = active
   const [confirmRestart, setConfirmRestart] = useState(false)
+  const [systemOpen, setSystemOpen] = useState(false)
+  const [anatomy, setAnatomy] = useState(null)
+  const probeRef = useRef(null)
   /* Capture the world: the scene as it is now, kept in the album. */
   const [capture, setCapture] = useState({ state: 'idle', n: 0 })
   const captureTimer = useRef(0)
@@ -736,6 +822,15 @@ export default function Experiment07({ title, description, autoGrow = false, ope
     else el.requestFullscreen?.().catch(() => {})
   }, [])
 
+  /* First keep of this world. A new world remounts this page and clears it. */
+  const underworldHinted = useRef(false)
+  const [underworldHint, setUnderworldHint] = useState(false)
+  useEffect(() => {
+    if (!underworldHint) return undefined
+    const id = window.setTimeout(() => setUnderworldHint(false), UNDERWORLD_HINT_MS)
+    return () => window.clearTimeout(id)
+  }, [underworldHint])
+
   /* The remains being identified, and keeping them in the archive. */
   const revealSpecies = opening ? worldRef.current?.bodies.get(focusId || 'hero')?.species : null
   const revealFossil = opening ? fossilForSpecies(revealSpecies) : fossilForBody('hero')
@@ -760,9 +855,13 @@ export default function Experiment07({ title, description, autoGrow = false, ope
       environment: { temperature, moisture, turbulence },
       crystallization: kin ? kin.level : 1,
     })
-    const { list } = saveSpecimen(specimen)
+    const { list, saved } = saveSpecimen(specimen)
     setArchive(list.length ? list : [specimen, ...archive])
     setSavedKey(specimen.key)
+    if (opening && saved && !underworldHinted.current) {
+      underworldHinted.current = true
+      if (!nearUnderworld(worldRef.current?.eye)) setUnderworldHint(true)
+    }
   }
 
   /* The panel reads the life being observed (World Final: the focused one). */
@@ -801,8 +900,17 @@ export default function Experiment07({ title, description, autoGrow = false, ope
           heroSpecies={heroLine.species}
           archive={opening ? archive : null}
           className="exp07-viewport"
+          systemOpen={Boolean(opening && systemOpen)}
+          inspectMode={opening && systemOpen ? anatomy : null}
+          inspectId={opening && systemOpen ? focusId : null}
+          probeRef={probeRef}
         />
         <div ref={vignetteRef} className="exp07-vignette" aria-hidden="true" />
+        {underworldHint ? (
+          <p className="exp07-underworld-hint" role="status">
+            {UNDERWORLD_HINT}
+          </p>
+        ) : null}
         <div className="exp07-dusk" aria-hidden="true" />
         {opening && phase === 'descent' ? <EntranceVeil /> : null}
         {revealed && !lingering ? (
@@ -828,6 +936,28 @@ export default function Experiment07({ title, description, autoGrow = false, ope
           >
             {confirmRestart ? 'Begin again? · click to confirm' : 'Start a new world ↺'}
           </button>
+        ) : null}
+        {opening && phase !== 'descent' && !(revealed && !lingering) ? (
+          <SystemView
+            open={systemOpen}
+            onToggle={() => {
+              setSystemOpen((v) => {
+                if (v) setAnatomy(null)
+                return !v
+              })
+            }}
+            anatomy={anatomy}
+            onAnatomy={setAnatomy}
+            focusId={focusId}
+            life={life}
+            heroSpecies={heroLine.species}
+            worldRef={worldRef}
+            envRef={envRef}
+            crystalRef={crystalRef}
+            probeRef={probeRef}
+            reply={reply}
+            langInfluence={langInfluence}
+          />
         ) : null}
         {opening && phase !== 'descent' && !(revealed && !lingering) ? (
           <button type="button" className="exp07-capture" onClick={captureWorld} disabled={capture.state === 'saving'}>
@@ -959,6 +1089,7 @@ export default function Experiment07({ title, description, autoGrow = false, ope
           <span>Scroll · Zoom</span>
           <span>Drag · Orbit</span>
           <span>Right-drag · Look</span>
+          <span>Mic · Speak</span>
         </p>
 
         <div className="exp07-foot">

@@ -5,7 +5,7 @@ import Experiment07 from '../playground/Experiment07.jsx'
 import '../playground/playground.css'
 
 /**
- * World Final is the habitat: three lives in one water, named when they end.
+ * World Final is the habitat: five lives in one water, named when they end.
  * The site header stays so the rest of the site is reachable.
  */
 export default function WorldFinalPage({ header, active = true }) {
@@ -29,7 +29,7 @@ export default function WorldFinalPage({ header, active = true }) {
           active={active}
           onRestart={() => setRound((r) => r + 1)}
           title="World Final"
-          description="Three lives share one water. Approach one, and when it ends, the remains are named."
+          description="Five lives share one water. Approach one, and when it ends, the remains are named."
           opening
         />
       </main>
