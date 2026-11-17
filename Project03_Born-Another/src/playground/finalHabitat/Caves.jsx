@@ -112,55 +112,91 @@ function SandFall() {
 
 /**
  * Light spilling up out of the hole. One place to tune it:
- * intensity — how bright the additive spill is
- * radius — how far the glow reaches past the throat, in world units
+ * intensity — brightness of the white spill
+ * height — how far the faint tail rises, in world units
  * pulsePeriod — seconds for one breath (about 4–6)
  * pulseAmount — how much the breath moves the brightness (0–1)
- * Lilac is the quartz, amber the ember. No other hue belongs here.
+ * A soft pool on the lip, plus a few standing sheets whose brightness
+ * is a falloff — brightest in the throat, gone at the edges and the top.
+ * Mostly white; tint is only a faint colour in the mouth.
  */
 const HOLE_GLOW = Object.freeze({
-  intensity: 0.36,
-  radius: 9.5,
-  pulsePeriod: 5,
-  pulseAmount: 0.16,
-  height: 6.4,
-  lilac: '#d7c6f2',
-  amber: '#e8b48a',
-  motes: 12,
+  intensity: 0.85,
+  height: 18,
+  pulsePeriod: 5.2,
+  pulseAmount: 0.06,
+  white: '#fffaf6',
+  tint: '#f4f1f8',
+  motes: 8,
 })
 
 function createHoleGlow() {
   const { hole } = UNDERWORLD
   const g = HOLE_GLOW
   const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-  const mouth = habitatSurfaceHeight(hole.x, hole.z)
-  /* Open shell: the centre stays the dark throat; the light is the rim. */
-  const shell = new THREE.CylinderGeometry(g.radius, hole.r * 0.92, g.height, 40, 1, true)
-  shell.translate(0, g.height / 2, 0)
+  const SEG = 80
+  let lipSum = 0
+  let ySum = 0
+  for (let j = 0; j < SEG; j++) {
+    const a = (j / SEG) * Math.PI * 2
+    const { lip } = holeShape(a)
+    lipSum += lip
+    ySum += habitatSurfaceHeight(hole.x + Math.cos(a) * lip, hole.z + Math.sin(a) * lip)
+  }
+  const lipR = lipSum / SEG
+  const yRim = ySum / SEG
+  /* The bright part sits in the mouth. Above the rim it is only a tail. */
+  const yMouth = yRim - 1.15
   const uniforms = {
     uTime: { value: 0 },
     uIntensity: { value: g.intensity },
     uPeriod: { value: g.pulsePeriod },
     uPulse: { value: reduce ? 0 : g.pulseAmount },
-    uRadius: { value: g.radius },
-    uLilac: { value: new THREE.Color(g.lilac) },
-    uAmber: { value: new THREE.Color(g.amber) },
+    uWhite: { value: new THREE.Color(g.white) },
+    uTint: { value: new THREE.Color(g.tint) },
+    uCenter: { value: new THREE.Vector3(hole.x, yMouth, hole.z) },
+    uLip: { value: lipR },
   }
-  const shellMat = new THREE.ShaderMaterial({
+  /* Pool on the opening. The rim vertices are the lip, and the light
+     is already gone there, so the glow sits in the hole rather than
+     drawing a circle on the sand. */
+  const discPos = new Float32Array((SEG + 1) * 3)
+  const discRadial = new Float32Array(SEG + 1)
+  discPos[0] = hole.x
+  discPos[1] = yMouth
+  discPos[2] = hole.z
+  for (let j = 0; j < SEG; j++) {
+    const a = (j / SEG) * Math.PI * 2
+    const { lip } = holeShape(a)
+    const x = hole.x + Math.cos(a) * lip
+    const z = hole.z + Math.sin(a) * lip
+    const v = j + 1
+    discPos[v * 3] = x
+    discPos[v * 3 + 1] = habitatSurfaceHeight(x, z) + 0.14
+    discPos[v * 3 + 2] = z
+    discRadial[v] = 1
+  }
+  const discIndex = []
+  for (let j = 0; j < SEG; j++) discIndex.push(0, j + 1, ((j + 1) % SEG) + 1)
+  const disc = new THREE.BufferGeometry()
+  disc.setAttribute('position', new THREE.BufferAttribute(discPos, 3))
+  disc.setAttribute('aRadial', new THREE.BufferAttribute(discRadial, 1))
+  disc.setIndex(discIndex)
+  disc.computeBoundingSphere()
+  const discMat = new THREE.ShaderMaterial({
     uniforms,
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
-    toneMapped: false,
     vertexShader: `
-      varying float vY;
-      varying float vRad;
-      varying float vAng;
+      attribute float aRadial;
+      uniform vec3 uCenter;
+      varying float vRadial;
+      varying float vSteep;
       void main() {
-        vY = position.y / ${g.height.toFixed(1)};
-        vRad = length(position.xz) / ${g.radius.toFixed(1)};
-        vAng = atan(position.z, position.x);
+        vRadial = aRadial;
+        vSteep = abs(normalize(cameraPosition - uCenter).y);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
     fragmentShader: `
@@ -168,41 +204,129 @@ function createHoleGlow() {
       uniform float uIntensity;
       uniform float uPeriod;
       uniform float uPulse;
-      uniform vec3 uLilac;
-      uniform vec3 uAmber;
-      varying float vY;
-      varying float vRad;
-      varying float vAng;
+      uniform vec3 uWhite;
+      uniform vec3 uTint;
+      varying float vRadial;
+      varying float vSteep;
       void main() {
-        float ring = smoothstep(0.18, 0.46, vRad) * (1.0 - smoothstep(0.62, 1.0, vRad));
-        float lift = (1.0 - smoothstep(0.08, 0.92, vY));
-        float shaft = 0.0;
-        shaft = max(shaft, exp(-pow(sin(vAng - 0.4), 2.0) * 22.0));
-        shaft = max(shaft, exp(-pow(sin(vAng - 1.7), 2.0) * 22.0));
-        shaft = max(shaft, exp(-pow(sin(vAng - 2.9), 2.0) * 26.0));
-        shaft = max(shaft, exp(-pow(sin(vAng - 4.3), 2.0) * 22.0));
-        shaft = max(shaft, exp(-pow(sin(vAng - 5.5), 2.0) * 26.0));
-        float rise = smoothstep(0.05, 0.28, vY) * (1.0 - smoothstep(0.55, 1.0, vY));
+        float across = exp(-vRadial * vRadial * 2.8);
+        float face = smoothstep(0.22, 0.7, vSteep);
         float pulse = 1.0 + uPulse * sin(uTime * 6.2831853 / max(uPeriod, 0.01));
-        vec3 col = mix(uLilac, uAmber, clamp(shaft * 1.15, 0.0, 1.0));
-        float alpha = (ring * lift * 0.55 + shaft * rise * 0.42) * uIntensity * pulse;
+        float alpha = across * face * uIntensity * pulse * 0.55;
         if (alpha < 0.004) discard;
-        gl_FragColor = vec4(col, alpha);
+        gl_FragColor = vec4(mix(uWhite, uTint, 0.18) * alpha, alpha);
       }`,
   })
-  /* The water's motes stay around the clearing. These few are only the ones
-     that slip down into the mouth — slow, and the same two colours. */
+  /* Sheets standing in the air, crossing at the hole's centre. The mesh
+     only holds the falloff: bright on the axis, already gone at the lip,
+     and thinning as it rises. Nothing here has a hard edge. */
+  const PLANES = 2
+  const ROWS = 10
+  const COLS = 9
+  const count = PLANES * ROWS * COLS
+  const billPos = new Float32Array(count * 3)
+  const billNrm = new Float32Array(count * 3)
+  const billUp = new Float32Array(count)
+  const billIndex = []
+  for (let p = 0; p < PLANES; p++) {
+    const a = (p / PLANES) * Math.PI
+    const ca = Math.cos(a)
+    const sa = Math.sin(a)
+    const lipA = holeShape(a).lip
+    const lipB = holeShape(a + Math.PI).lip
+    const nx = -sa
+    const nz = ca
+    const base = p * ROWS * COLS
+    for (let row = 0; row < ROWS; row++) {
+      const t = row / (ROWS - 1)
+      const spread = 1.2 + t * 0.2
+      const y = yRim - 2.4 + g.height * t
+      for (let col = 0; col < COLS; col++) {
+        const s = (col / (COLS - 1)) * 2 - 1
+        const lipSide = s >= 0 ? lipA : lipB
+        const rad = Math.abs(s) * lipSide * spread
+        const dir = s >= 0 ? 1 : -1
+        const v = base + row * COLS + col
+        billPos[v * 3] = hole.x + dir * ca * rad
+        billPos[v * 3 + 1] = y
+        billPos[v * 3 + 2] = hole.z + dir * sa * rad
+        billNrm[v * 3] = nx
+        billNrm[v * 3 + 1] = 0
+        billNrm[v * 3 + 2] = nz
+        billUp[v] = t
+      }
+    }
+    for (let row = 0; row < ROWS - 1; row++) {
+      for (let col = 0; col < COLS - 1; col++) {
+        const a0 = base + row * COLS + col
+        const a1 = a0 + 1
+        const b0 = a0 + COLS
+        const b1 = b0 + 1
+        billIndex.push(a0, b0, a1, a1, b0, b1)
+      }
+    }
+  }
+  const bill = new THREE.BufferGeometry()
+  bill.setAttribute('position', new THREE.BufferAttribute(billPos, 3))
+  bill.setAttribute('normal', new THREE.BufferAttribute(billNrm, 3))
+  bill.setAttribute('aUp', new THREE.BufferAttribute(billUp, 1))
+  bill.setIndex(billIndex)
+  bill.computeBoundingSphere()
+  const billMat = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    vertexShader: `
+      attribute float aUp;
+      varying float vUp;
+      varying float vFace;
+      varying float vDist;
+      uniform vec3 uCenter;
+      void main() {
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vec3 n = normalize(mat3(modelMatrix) * normal);
+        vFace = abs(dot(n, normalize(cameraPosition - world.xyz)));
+        vUp = aUp;
+        vDist = length(world.xz - uCenter.xz);
+        gl_Position = projectionMatrix * viewMatrix * world;
+      }`,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uIntensity;
+      uniform float uPeriod;
+      uniform float uPulse;
+      uniform float uLip;
+      uniform vec3 uWhite;
+      uniform vec3 uTint;
+      varying float vUp;
+      varying float vFace;
+      varying float vDist;
+      void main() {
+        float r = vDist / max(uLip, 0.001);
+        float across = exp(-r * r * 8.0);
+        float rise = exp(-vUp * 1.7) * (1.0 - smoothstep(0.4, 0.92, vUp));
+        float face = smoothstep(0.08, 0.5, vFace);
+        float pulse = 1.0 + uPulse * sin(uTime * 6.2831853 / max(uPeriod, 0.01));
+        float alpha = across * rise * face * uIntensity * pulse * 0.7;
+        if (alpha < 0.02) discard;
+        vec3 col = mix(uWhite, uTint, (1.0 - smoothstep(0.0, 0.4, vUp)) * 0.1);
+        gl_FragColor = vec4(col * alpha, alpha);
+      }`,
+  })
+  /* A few specks drifting in the spill. Too small to draw a shape. */
   const n = g.motes
   const start = new Float32Array(n * 3)
   const seeds = new Float32Array(n * 3)
   for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + 0.4
-    const rr = hole.r * (0.28 + (i % 3) * 0.16)
-    start[i * 3] = Math.cos(a) * rr
-    start[i * 3 + 1] = 1.4
-    start[i * 3 + 2] = Math.sin(a) * rr
-    seeds[i * 3] = i / n
-    seeds[i * 3 + 1] = 0.65 + (i % 4) * 0.1
+    const a = i * 2.399 + 0.4
+    const rad = lipR * (0.08 + (i % 5) * 0.07)
+    start[i * 3] = hole.x + Math.cos(a) * rad
+    start[i * 3 + 1] = yMouth + (i % 6) * 0.7
+    start[i * 3 + 2] = hole.z + Math.sin(a) * rad
+    seeds[i * 3] = (i * 0.37) % 1
+    seeds[i * 3 + 1] = 0.55 + (i % 4) * 0.12
     seeds[i * 3 + 2] = a
   }
   const motes = new THREE.BufferGeometry()
@@ -213,63 +337,60 @@ function createHoleGlow() {
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    toneMapped: false,
     vertexShader: `
       attribute vec3 aSeed;
       uniform float uTime;
       varying float vA;
-      varying float vWarm;
       void main() {
-        float f = fract(uTime * 0.065 * aSeed.y + aSeed.x);
+        float f = fract(uTime * 0.045 * aSeed.y + aSeed.x);
         vec3 p = position;
-        p.y = 4.0 - f * 5.6;
-        p.x += sin(uTime * 0.22 + aSeed.z) * 0.12;
-        p.z += cos(uTime * 0.18 + aSeed.z) * 0.12;
-        vA = smoothstep(0.0, 0.14, f) * (1.0 - smoothstep(0.76, 1.0, f));
-        vWarm = step(0.5, fract(aSeed.x * 3.0));
+        p.y += f * 7.0;
+        p.x += sin(uTime * 0.2 + aSeed.z) * 0.12;
+        p.z += cos(uTime * 0.16 + aSeed.z) * 0.12;
+        vA = smoothstep(0.0, 0.16, f) * (1.0 - smoothstep(0.72, 1.0, f));
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_PointSize = clamp(70.0 / -mv.z, 1.2, 3.2);
+        gl_PointSize = clamp(64.0 / -mv.z, 1.0, 2.6);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
-      uniform vec3 uLilac;
-      uniform vec3 uAmber;
+      uniform vec3 uWhite;
       uniform float uIntensity;
       varying float vA;
-      varying float vWarm;
       void main() {
         float r = length(gl_PointCoord - 0.5);
         if (r > 0.5) discard;
-        vec3 col = mix(uLilac, uAmber, vWarm);
-        gl_FragColor = vec4(col, vA * (1.0 - r * 2.0) * uIntensity * 0.85);
+        float a = vA * (1.0 - r * 2.0) * uIntensity * 0.35;
+        gl_FragColor = vec4(uWhite * a, a);
       }`,
   })
   const group = new THREE.Group()
-  group.position.set(hole.x, mouth - 0.35, hole.z)
-  const shellMesh = new THREE.Mesh(shell, shellMat)
-  shellMesh.frustumCulled = false
-  shellMesh.renderOrder = 3
+  const discMesh = new THREE.Mesh(disc, discMat)
+  discMesh.frustumCulled = false
+  discMesh.renderOrder = 3
+  const billMesh = new THREE.Mesh(bill, billMat)
+  billMesh.frustumCulled = false
+  billMesh.renderOrder = 3
   const motePoints = new THREE.Points(motes, moteMat)
   motePoints.frustumCulled = false
   motePoints.renderOrder = 3
-  group.add(shellMesh, motePoints)
+  group.add(discMesh, billMesh, motePoints)
   return {
     group,
     uniforms,
     dispose() {
-      for (const d of [shell, shellMat, motes, moteMat]) d.dispose()
+      for (const d of [disc, discMat, bill, billMat, motes, moteMat]) d.dispose()
     },
   }
 }
 
 function HoleGlow() {
-  const res = useMemo(() => createHoleGlow(), [])
+  const res = useMemo(() => createHoleGlow(), [HOLE_GLOW])
   useEffect(() => () => res.dispose(), [res])
   const { hole } = UNDERWORLD
   useFrame((state) => {
     const cam = state.camera.position
     const below = cam.y < habitatSurfaceHeight(cam.x, cam.z) - 1.4
-    const inMouth = Math.hypot(cam.x - hole.x, cam.z - hole.z) < HOLE_GLOW.radius
+    const inMouth = Math.hypot(cam.x - hole.x, cam.z - hole.z) < hole.r + 4
     /* Full spill on the dunes. Quieter once you are down in the mouth. */
     res.uniforms.uIntensity.value = HOLE_GLOW.intensity * (below && inMouth ? 0.4 : 1)
     res.uniforms.uTime.value = state.clock.elapsedTime
