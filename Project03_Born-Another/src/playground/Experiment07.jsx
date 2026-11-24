@@ -145,6 +145,10 @@ function createWorld() {
     kinInfo: new Map(),
     kinControl: null,
     dimming: { id: null, dusk: 0 },
+    /* The life shown on the archive sheet (framing, silhouette, light). */
+    specimen: null,
+    specimenBox: null,
+    specimenBoxRel: null,
     opening: { t: 0, skip: false, skipping: null, haze: 1, depth: 1, veil: 1 },
     /* Written by the cavern each frame: where the camera is, for the hint. */
     eye: [0, 0, 0],
@@ -837,6 +841,35 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   useEffect(() => {
     if (!revealed) setSavedKey(null)
   }, [revealed])
+  /* The record shown on the end-of-life sheet: its story so far, and a
+     picture of the remains (taken once, as the sheet opens). */
+  const [revealRecord, setRevealRecord] = useState(null)
+  useEffect(() => {
+    if (!revealed || !opening) {
+      setRevealRecord(null)
+      return undefined
+    }
+    let alive = true
+    const id = focusKin ? focusId : 'hero'
+    const key = lifeKeyFor(id)
+    const now = performance.now() / 1000
+    lifeEntry(logRef.current, key, now)
+    const story = summarizeLife(logRef.current, key, now)
+    const kin = focusKin ? worldRef.current?.kinInfo.get(focusId) : null
+    setRevealRecord({ story, level: kin ? kin.level : null, now: null })
+    worldRef.current?.requestSnapshot?.(id, 240)?.then((image) => {
+      if (alive && image) setRevealRecord((r) => (r ? { ...r, now: image } : r))
+    })
+    return () => {
+      alive = false
+    }
+  }, [revealed, opening, focusKin, focusId, lifeKeyFor])
+  /* The scene frames and lights the life on the sheet while it is open. */
+  useEffect(() => {
+    const w = worldRef.current
+    if (!w) return
+    w.specimen = opening && revealed && !lingering ? focusId || 'hero' : null
+  }, [opening, revealed, lingering, focusId])
   const saveToArchive = async () => {
     const kin = focusKin ? worldRef.current?.kinInfo.get(focusId) : null
     const id = focusKin ? focusId : 'hero'
@@ -921,6 +954,14 @@ export default function Experiment07({ title, description, autoGrow = false, ope
             onSave={saveToArchive}
             saved={Boolean(savedKey)}
             onOpenArchive={() => setArchiveOpen(true)}
+            story={revealRecord?.story ?? null}
+            species={revealSpecies ?? 'spiral'}
+            env={{ temperature, moisture, turbulence }}
+            level={revealRecord?.level ?? null}
+            then={revealRecord?.story?.stages?.find((st) => st.name === 'first')?.image ?? null}
+            now={revealRecord?.now ?? null}
+            world={opening ? worldRef : null}
+            number={String((savedKey ? archive.findIndex((e) => e.key === savedKey) : -1) >= 0 ? archive.length - archive.findIndex((e) => e.key === savedKey) : archive.length + 1).padStart(4, '0')}
           />
         ) : null}
         {opening && phase !== 'descent' && !(revealed && !lingering) ? (

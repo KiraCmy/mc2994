@@ -7,6 +7,7 @@ import FocusStudio, { ViewCapture } from './FocusStudio.jsx'
 import { resolveRenderDpr, STUDIES_MAX_PIXELS } from '../../renderBudget.js'
 import { syncAgeClock } from '../../ageClock.js'
 import { cutOutPixels } from './snapshotCutout.js'
+import { specimenAnchors, specimenBox } from './specimenAnchors.js'
 import CrystalBody from './CrystalBody.jsx'
 import ExploreLifeScatter from '../finalForm/ExploreLifeScatter.jsx'
 import { mapLifeToExploreVisual } from '../finalForm/exploreLifeAdapter.js'
@@ -254,27 +255,61 @@ function DeathClock({ dead, deathRef }) {
   return null
 }
 
-/** Projects the hero so the end-of-life card can lead a line out from the body. */
+/**
+ * Projects the witnessed life for the end-of-life sheet: its centre and
+ * radius on screen (CSS vars, and world.specimenScreen), and — World Final —
+ * its box from its own geometry (world.specimenBox, px) and the three
+ * callout points as real places on the body (world.specimenAnchors).
+ * Runs after the camera and the bodies have moved this frame (priority 0.5,
+ * before the render at 1), then lets the sheet lay itself out, so the lines
+ * never trail the body.
+ */
 function SpecimenLeader({ bodyRef, overlayRef, world = null }) {
   const { camera, size } = useThree()
   const point = useMemo(() => new THREE.Vector3(), [])
-  useFrame(() => {
+  const centre = useMemo(() => new THREE.Vector3(), [])
+  const edge = useMemo(() => new THREE.Vector3(), [])
+  const anchorState = useRef({ id: null })
+  useFrame((state) => {
     const root = overlayRef?.current?.parentElement
     /* World Final: the line leads to whichever life is being witnessed. */
     const focusId = world?.current?.focusId
     const body = (focusId && world.current.bodies.get(focusId)) || bodyRef?.current
     if (!root || !body || !Number.isFinite(body.x)) return
-    point.set(body.x, body.y, body.z).project(camera)
+    camera.updateMatrixWorld()
+    centre.set(body.x, body.y, body.z)
+    point.copy(centre).project(camera)
     const x = (point.x * 0.5 + 0.5) * size.width
     const y = (-point.y * 0.5 + 0.5) * size.height
-    const cardW = Math.min(288, size.width * 0.86)
-    const rx = size.width * 0.034 + cardW
-    const ry = Math.max(150, size.height * 0.22) + cardW * 0.42
+    /* Its radius on screen, for the frame and callouts around the remains. */
+    edge.setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(Number(body.r) || 1).add(centre).project(camera)
+    const r = Math.abs(edge.x - point.x) * 0.5 * size.width
+    root.style.setProperty('--exp07-ar', `${r}px`)
     root.style.setProperty('--exp07-ax', `${x}px`)
     root.style.setProperty('--exp07-ay', `${y}px`)
-    root.style.setProperty('--exp07-reveal-len', `${Math.hypot(rx - x, ry - y)}px`)
-    root.style.setProperty('--exp07-reveal-ang', `${Math.atan2(ry - y, rx - x)}rad`)
-  })
+    const w = world?.current
+    if (!w) return
+    w.specimenScreen = { x, y, r }
+    const ctx = w.specimen && w.specimen === focusId ? body.specimenCtx : null
+    if (ctx) {
+      if (anchorState.current.id !== w.specimen) anchorState.current = { id: w.specimen }
+      const toScreen = (p) => {
+        p.project(camera)
+        return [(p.x * 0.5 + 0.5) * size.width, (-p.y * 0.5 + 0.5) * size.height]
+      }
+      w.specimenAnchors = specimenAnchors(anchorState.current, ctx, camera, Number(body.r) || 1, toScreen, state.clock.elapsedTime)
+      /* The frame: the body's own geometry, projected (steady, exact). */
+      const box = specimenBox(ctx, camera, (nx, ny) => [(nx * 0.5 + 0.5) * size.width, (-ny * 0.5 + 0.5) * size.height])
+      w.specimenBox = box
+      w.specimenBoxRel = box && r > 0 ? { id: w.specimen, x0: (box.x0 - x) / r, y0: (box.y0 - y) / r, x1: (box.x1 - x) / r, y1: (box.y1 - y) / r } : null
+    } else {
+      w.specimenBox = null
+      w.specimenBoxRel = null
+      w.specimenAnchors = null
+      anchorState.current = { id: null }
+    }
+    w.specimenOverlay?.()
+  }, 0.5)
   return null
 }
 

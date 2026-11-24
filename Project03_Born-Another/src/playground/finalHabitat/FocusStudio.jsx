@@ -14,6 +14,7 @@ export default function FocusStudio({ world }) {
   const key = useRef(null)
   const rim = useRef(null)
   const amount = useRef(0)
+  const spec = useRef(0)
   const tmp = useMemo(
     () => ({ keyTarget: new THREE.Object3D(), rimTarget: new THREE.Object3D(), body: new THREE.Vector3(), toCam: new THREE.Vector3(), right: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0) }),
     [],
@@ -29,6 +30,10 @@ export default function FocusStudio({ world }) {
     w.focusDim = f
     if (scene.fog && 'density' in scene.fog && f > 0.002) scene.fog.density *= 1 + 0.55 * f
     if (body) tmp.body.set(body.x, body.y, body.z)
+    /* Archive sheet: a stronger key for highlights, a stronger rim for the
+       edge reflection that draws the silhouette. */
+    spec.current += ((id && w.specimen === id ? 1 : 0) - spec.current) * Math.min(1, delta * 1.1)
+    const sp = spec.current
     const r = body ? Math.max(0.5, body.r) : 1
     const cam = state.camera.position
     tmp.toCam.copy(cam).sub(tmp.body)
@@ -40,13 +45,13 @@ export default function FocusStudio({ world }) {
       key.current.position.copy(tmp.body).addScaledVector(tmp.toCam, r * 4).addScaledVector(tmp.right, -r * 3).addScaledVector(tmp.up, r * 4.5)
       tmp.keyTarget.position.copy(tmp.body)
       tmp.keyTarget.updateMatrixWorld()
-      key.current.intensity = 9 * f
+      key.current.intensity = (9 + 6 * sp) * f
     }
     if (rim.current) {
       rim.current.position.copy(tmp.body).addScaledVector(tmp.toCam, -r * 5).addScaledVector(tmp.right, r * 1.5).addScaledVector(tmp.up, r * 2.5)
       tmp.rimTarget.position.copy(tmp.body)
       tmp.rimTarget.updateMatrixWorld()
-      rim.current.intensity = 14 * f
+      rim.current.intensity = (14 + 16 * sp) * f
     }
   })
 

@@ -15,6 +15,7 @@ import {
   SURFACE_HEIGHT,
 } from './worldOpening.js'
 import { surfaceFragment, surfaceVertex } from './worldShaders.js'
+import { distanceForRadius, specimenRadius, specimenRegion } from './specimenFrame.js'
 
 /*
  * World Final opening experience, inside the existing habitat canvas:
@@ -131,11 +132,25 @@ export function DescentCamera({ world, groundY, overlayRef = null }) {
   return null
 }
 
+/** The archive sheet's panels, relative to the scene (null when absent). */
+function readSheetLayout(root) {
+  const base = root.getBoundingClientRect()
+  const rel = (selector) => {
+    const el = root.querySelector(selector)
+    if (!el) return null
+    const b = el.getBoundingClientRect()
+    if (!b.width || !b.height) return null
+    return { left: b.left - base.left, top: b.top - base.top, right: b.right - base.left, bottom: b.bottom - base.top }
+  }
+  const hint = rel('.exp07-reveal__hint')
+  return { card: rel('.exp07-reveal__left'), record: rel('.exp07-reveal__record'), bottom: hint ? hint.top - 12 : null }
+}
+
 export function FocusRig({ world, overlayRef }) {
   const camera = useThree((s) => s.camera)
   const controls = useThree((s) => s.controls)
   const size = useThree((s) => s.size)
-  const rig = useRef({ id: null, t: 0, moving: false })
+  const rig = useRef({ id: null, t: 0, moving: false, spec: null, ox: 0, oy: 0, layout: null, layoutAt: -1 })
   const tmp = useMemo(
     () => ({
       fromPos: new THREE.Vector3(),
@@ -153,13 +168,34 @@ export function FocusRig({ world, overlayRef }) {
   useEffect(() => () => {
     const root = overlayRef?.current?.parentElement
     root?.style.setProperty('--exp07-fo', '0')
-  }, [overlayRef])
+    camera.clearViewOffset()
+  }, [overlayRef, camera])
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const w = world.current
     const r = rig.current
     const root = overlayRef?.current?.parentElement
     const id = w.phase === 'descent' ? null : w.focusId
+    /* Leaving the archive sheet: give the viewer their zoom back and ease
+       the picture back to the middle of the screen. */
+    if (r.spec && !(id && w.specimen === id)) {
+      if (controls) {
+        controls.minDistance = r.spec.minDistance
+        controls.maxDistance = r.spec.maxDistance
+        controls.enableZoom = r.spec.enableZoom
+      }
+      r.spec = null
+    }
+    if (!r.spec && (r.ox || r.oy)) {
+      const k = 1 - Math.exp(-Math.min(0.1, delta) * 2.4)
+      r.ox -= r.ox * k
+      r.oy -= r.oy * k
+      if (Math.abs(r.ox) < 0.5 && Math.abs(r.oy) < 0.5) {
+        r.ox = 0
+        r.oy = 0
+        camera.clearViewOffset()
+      } else camera.setViewOffset(size.width, size.height, -r.ox, -r.oy, size.width, size.height)
+    }
     if (id !== r.id) {
       r.id = id
       if (id) {
@@ -217,6 +253,59 @@ export function FocusRig({ world, overlayRef }) {
       tmp.last.copy(tmp.centre)
       camera.position.add(tmp.step)
       controls?.target.add(tmp.step)
+    }
+    /* The archive sheet: the remains step back to about 58% of their size
+       and sit in the middle of the free stage between the panels, with room
+       for the callouts. The viewer can still turn them (orbit), not zoom. */
+    if (!r.moving && w.specimen === id) {
+      const projectedR = () => {
+        tmp.p.copy(tmp.centre).project(camera)
+        tmp.right.setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(body.r).add(tmp.centre).project(camera)
+        return Math.abs(tmp.right.x - tmp.p.x) * 0.5 * size.width
+      }
+      if (!r.spec) {
+        r.spec = {
+          start: projectedR(),
+          minDistance: controls?.minDistance ?? 1.5,
+          maxDistance: controls?.maxDistance ?? 18,
+          enableZoom: controls?.enableZoom ?? true,
+        }
+        r.layoutAt = -1
+      }
+      const now = state.clock.elapsedTime
+      if (root && (r.layoutAt < 0 || now - r.layoutAt > 0.25)) {
+        r.layoutAt = now
+        r.layout = readSheetLayout(root)
+      }
+      const region = specimenRegion(size.width, size.height, r.layout ?? {})
+      /* The body's extent and where its box sits around its centre are
+         taken once and kept: the framing must not breathe as the view turns. */
+      if (!r.spec.box && w.specimenBoxRel?.id === id) r.spec.box = { ...w.specimenBoxRel }
+      const b = r.spec.box ?? null
+      const extent = b ? Math.max(-b.x0, b.x1, -b.y0, b.y1) : 1
+      const px = specimenRadius(region, r.spec.start, extent)
+      const want = distanceForRadius(body.r, px, size.height, camera.fov)
+      const k = 1 - Math.exp(-Math.min(0.1, delta) * 1.8)
+      tmp.step.copy(camera.position).sub(tmp.centre)
+      const cur = tmp.step.length() || want
+      const next = cur + (want - cur) * k
+      camera.position.copy(tmp.centre).addScaledVector(tmp.step.normalize(), next)
+      const floor = habitatHeight(camera.position.x, camera.position.z) + 0.8
+      if (camera.position.y < floor) camera.position.y = floor
+      if (controls) {
+        controls.enableZoom = false
+        controls.minDistance = next * 0.999
+        controls.maxDistance = next * 1.001
+      }
+      /* Centre the silhouette (not just the body's middle) on the stage. */
+      const rNow = projectedR()
+      const bx = b ? ((b.x0 + b.x1) / 2) * rNow : 0
+      const by = b ? ((b.y0 + b.y1) / 2) * rNow : 0
+      const tx = region.cx - size.width / 2 - bx
+      const ty = region.cy - size.height / 2 - by
+      r.ox += (tx - r.ox) * k
+      r.oy += (ty - r.oy) * k
+      camera.setViewOffset(size.width, size.height, -r.ox, -r.oy, size.width, size.height)
     }
     /* Corner brackets around the observed life (CSS reads these). */
     if (root) {

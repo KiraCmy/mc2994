@@ -1,0 +1,627 @@
+/* ------------------------------------------------------------------
+ * End of life: the archive sheet (record · anatomy · life record).
+ * ------------------------------------------------------------------ */
+.exp07-reveal {
+  --rv-top: calc(var(--site-header-h) + 2.6rem);
+  --rv-bottom: 6.4rem;
+  --rv-hair: rgba(244, 239, 230, 0.22);
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  animation: exp07-reveal-in 2.2s ease both;
+}
+
+@keyframes exp07-reveal-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.exp07-reveal h3 {
+  margin: 0 0 0.7rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--exp07-ink);
+}
+
+/* --- Anatomy around the remains ------------------------------------ */
+.exp07-reveal__anatomy {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.exp07-reveal__clabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  gap: 0.05rem;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  font-size: 0.56rem;
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--exp07-ink-faint);
+  white-space: nowrap;
+}
+
+.exp07-reveal__clabel b {
+  font-size: 0.86rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--exp07-ink);
+}
+
+.exp07-reveal.has-anatomy .exp07-reveal__anatomy,
+.exp07-reveal.has-anatomy .exp07-reveal__clabel {
+  opacity: 1;
+}
+
+.exp07-reveal__box {
+  fill: none;
+  stroke: rgba(244, 239, 230, 0.8);
+  stroke-width: 1;
+}
+
+.exp07-reveal__handle {
+  fill: #f4efe6;
+}
+
+.exp07-reveal__cline {
+  fill: none;
+  stroke: rgba(244, 239, 230, 0.78);
+  stroke-width: 1;
+}
+
+.exp07-reveal__cdot {
+  fill: #ffffff;
+}
+
+/* --- Left: the record ---------------------------------------------- */
+.exp07-reveal__card {
+  position: absolute;
+  top: var(--rv-top);
+  left: 3.4vw;
+  width: min(19rem, 26vw);
+  max-height: calc(100% - var(--rv-top) - var(--rv-bottom) - 4rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(244, 239, 230, 0.3) transparent;
+  pointer-events: auto;
+  padding: 0.4rem 0.4rem 0.4rem 1.6rem;
+  border-left: 1px solid var(--rv-hair);
+  color: var(--exp07-ink);
+}
+
+.exp07-reveal__eyebrow {
+  display: inline-block;
+  margin: 0;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--rv-hair);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+}
+
+.exp07-reveal__eyebrow i {
+  margin: 0 0.7em;
+  font-style: normal;
+  color: var(--exp07-ink-faint);
+}
+
+.exp07-reveal__name {
+  margin: 1rem 0 0;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--rv-hair);
+  font-size: clamp(2rem, 3.4vw, 3.2rem);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.exp07-reveal__rows {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.2rem 0 0;
+  padding-bottom: 1.2rem;
+  border-bottom: 1px solid var(--rv-hair);
+}
+
+.exp07-reveal__rows > div {
+  display: grid;
+  grid-template-columns: 9.2rem 1fr;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.exp07-reveal__rows dt {
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.exp07-reveal__rows dd {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--exp07-ink-soft);
+}
+
+.exp07-reveal__rows dd.is-italic {
+  font-style: italic;
+}
+
+.exp07-reveal__narrative {
+  margin-top: 1.2rem;
+}
+
+.exp07-reveal__narrative h3 {
+  margin-bottom: 0.45rem;
+}
+
+.exp07-reveal__narrative p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--exp07-ink-soft);
+}
+
+/* The prehistoric creature it was identified as: folded by default. */
+.exp07-reveal__fossil {
+  margin-top: 1.1rem;
+  border-top: 1px solid var(--rv-hair);
+  padding-top: 0.7rem;
+}
+
+.exp07-reveal__fossil summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  align-items: baseline;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.exp07-reveal__fossil summary::-webkit-details-marker {
+  display: none;
+}
+
+.exp07-reveal__fossil summary::before {
+  content: '+';
+  width: 0.8em;
+  font-weight: 400;
+}
+
+.exp07-reveal__fossil[open] summary::before {
+  content: '−';
+}
+
+.exp07-reveal__fossil summary span {
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  color: var(--exp07-ink-faint);
+}
+
+.exp07-reveal__fossil-body {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.7rem;
+}
+
+.exp07-reveal__figure {
+  position: relative;
+  margin: 0;
+  width: 70%;
+  aspect-ratio: 1;
+}
+
+.exp07-reveal__facts,
+.exp07-reveal__cause,
+.exp07-reveal__echo {
+  margin: 0;
+}
+
+.exp07-reveal__facts {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  line-height: 1.45;
+  text-transform: uppercase;
+}
+
+.exp07-reveal__cause,
+.exp07-reveal__echo {
+  font-size: 0.74rem;
+  line-height: 1.55;
+  color: var(--exp07-ink-soft);
+}
+
+.exp07-reveal__cause b {
+  display: block;
+  margin-bottom: 0.15rem;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--exp07-ink);
+}
+
+.exp07-reveal__echo {
+  font-style: italic;
+  color: var(--exp07-ink-faint);
+}
+
+/* --- Choices (bottom left) ------------------------------------------ */
+.exp07-reveal__actions {
+  position: absolute;
+  left: calc(3.4vw + 1.6rem);
+  bottom: var(--rv-bottom);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  pointer-events: auto;
+}
+
+.exp07-reveal__primary,
+.exp07-reveal__ghost,
+.exp07-reborn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 3rem;
+  padding: 0 1.5rem;
+  border: 1px solid var(--exp07-line-strong);
+  border-radius: 0;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--exp07-ink);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.exp07-reveal__primary {
+  border-color: transparent;
+  background: rgba(228, 226, 234, 0.9);
+  color: #1d1f29;
+}
+
+.exp07-reveal__primary:hover {
+  background: #ffffff;
+}
+
+.exp07-reveal__ghost:hover,
+.exp07-reborn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.exp07-reveal__ghost.is-saved {
+  border-color: rgba(159, 216, 230, 0.7);
+}
+
+.exp07-reveal__icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.exp07-reborn {
+  position: absolute;
+  left: 50%;
+  bottom: 5.6rem;
+  z-index: 3;
+  transform: translateX(-50%);
+  backdrop-filter: blur(8px);
+  background: var(--exp07-glass);
+}
+
+/* --- Right: the life record ------------------------------------------ */
+.exp07-reveal__record {
+  position: absolute;
+  top: var(--rv-top);
+  right: 3.4vw;
+  width: min(20rem, 26vw);
+  max-height: calc(100% - var(--rv-top) - var(--rv-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(244, 239, 230, 0.3) transparent;
+  pointer-events: auto;
+  border: 1px solid rgba(244, 239, 230, 0.4);
+  background: rgba(14, 14, 24, 0.28);
+  backdrop-filter: blur(6px);
+  color: var(--exp07-ink);
+}
+
+.exp07-reveal__record > section {
+  padding: 1rem 1.1rem;
+}
+
+.exp07-reveal__record > section + section {
+  border-top: 1px solid var(--rv-hair);
+}
+
+.exp07-reveal__then {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.exp07-reveal__then figure {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.exp07-reveal__then figure:last-child figcaption {
+  justify-self: end;
+}
+
+.exp07-reveal__then figcaption {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.exp07-reveal__then figcaption span {
+  margin-left: 0.6em;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--exp07-ink-faint);
+}
+
+.exp07-reveal__then img,
+.exp07-reveal__noimg {
+  display: block;
+  justify-self: center;
+  width: 100%;
+  max-width: 6rem;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+.exp07-reveal__then figure:first-child img {
+  max-width: 4.4rem;
+  opacity: 0.8;
+}
+
+.exp07-reveal__noimg {
+  max-width: 3rem;
+  border: 1px dashed var(--rv-hair);
+  border-radius: 50%;
+}
+
+.exp07-reveal__arrow {
+  align-self: center;
+  margin-top: 1.4rem;
+  color: var(--exp07-ink-soft);
+}
+
+.exp07-reveal__lifecycle svg {
+  display: block;
+  width: 100%;
+  height: 3.6rem;
+  overflow: visible;
+}
+
+.exp07-reveal__lifecycle path {
+  fill: none;
+  stroke: rgba(244, 239, 230, 0.75);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.exp07-reveal__lifecycle line {
+  stroke: rgba(244, 239, 230, 0.3);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.exp07-reveal__lifecycle circle {
+  fill: #ffffff;
+}
+
+.exp07-reveal__ticks {
+  display: flex;
+  justify-content: space-between;
+  margin: 0.55rem 0 0;
+  font-size: 0.52rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--exp07-ink-soft);
+}
+
+.exp07-reveal__env p {
+  display: grid;
+  grid-template-columns: 6.4rem 1fr 2.2rem;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.55rem;
+  font-size: 0.56rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.exp07-reveal__env p:last-child {
+  margin-bottom: 0;
+}
+
+.exp07-reveal__env p span:last-child {
+  text-align: right;
+  letter-spacing: 0.04em;
+}
+
+.exp07-reveal__env i {
+  position: relative;
+  height: 0.3rem;
+  background: rgba(244, 239, 230, 0.16);
+}
+
+.exp07-reveal__env i::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--v, 0) * 100%);
+  background: #f4efe6;
+}
+
+.exp07-reveal__events ol {
+  position: relative;
+  display: grid;
+  gap: 1.05rem;
+  margin: 0;
+  padding: 0 0 0 1.6rem;
+  list-style: none;
+}
+
+.exp07-reveal__events ol::before {
+  content: '';
+  position: absolute;
+  left: 0.3rem;
+  top: 0.45rem;
+  bottom: 0.45rem;
+  border-left: 1px dotted rgba(244, 239, 230, 0.5);
+}
+
+.exp07-reveal__events li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3.6rem 1fr;
+  gap: 0.5rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.exp07-reveal__events li::before {
+  content: '';
+  position: absolute;
+  left: -1.6rem;
+  top: 0.08rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1px solid rgba(244, 239, 230, 0.75);
+  border-radius: 50%;
+  background: #15151f;
+}
+
+.exp07-reveal__events li.is-birth::before,
+.exp07-reveal__events li.is-end::before {
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
+.exp07-reveal__events li.is-unheard span {
+  color: var(--exp07-ink-faint);
+}
+
+.exp07-reveal__events time {
+  letter-spacing: 0.1em;
+  color: var(--exp07-ink-soft);
+}
+
+.exp07-reveal__events span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Hint -------------------------------------------------------------- */
+.exp07-reveal__hint {
+  position: absolute;
+  left: 50%;
+  bottom: 4.2rem;
+  margin: 0;
+  transform: translateX(-50%);
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--exp07-ink-faint);
+}
+
+/* --- Plate (inside the fossil record) ---------------------------------- */
+.exp07-plate {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.exp07-plate__ground { fill: transparent; }
+.exp07-plate__outline { fill: rgba(236, 228, 240, 0.06); stroke: #ece6f2; stroke-width: 1.3; }
+.exp07-plate__seam { fill: none; stroke: rgba(236, 230, 242, 0.75); stroke-width: 0.9; }
+.exp07-plate__rib { fill: none; stroke: rgba(236, 230, 242, 0.55); stroke-width: 0.7; stroke-linecap: round; }
+.exp07-plate__septum { fill: none; stroke: rgba(236, 230, 242, 0.55); stroke-width: 0.6; }
+.exp07-plate text { fill: rgba(236, 230, 242, 0.7); font-size: 8.5px; letter-spacing: 0.16em; }
+.exp07-plate__title { font-size: 9px; }
+.exp07-plate__label path,
+.exp07-plate__scale path { fill: none; stroke: rgba(159, 216, 230, 0.8); stroke-width: 0.7; }
+.exp07-plate__label circle { fill: #9fd8e6; }
+
+/* --- Narrow screens: stack the record, drop the anatomy ---------------- */
+@media (max-width: 1100px) {
+  .exp07-reveal__record {
+    width: min(17rem, 30vw);
+  }
+  .exp07-reveal__card {
+    width: min(17rem, 30vw);
+  }
+  .exp07-reveal__clabel span {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .exp07-reveal__card {
+    top: calc(var(--site-header-h) + 1.2rem);
+    left: 16px;
+    width: calc(100vw - 32px);
+    max-height: 46vh;
+  }
+  .exp07-reveal__record,
+  .exp07-reveal__anatomy,
+  .exp07-reveal__clabel,
+  .exp07-reveal__hint {
+    display: none;
+  }
+  .exp07-reveal__actions {
+    left: 16px;
+    right: 16px;
+  }
+  .exp07-reveal__actions > button {
+    flex: 1 1 auto;
+    padding: 0 0.9rem;
+  }
+}
+

@@ -688,6 +688,8 @@ export default function CrystalBody({
     [tint],
   )
   useEffect(() => () => budMaterial.dispose(), [budMaterial])
+  /* 0 → 1 while this life's remains are shown on the archive sheet. */
+  const specRef = useRef(0)
   const respRef = useRef({ t0: -100, kind: 'still', strength: 0, pendingAt: -1, cooldownUntil: 0, hover: 0, radius: 1.4, dist: undefined })
   const glowMaterial = useMemo(
     () =>
@@ -1341,6 +1343,12 @@ export default function CrystalBody({
       entry.age = age
       entry.species = morphType
       entry.snapshot = snapshot
+      /* On the archive sheet: what the callouts need to find real places on
+         this body (its crystals, its skin as drawn, its centre). */
+      entry.specimenCtx =
+        world.current.specimen === selfId
+          ? { group, crystals: crystalsRef.current, geo: resources.membraneGeo, coil: uniforms.uCoil.value, facet: uniforms.uFacet.value, center: data.center }
+          : null
     }
     /* Response shape: contraction / expansion of the membrane (subtle). */
     const sign = resp.kind === 'contract' ? -1 : resp.kind === 'expand' ? 1 : 0
@@ -1424,6 +1432,24 @@ export default function CrystalBody({
     uniforms.uFilm.value = 0.24 - 0.18 * wither + 0.32 * shimmer + 0.06 * resp.hover
     uniforms.uRim.value = 0.32 + 0.16 * wither + 0.22 * shimmer + 0.18 * resp.hover
     mm.iridescence += 0.3 * shimmer
+    /* Archive sheet: shown as a specimen, the husk's clouding lifts —
+       clearer skin, pearl sheen and film, glossy highlights, a bright rim.
+       Same palette: only the strength of what is already there changes. */
+    const specTarget = world?.current?.specimen === selfId ? 1 : 0
+    specRef.current += (specTarget - specRef.current) * (1 - Math.exp(-Math.min(0.1, delta) * 1.1))
+    const sp = specRef.current
+    if (sp > 1e-3) {
+      mm.transmission += (MEMBRANE_TRANSMISSION * 0.95 - mm.transmission) * sp
+      mm.roughness += (Math.max(0.04, skin.roughness * 0.5) - mm.roughness) * sp
+      mm.iridescence += (Math.min(1, skin.iridescence * 0.85 + 0.3) - mm.iridescence) * sp
+      mm.sheen += (skin.sheen_ + 0.3 - mm.sheen) * sp
+      mm.attenuationColor.lerp(tintAttenuation, 0.65 * sp)
+      uniforms.uFilm.value += 0.14 * sp
+      uniforms.uRim.value += 0.34 * sp
+      uniforms.uCoreGlow.value += 0.06 * sp
+    }
+    mm.clearcoat = skin.clearcoat + (0.95 - skin.clearcoat) * sp
+    mm.clearcoatRoughness = 0.12 - 0.08 * sp
     if (sq) uniforms.uBreath.value *= 1 + 2 * Math.abs(sq)
     /* Light signal: breathes slowly, stronger from afar (it is how a life is
        first sensed), quiet up close, gone with the life. */
@@ -1441,7 +1467,7 @@ export default function CrystalBody({
     }
     resources.fibreMat.opacity = 0.7 * (1 - wither)
     if (coreLightRef.current) coreLightRef.current.intensity = 0.9 * (1 - wither)
-    if (huskLightRef.current) huskLightRef.current.intensity = 2.6 * phases.dusk
+    if (huskLightRef.current) huskLightRef.current.intensity = (2.6 + 2.2 * sp) * Math.max(phases.dusk, sp)
     for (const key of Object.keys(NUCLEUS_ALIVE)) nucleusUniforms[key].value.copy(NUCLEUS_ALIVE[key]).lerp(NUCLEUS_FOSSIL, wither * 0.85)
     const tentLift = 0.17 * S * smoothstep(0.12, 0.8, level)
     uniforms.uTent.value = tentLift
