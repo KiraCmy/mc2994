@@ -133,9 +133,11 @@ export const ENTRANCE_SECONDS = 18
 /** Quiet lines. Each eases in, holds, then eases out before the next.
  *  The last one is gone while the world is still mostly covered. */
 export const ENTRANCE_LINES = Object.freeze([
-  Object.freeze({ text: 'to encounter', in: [2.2, 3.6], out: [4.8, 6.2] }),
-  Object.freeze({ text: 'to know', in: [6.7, 8.0], out: [8.8, 10.1] }),
-  Object.freeze({ text: 'to remember', in: [10.5, 11.7], out: [12.2, 13.4] }),
+  /* The first line arrives soon after the page opens (not after a long
+     dark wait); the three keep their rhythm. */
+  Object.freeze({ text: 'to encounter', in: [0.8, 2.2], out: [3.4, 4.8] }),
+  Object.freeze({ text: 'to know', in: [5.3, 6.6], out: [7.4, 8.7] }),
+  Object.freeze({ text: 'to remember', in: [9.1, 10.3], out: [10.8, 12.0] }),
 ])
 
 function windowOpacity(t, inn, out) {

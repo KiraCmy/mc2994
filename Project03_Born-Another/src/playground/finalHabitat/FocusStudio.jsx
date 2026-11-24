@@ -30,8 +30,8 @@ export default function FocusStudio({ world }) {
     w.focusDim = f
     if (scene.fog && 'density' in scene.fog && f > 0.002) scene.fog.density *= 1 + 0.55 * f
     if (body) tmp.body.set(body.x, body.y, body.z)
-    /* Archive sheet: a stronger key for highlights, a stronger rim for the
-       edge reflection that draws the silhouette. */
+    /* Archive sheet: a touch more key and rim (kept small: strong
+       highlights make a blistered skin look lumpy). */
     spec.current += ((id && w.specimen === id ? 1 : 0) - spec.current) * Math.min(1, delta * 1.1)
     const sp = spec.current
     const r = body ? Math.max(0.5, body.r) : 1
@@ -45,13 +45,13 @@ export default function FocusStudio({ world }) {
       key.current.position.copy(tmp.body).addScaledVector(tmp.toCam, r * 4).addScaledVector(tmp.right, -r * 3).addScaledVector(tmp.up, r * 4.5)
       tmp.keyTarget.position.copy(tmp.body)
       tmp.keyTarget.updateMatrixWorld()
-      key.current.intensity = (9 + 6 * sp) * f
+      key.current.intensity = (9 + 1.5 * sp) * f
     }
     if (rim.current) {
       rim.current.position.copy(tmp.body).addScaledVector(tmp.toCam, -r * 5).addScaledVector(tmp.right, r * 1.5).addScaledVector(tmp.up, r * 2.5)
       tmp.rimTarget.position.copy(tmp.body)
       tmp.rimTarget.updateMatrixWorld()
-      rim.current.intensity = (14 + 16 * sp) * f
+      rim.current.intensity = (14 + 4 * sp) * f
     }
   })
 

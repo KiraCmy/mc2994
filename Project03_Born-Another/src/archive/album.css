@@ -1,42 +1,14 @@
 /* Archive → Album: moments of the world captured in World Final. */
 
-/* Lives / Album switch, under the site header on both archive views. */
-.arc-tabs {
-  display: flex;
-  justify-content: center;
-  gap: 2.2rem;
-  margin: 0.4rem 0 0;
-  font-size: 0.66rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-
-.arc-tabs a {
-  padding-bottom: 0.45rem;
-  color: var(--arc-faint);
-  text-decoration: none;
-  border-bottom: 1px solid transparent;
-}
-
-.arc-tabs a:hover {
-  color: var(--arc-ink);
-}
-
-.arc-tabs a[aria-current='page'] {
-  color: var(--arc-ink);
-  border-bottom-color: currentColor;
-}
-
-.arc-album {
-  max-width: 1500px;
-  margin: 0 auto;
-}
-
+/* As wide as the Lives grid, centred on the page; frames bordered like
+   its plates. */
 .arc-album__grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1.6rem 1.15rem;
-  margin: 0;
+  width: min(100%, var(--arc-grid-w));
+  margin: 0 auto;
+  transform: translateX(calc((clamp(1.5rem, 3.3vw, 3.6rem) - var(--arc-side)) / 2));
   padding: 0;
   list-style: none;
 }
@@ -65,8 +37,8 @@
   aspect-ratio: 16 / 9;
   object-fit: cover;
   object-position: center;
-  border: 1px solid var(--arc-line);
-  background: #0c0c10;
+  border: 1px solid rgba(242, 237, 230, 0.2);
+  background: rgba(12, 11, 20, 0.5);
   transition: border-color 0.3s ease, filter 0.3s ease;
 }
 
@@ -182,6 +154,7 @@
 @media (max-width: 980px) {
   .arc-album__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    transform: none;
   }
 }
 

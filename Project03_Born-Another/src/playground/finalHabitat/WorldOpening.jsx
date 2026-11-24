@@ -185,6 +185,7 @@ export function FocusRig({ world, overlayRef }) {
         controls.enableZoom = r.spec.enableZoom
       }
       r.spec = null
+      w.specimenRadius = null
     }
     if (!r.spec && (r.ox || r.oy)) {
       const k = 1 - Math.exp(-Math.min(0.1, delta) * 2.4)
@@ -258,14 +259,20 @@ export function FocusRig({ world, overlayRef }) {
        and sit in the middle of the free stage between the panels, with room
        for the callouts. The viewer can still turn them (orbit), not zoom. */
     if (!r.moving && w.specimen === id) {
-      const projectedR = () => {
+      /* Everything the framing depends on is taken once, when the sheet
+         opens (the body's radius, its extent, where its box sits): only the
+         layout of the page can change it. Nothing per-frame feeds back, so
+         the picture cannot pump. */
+      const projectedR = (radius) => {
         tmp.p.copy(tmp.centre).project(camera)
-        tmp.right.setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(body.r).add(tmp.centre).project(camera)
+        tmp.right.setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(radius).add(tmp.centre).project(camera)
         return Math.abs(tmp.right.x - tmp.p.x) * 0.5 * size.width
       }
       if (!r.spec) {
+        const radius = Math.max(0.05, Number(body.r) || 1)
         r.spec = {
-          start: projectedR(),
+          radius,
+          start: projectedR(radius),
           minDistance: controls?.minDistance ?? 1.5,
           maxDistance: controls?.maxDistance ?? 18,
           enableZoom: controls?.enableZoom ?? true,
@@ -284,7 +291,8 @@ export function FocusRig({ world, overlayRef }) {
       const b = r.spec.box ?? null
       const extent = b ? Math.max(-b.x0, b.x1, -b.y0, b.y1) : 1
       const px = specimenRadius(region, r.spec.start, extent)
-      const want = distanceForRadius(body.r, px, size.height, camera.fov)
+      const want = distanceForRadius(r.spec.radius, px, size.height, camera.fov)
+      w.specimenRadius = r.spec.radius
       const k = 1 - Math.exp(-Math.min(0.1, delta) * 1.8)
       tmp.step.copy(camera.position).sub(tmp.centre)
       const cur = tmp.step.length() || want
@@ -297,10 +305,10 @@ export function FocusRig({ world, overlayRef }) {
         controls.minDistance = next * 0.999
         controls.maxDistance = next * 1.001
       }
-      /* Centre the silhouette (not just the body's middle) on the stage. */
-      const rNow = projectedR()
-      const bx = b ? ((b.x0 + b.x1) / 2) * rNow : 0
-      const by = b ? ((b.y0 + b.y1) / 2) * rNow : 0
+      /* Centre the silhouette (not just the body's middle) on the stage,
+         at the size it is framed for. */
+      const bx = b ? ((b.x0 + b.x1) / 2) * px : 0
+      const by = b ? ((b.y0 + b.y1) / 2) * px : 0
       const tx = region.cx - size.width / 2 - bx
       const ty = region.cy - size.height / 2 - by
       r.ox += (tx - r.ox) * k

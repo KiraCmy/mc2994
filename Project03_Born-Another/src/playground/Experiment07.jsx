@@ -32,6 +32,8 @@ import './finalHabitat/habitat.css'
 
 const START_AGE = 0.64
 const START_ENV = { temperature: 0.38, moisture: 0.68, turbulence: 0.12 }
+/** World Final: the water a visitor arrives in. */
+const WORLD_START_ENV = { temperature: 0.5, moisture: 0.6, turbulence: 0.15 }
 const HISTORY = 56
 /** Real-time ageing of the hero: START_AGE → end of life in ~2.5 minutes. */
 const HERO_AGE_RATE = (1 - START_AGE) / 150
@@ -149,6 +151,7 @@ function createWorld() {
     specimen: null,
     specimenBox: null,
     specimenBoxRel: null,
+    specimenRadius: null,
     opening: { t: 0, skip: false, skipping: null, haze: 1, depth: 1, veil: 1 },
     /* Written by the cavern each frame: where the camera is, for the hint. */
     eye: [0, 0, 0],
@@ -310,13 +313,16 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   const [lingering, setLingering] = useState(false)
   const dead = Boolean(life.dead)
   const articleRef = useRef(null)
-  const [temperature, setTemperature] = useState(START_ENV.temperature)
+  const startEnv = opening ? WORLD_START_ENV : START_ENV
+  const [temperature, setTemperature] = useState(startEnv.temperature)
   const [running, setRunning] = useState(opening || !autoGrow)
   /* World Final opening experience: descent → discovery → encounter → focus.
      Per-frame state lives in worldRef; React hears phase / focus / hover. */
   const worldRef = useRef(null)
   if (opening && !worldRef.current) {
     worldRef.current = createWorld()
+    /* Development only: the live world, for diagnosing in the console. */
+    if (import.meta.env?.DEV && typeof window !== 'undefined') window.__bornAnotherWorld = worldRef.current
     if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
       worldRef.current.opening.reduced = true
     }
@@ -365,7 +371,7 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   const envRef = useRef({ temperature, moisture, turbulence })
   envRef.current = { temperature, moisture, turbulence }
   /* Manual base of the water, and the live language effects on top of it. */
-  const baseEnvRef = useRef({ ...START_ENV })
+  const baseEnvRef = useRef({ ...startEnv })
   const effectsRef = useRef([])
   /* How far the words currently move each channel (for the sliders). */
   const [langInfluence, setLangInfluence] = useState({ temperature: 0, moisture: 0, turbulence: 0 })
@@ -422,8 +428,8 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   useEffect(() => {
     seekToAge(opening ? WORLD_START_AGE : START_AGE, { resume: false })
     setPlaying(false)
-    setMoisture(START_ENV.moisture)
-    setTurbulence(START_ENV.turbulence)
+    setMoisture(startEnv.moisture)
+    setTurbulence(startEnv.turbulence)
     return () => setPlaying(false)
     // Mount-only: park the organism at the reference AGE and medium.
     // eslint-disable-next-line react-hooks/exhaustive-deps

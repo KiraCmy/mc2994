@@ -62,12 +62,6 @@ export default function AlbumView() {
 
   return (
     <section className="arc-album" aria-labelledby="arc-album-title">
-      <header className="arc-overview__head">
-        <h1 id="arc-album-title" className="arc-overview__title">Album</h1>
-        <p className="arc-overview__lede">
-          {count ? `${count} ${count === 1 ? 'moment' : 'moments'} of the world, as you saw them` : 'Moments of the world, as you saw them'}
-        </p>
-      </header>
 
       {shots && count === 0 ? (
         <div className="arc-overview__empty">

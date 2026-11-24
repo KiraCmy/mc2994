@@ -1,0 +1,203 @@
+/* Archive → Album: moments of the world captured in World Final. */
+
+/* Lives / Album switch, under the site header on both archive views. */
+.arc-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 2.2rem;
+  margin: 0.4rem 0 0;
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.arc-tabs a {
+  padding-bottom: 0.45rem;
+  color: var(--arc-faint);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.arc-tabs a:hover {
+  color: var(--arc-ink);
+}
+
+.arc-tabs a[aria-current='page'] {
+  color: var(--arc-ink);
+  border-bottom-color: currentColor;
+}
+
+.arc-album {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.arc-album__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.6rem 1.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.arc-album__grid li {
+  min-width: 0;
+}
+
+.arc-album__cell {
+  display: grid;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: zoom-in;
+}
+
+.arc-album__cell img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  object-position: center;
+  border: 1px solid var(--arc-line);
+  background: #0c0c10;
+  transition: border-color 0.3s ease, filter 0.3s ease;
+}
+
+.arc-album__cell:hover img,
+.arc-album__cell:focus-visible img {
+  border-color: rgba(242, 237, 230, 0.55);
+  filter: brightness(1.06);
+}
+
+.arc-album__cell:focus-visible {
+  outline: none;
+}
+
+.arc-album__time {
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--arc-faint);
+}
+
+/* One moment, full size. */
+.arc-album__view {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 4.5rem 5rem 3rem;
+  background: rgba(5, 5, 7, 0.94);
+  cursor: zoom-out;
+}
+
+.arc-album__figure {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+  max-width: 100%;
+  max-height: 100%;
+  cursor: default;
+}
+
+.arc-album__figure img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 11rem);
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.arc-album__figure figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1.6rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--arc-soft);
+}
+
+.arc-album__actions {
+  display: flex;
+  gap: 1.2rem;
+}
+
+.arc-album__actions a,
+.arc-album__actions button,
+.arc-album__close,
+.arc-album__nav {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  color: var(--arc-ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.arc-album__actions a:hover,
+.arc-album__actions button:hover,
+.arc-album__close:hover,
+.arc-album__nav:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.arc-album__close {
+  position: absolute;
+  top: 1.6rem;
+  right: 2rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+}
+
+.arc-album__nav {
+  position: absolute;
+  top: 50%;
+  font-size: 1.4rem;
+  transform: translateY(-50%);
+}
+
+.arc-album__nav.is-prev {
+  left: 1.6rem;
+}
+
+.arc-album__nav.is-next {
+  right: 1.6rem;
+}
+
+@media (max-width: 980px) {
+  .arc-album__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .arc-album__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .arc-album__view {
+    padding: 4rem 1rem 2rem;
+  }
+  .arc-album__nav {
+    top: auto;
+    bottom: 1rem;
+    transform: none;
+  }
+}

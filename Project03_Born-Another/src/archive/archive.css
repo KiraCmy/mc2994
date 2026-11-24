@@ -7,9 +7,17 @@
   --arc-faint: rgba(242, 237, 230, 0.58);
   --arc-line: rgba(242, 237, 230, 0.18);
   --arc-cyan: #9fd8e6;
+  /* Where the end-of-life sheet sets its title: the archive's heading sits
+     at the same place. */
+  --arc-side: calc(clamp(1.5rem, 3.3vw, 3.6rem) + clamp(1.4rem, 1.6vw, 1.9rem));
+  --arc-top: calc(var(--site-header-h) + clamp(2rem, 5vh, 3.2rem) + 0.6rem);
+  /* The collection: five plates across at most. */
+  --arc-tile: clamp(9.5rem, 10.6vw, 13rem);
+  --arc-gap: clamp(1.3rem, 2vw, 2.4rem);
+  --arc-grid-w: calc(5 * var(--arc-tile) + 4 * var(--arc-gap));
   position: fixed;
   inset: 0;
-  background: #050507;
+  background: #0f0e18;
   color: var(--arc-ink);
   font-family: Anybody, sans-serif;
 }
@@ -29,14 +37,70 @@
 }
 
 .archive-page__hud.is-scrolled {
-  background: rgba(5, 5, 7, 0.86);
+  background: rgba(14, 13, 24, 0.86);
+  backdrop-filter: blur(6px);
 }
 
 .archive-page__scroller {
   position: absolute;
   inset: 0;
+  z-index: 1;
   overflow-y: auto;
   padding: calc(var(--site-header-h) + 2rem) clamp(1rem, 4vw, 4rem) 4rem;
+}
+
+/* Lives / Album: heading at the sheet's place, collection, foot. */
+.archive-page__scroller.is-list {
+  padding: var(--arc-top) clamp(1.5rem, 3.3vw, 3.6rem) 0 var(--arc-side);
+}
+
+.arc-page {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100% + 0px);
+}
+
+/* ---------------- backdrop: the world, far away and dimmed ---------------- */
+.arc-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: #12111c;
+}
+
+/* A still of World Final, already darkened and tinted (archive-backdrop.jpg). */
+.arc-backdrop__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 70%;
+  animation: arc-breathe 40s ease-in-out infinite alternate;
+}
+
+@keyframes arc-breathe {
+  from { transform: scale(1.02) translate(0, 0); }
+  to { transform: scale(1.06) translate(-1%, -0.6%); }
+}
+
+/* Mist over the scene and a darker edge, so the heading and the plates
+   always sit on calm, dark water. */
+.arc-backdrop__mist {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(14, 13, 24, 0.55) 0%, rgba(14, 13, 24, 0.1) 32%, transparent 55%, rgba(12, 11, 20, 0.35) 100%),
+    radial-gradient(ellipse 60% 40% at 50% 52%, rgba(14, 13, 24, 0.32) 0%, transparent 75%),
+    radial-gradient(ellipse 120% 100% at 50% 50%, transparent 55%, rgba(6, 6, 12, 0.5) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arc-backdrop__image {
+    animation: none;
+  }
 }
 
 .arc-button {
@@ -76,40 +140,85 @@
   opacity: 0.7;
 }
 
-/* ---------------- overview ---------------- */
-.arc-overview {
-  max-width: 1500px;
-  margin: 0 auto;
-}
-
-.arc-overview__head {
+/* ---------------- heading (Lives / Album) ---------------- */
+.arc-head {
   display: grid;
-  justify-items: center;
-  gap: 1rem;
-  margin: 1rem 0 3.5rem;
-  text-align: center;
+  gap: 1.1rem;
+  margin-bottom: clamp(1.6rem, 4vh, 2.6rem);
 }
 
-/* Same tracking and width as the site's "Born Another" title. */
-.arc-overview__title {
+.arc-head__eyebrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+}
+
+.arc-head__eyebrow i {
+  margin-left: -0.5rem;
+  font-style: normal;
+  color: var(--arc-faint);
+}
+
+.arc-head__eyebrow a {
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid transparent;
+  color: var(--arc-faint);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.arc-head__eyebrow a b {
+  margin-left: 0.5em;
+  font-weight: 600;
+}
+
+.arc-head__eyebrow a:hover {
+  color: var(--arc-ink);
+}
+
+.arc-head__eyebrow a[aria-current='page'] {
+  color: var(--arc-ink);
+  border-bottom-color: currentColor;
+}
+
+.arc-head__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem clamp(1.6rem, 3vw, 3rem);
+}
+
+.arc-head__title {
   margin: 0;
-  padding-left: 0.38em;
-  font-size: clamp(1.9rem, 3.4vw, 2.75rem);
+  font-size: clamp(2.4rem, 3.4vw, 4rem);
   font-weight: 300;
-  font-stretch: normal;
-  font-variation-settings: 'wdth' 100, 'wght' 300;
-  letter-spacing: 0.38em;
   line-height: 1;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--arc-ink);
 }
 
-.arc-overview__lede {
+.arc-head__lede {
   margin: 0;
-  font-size: 0.8rem;
-  font-stretch: 85%;
-  letter-spacing: 0.08em;
-  color: var(--arc-faint);
+  padding-left: clamp(1.6rem, 3vw, 3rem);
+  border-left: 1px solid rgba(242, 237, 230, 0.34);
+  font-size: 0.66rem;
+  line-height: 1.6;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--arc-soft);
+}
+
+/* ---------------- overview ---------------- */
+.arc-overview,
+.arc-album {
+  flex: 1 0 auto;
+  width: 100%;
 }
 
 .arc-overview__note,
@@ -126,11 +235,16 @@
   padding: 4rem 0;
 }
 
+/* The collection: a centred grid of bordered plates (five across on a
+   wide screen), each with its name and number under it. */
 .arc-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
-  gap: 3.5rem 1.5rem;
-  margin: 0;
+  grid-template-columns: repeat(auto-fill, minmax(var(--arc-tile), 1fr));
+  gap: clamp(1.8rem, 3.8vh, 2.8rem) var(--arc-gap);
+  width: min(100%, var(--arc-grid-w));
+  margin: 0 auto;
+  /* Centre it on the page, not on the space right of the heading's indent. */
+  transform: translateX(calc((clamp(1.5rem, 3.3vw, 3.6rem) - var(--arc-side)) / 2));
   padding: 0;
   list-style: none;
 }
@@ -139,66 +253,244 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.35rem;
   color: inherit;
   text-align: center;
   text-decoration: none;
 }
 
 .arc-cell__stage {
-  display: grid;
-  place-items: center;
+  /* A fixed frame: the remains are placed inside it and never size it. */
+  position: relative;
+  display: block;
+  overflow: hidden;
   width: 100%;
-  aspect-ratio: 1;
-  margin-bottom: 0.6rem;
+  aspect-ratio: 1.22;
+  margin-bottom: 0.7rem;
+  border: 1px solid rgba(242, 237, 230, 0.2);
+  background: radial-gradient(ellipse 70% 70% at 50% 50%, rgba(120, 106, 170, 0.1) 0%, rgba(12, 11, 20, 0.5) 100%);
+  transition: border-color 0.3s ease, background 0.3s ease;
 }
 
 .arc-cell__remains {
-  width: calc(90% * var(--arc-scale, 1));
-  transform: rotate(var(--arc-rot, 0deg));
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: auto;
+  height: calc(82% * var(--arc-scale, 1));
+  max-width: 92%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
   transition: transform 0.7s ease;
+}
+
+.arc-cell:hover .arc-cell__stage,
+.arc-cell:focus-visible .arc-cell__stage {
+  border-color: rgba(242, 237, 230, 0.55);
+  background: radial-gradient(ellipse 70% 70% at 50% 50%, rgba(150, 132, 206, 0.16) 0%, rgba(12, 11, 20, 0.5) 100%);
 }
 
 .arc-cell:hover .arc-cell__remains,
 .arc-cell:focus-visible .arc-cell__remains {
-  transform: rotate(var(--arc-rot, 0deg)) scale(1.05);
+  transform: translate(-50%, -50%) scale(1.06);
 }
 
-.arc-cell__words {
-  font-size: clamp(1.1rem, 1.6vw, 1.45rem);
+.arc-cell:focus-visible {
+  outline: none;
+}
+
+.arc-cell__name {
+  font-size: clamp(1.05rem, 1.3vw, 1.4rem);
   font-style: italic;
   font-weight: 300;
   letter-spacing: 0.01em;
   line-height: 1.2;
 }
 
-.arc-cell__words.is-quiet {
-  color: var(--arc-faint);
-}
-
 .arc-cell__meta {
-  font-size: 0.68rem;
-  font-stretch: 85%;
-  letter-spacing: 0.22em;
+  font-size: 0.64rem;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--arc-faint);
 }
 
-.arc-overview__foot {
+/* ---------------- foot ---------------- */
+.arc-foot {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 1rem;
-  margin-top: 5rem;
-  font-size: 0.68rem;
-  font-stretch: 85%;
+  gap: 0.6rem 1rem;
+  margin-top: clamp(2.4rem, 6vh, 4rem);
+  padding: 1.4rem 0 clamp(1.4rem, 3.4vh, 2.4rem);
+  border-top: 1px solid rgba(242, 237, 230, 0.22);
+  font-size: 0.64rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--arc-faint);
+  color: var(--arc-soft);
 }
 
-.arc-overview__foot i {
-  font-style: normal;
+.arc-foot > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.arc-foot i {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+/* The heading's hairline and lede fold under the title on narrow screens. */
+@media (max-width: 720px) {
+  .archive-page__scroller.is-list {
+    padding-left: 1.2rem;
+    padding-right: 1.2rem;
+  }
+  .arc-grid {
+    transform: none;
+  }
+  .arc-head__lede {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+/* ---------------- one life: the specimen card ---------------- */
+/* Outside the card the archive's water dims a step further. */
+.archive-page.is-specimen .arc-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 70% at 50% 50%, rgba(10, 9, 18, 0.35) 0%, rgba(8, 8, 14, 0.62) 100%);
+}
+
+.arc-cardpage {
+  /* Card height: what is left under the header, above the actions. */
+  --card-w: min(92vw, 46rem, calc((100svh - var(--site-header-h) - 9.5rem) * 0.8));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(1rem, 2.4vh, 1.6rem);
+  padding-bottom: 1rem;
+}
+
+.arc-card {
+  position: relative;
+  width: var(--card-w);
+  aspect-ratio: 4 / 5;
+  margin: 0;
+  box-shadow:
+    0 0 0 1px rgba(236, 232, 244, 0.06),
+    0 2.4rem 6rem rgba(4, 4, 10, 0.6),
+    0 0 8rem rgba(120, 96, 200, 0.12);
+}
+
+.arc-card__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The card's text for screen readers (the canvas shows it). */
+.arc-card__text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.arc-cardpage__actions {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  width: var(--card-w);
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.arc-cardpage__more {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1.4rem;
+}
+
+.arc-cardpage__link {
+  padding: 0.6rem 0;
+  border: 0;
+  background: none;
+  color: var(--arc-soft);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.arc-cardpage__link:hover {
+  color: var(--arc-ink);
+}
+
+/* Export: the card's one call to action, light on the dark. */
+.arc-cardpage__export {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-width: clamp(12rem, 18vw, 15rem);
+  min-height: 3rem;
+  padding: 0 1.8rem;
+  border: 0;
+  background: rgba(222, 218, 234, 0.9);
+  color: #1b1a28;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.arc-cardpage__export:hover {
+  background: #ffffff;
+}
+
+.arc-cardpage__export:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.arc-cardpage__export:focus-visible,
+.arc-cardpage__link:focus-visible {
+  outline: 1px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.arc-cardpage__export svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (max-width: 620px) {
+  .arc-cardpage__actions {
+    grid-template-columns: 1fr 1fr;
+  }
+  .arc-cardpage__export {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
 }
 
 .arc-specimen__actions {

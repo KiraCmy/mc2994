@@ -1188,7 +1188,15 @@ export default function CrystalBody({
     const mustSeat = !seatState.data || rebuilt
     /* Env changes (slider drags) reseat at most every KEY_RESEAT_INTERVAL;
        the easing below fills the gaps, so a drag reads as one motion. */
-    const wantSeat = stale && now - seatState.at > (seatState.key !== key ? KEY_RESEAT_INTERVAL : RESEAT_INTERVAL)
+    /* After death nothing changes shape: once the remains have had a moment
+       to settle, the surface is no longer reseated (a fading word in the
+       water, or a slider, used to reshape it — and with it the body's radius
+       — every ~0.6 s, which read as the remains breathing). */
+    if (life.dead) {
+      if (seatState.deadAt == null) seatState.deadAt = now
+    } else seatState.deadAt = null
+    const frozen = life.dead && now - seatState.deadAt > 2.5 && !seatState.settling
+    const wantSeat = !frozen && stale && now - seatState.at > (seatState.key !== key ? KEY_RESEAT_INTERVAL : RESEAT_INTERVAL)
     /* A reseat costs tens of ms (8k-vertex surface evaluation + normals).
        Several lives reseating in the same frame stacked into a visible hitch
        (read as flicker), so non-urgent reseats take turns: one per ~60 ms. */
@@ -1374,6 +1382,15 @@ export default function CrystalBody({
     uniforms.uSphere.value = sphereK
     uniforms.uSphereR.value = 0.82 * data.rmax
     const budAlpha = 0
+    /* Birth progress, readable from the world registry (diagnostics). */
+    {
+      const reg = world?.current?.bodies.get(selfId)
+      if (reg) {
+        reg.bornK = bornK
+        reg.bodyGrow = bodyGrow
+        reg.seed = life.seed
+      }
+    }
     if (!place) {
       const kb = k * fade * bodyGrow
       group.scale.set(kb * (1 + 0.07 * sq), kb * (1 - 0.035 * sq), kb * (1 + 0.07 * sq))
@@ -1433,23 +1450,21 @@ export default function CrystalBody({
     uniforms.uRim.value = 0.32 + 0.16 * wither + 0.22 * shimmer + 0.18 * resp.hover
     mm.iridescence += 0.3 * shimmer
     /* Archive sheet: shown as a specimen, the husk's clouding lifts —
-       clearer skin, pearl sheen and film, glossy highlights, a bright rim.
-       Same palette: only the strength of what is already there changes. */
+       clearer skin, pearl sheen and film. No extra gloss or rim: on a
+       blistered (wet) skin those make every dome shine like a lump. */
     const specTarget = world?.current?.specimen === selfId ? 1 : 0
     specRef.current += (specTarget - specRef.current) * (1 - Math.exp(-Math.min(0.1, delta) * 1.1))
     const sp = specRef.current
     if (sp > 1e-3) {
       mm.transmission += (MEMBRANE_TRANSMISSION * 0.95 - mm.transmission) * sp
-      mm.roughness += (Math.max(0.04, skin.roughness * 0.5) - mm.roughness) * sp
       mm.iridescence += (Math.min(1, skin.iridescence * 0.85 + 0.3) - mm.iridescence) * sp
       mm.sheen += (skin.sheen_ + 0.3 - mm.sheen) * sp
       mm.attenuationColor.lerp(tintAttenuation, 0.65 * sp)
       uniforms.uFilm.value += 0.14 * sp
-      uniforms.uRim.value += 0.34 * sp
       uniforms.uCoreGlow.value += 0.06 * sp
     }
-    mm.clearcoat = skin.clearcoat + (0.95 - skin.clearcoat) * sp
-    mm.clearcoatRoughness = 0.12 - 0.08 * sp
+    mm.clearcoat = skin.clearcoat
+    mm.clearcoatRoughness = 0.12
     if (sq) uniforms.uBreath.value *= 1 + 2 * Math.abs(sq)
     /* Light signal: breathes slowly, stronger from afar (it is how a life is
        first sensed), quiet up close, gone with the life. */
@@ -1467,7 +1482,7 @@ export default function CrystalBody({
     }
     resources.fibreMat.opacity = 0.7 * (1 - wither)
     if (coreLightRef.current) coreLightRef.current.intensity = 0.9 * (1 - wither)
-    if (huskLightRef.current) huskLightRef.current.intensity = (2.6 + 2.2 * sp) * Math.max(phases.dusk, sp)
+    if (huskLightRef.current) huskLightRef.current.intensity = (2.6 + 0.6 * sp) * Math.max(phases.dusk, sp)
     for (const key of Object.keys(NUCLEUS_ALIVE)) nucleusUniforms[key].value.copy(NUCLEUS_ALIVE[key]).lerp(NUCLEUS_FOSSIL, wither * 0.85)
     const tentLift = 0.17 * S * smoothstep(0.12, 0.8, level)
     uniforms.uTent.value = tentLift

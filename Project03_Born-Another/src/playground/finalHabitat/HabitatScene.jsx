@@ -282,7 +282,10 @@ function SpecimenLeader({ bodyRef, overlayRef, world = null }) {
     const x = (point.x * 0.5 + 0.5) * size.width
     const y = (-point.y * 0.5 + 0.5) * size.height
     /* Its radius on screen, for the frame and callouts around the remains. */
-    edge.setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(Number(body.r) || 1).add(centre).project(camera)
+    /* On the sheet the radius is the one the framing locked (a settling
+       surface must not make the overlay breathe). */
+    const radius = (world?.current?.specimen && world.current.specimen === focusId && world.current.specimenRadius) || Number(body.r) || 1
+    edge.setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(radius).add(centre).project(camera)
     const r = Math.abs(edge.x - point.x) * 0.5 * size.width
     root.style.setProperty('--exp07-ar', `${r}px`)
     root.style.setProperty('--exp07-ax', `${x}px`)
@@ -297,7 +300,7 @@ function SpecimenLeader({ bodyRef, overlayRef, world = null }) {
         p.project(camera)
         return [(p.x * 0.5 + 0.5) * size.width, (-p.y * 0.5 + 0.5) * size.height]
       }
-      w.specimenAnchors = specimenAnchors(anchorState.current, ctx, camera, Number(body.r) || 1, toScreen, state.clock.elapsedTime)
+      w.specimenAnchors = specimenAnchors(anchorState.current, ctx, camera, radius, toScreen, state.clock.elapsedTime)
       /* The frame: the body's own geometry, projected (steady, exact). */
       const box = specimenBox(ctx, camera, (nx, ny) => [(nx * 0.5 + 0.5) * size.width, (-ny * 0.5 + 0.5) * size.height])
       w.specimenBox = box
