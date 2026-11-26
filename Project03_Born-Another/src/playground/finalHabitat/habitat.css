@@ -1676,11 +1676,16 @@
 }
 
 .exp07-entrance__line {
+  /* Centred in the view under the site header (not the whole window), across
+     the full width; the italic leans right, so its box is nudged left a
+     hair to look centred. */
   position: absolute;
-  left: 50%;
-  top: 48%;
+  left: 0;
+  right: 0;
+  top: calc(var(--site-header-h) + (100% - var(--site-header-h)) / 2 - 3vh);
   margin: 0;
-  transform: translate(-50%, -50%);
+  text-align: center;
+  transform: translate(-0.08em, -50%);
   /* A thin humanist italic (Mulish ExtraLight, loaded in index.html). */
   font-family: Mulish, "Proxima Nova", "Avenir Next", "Helvetica Neue", sans-serif;
   font-style: italic;

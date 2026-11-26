@@ -173,6 +173,55 @@ export const KIN_PHYSICS = Object.freeze({
 })
 
 /**
+ * While a life is being observed, keep the others out of the view: if a
+ * body's target `t` ({x, y, z}) lies in the corridor between the eye and the
+ * observed life (centre `focus`, radius `focusR`), move the target sideways
+ * just out of it. The corridor is the observed life's silhouette seen from
+ * the eye, a little wider (it narrows toward the eye), plus the body's own
+ * radius `r`. Mutates and returns `t`; returns it unchanged when clear.
+ */
+export function keepOutOfSight(t, r, eye, focus, focusR, { widen = 1.7, margin = 0.5 } = {}) {
+  const sx = focus[0] - eye[0]
+  const sy = focus[1] - eye[1]
+  const sz = focus[2] - eye[2]
+  const flat = sx * sx + sz * sz
+  if (flat < 1e-6) return t
+  /* Along the sight line (horizontal projection), 0 at the eye, 1 at the life. */
+  const u = ((t.x - eye[0]) * sx + (t.z - eye[2]) * sz) / flat
+  if (u <= 0.02 || u >= 1) return t
+  const px = eye[0] + sx * u
+  const py = eye[1] + sy * u
+  const pz = eye[2] + sz * u
+  const need = r + focusR * widen * u + margin
+  if (Math.abs(t.y - py) > need + r) return t
+  const dx = t.x - px
+  const dz = t.z - pz
+  const d = Math.hypot(dx, dz)
+  if (d >= need) return t
+  let nx
+  let nz
+  if (d < 1e-4) {
+    /* Right on the line: step to the side (perpendicular to the view). */
+    const l = Math.sqrt(flat)
+    nx = -sz / l
+    nz = sx / l
+  } else {
+    nx = dx / d
+    nz = dz / d
+  }
+  t.x = px + nx * need
+  t.z = pz + nz * need
+  return t
+}
+
+/** Whether a body ({x, y, z, r}) stands in the view from `eye` to `focus`. */
+export function blocksSight(b, eye, focus, focusR, opts) {
+  const probe = { x: b.x, y: b.y, z: b.z }
+  keepOutOfSight(probe, b.r, eye, focus, focusR, opts)
+  return probe.x !== b.x || probe.z !== b.z
+}
+
+/**
  * One physics step for the floating bodies (mutates `bodies`).
  * bodies: [{ id, x, y, z, vx, vy, vz, r, tx, ty, tz, floor }] — y is the body
  *   centre (world), t* the target centre, floor the lowest allowed centre y.

@@ -6,7 +6,7 @@ import { mapLifeToExploreVisual } from '../finalForm/exploreLifeAdapter.js'
 import { EXP05_LAB_DEFAULTS } from '../finalForm/exp05LabParams.js'
 import { useHabitatKin } from './useHabitatKin.js'
 import { habitatHeight } from './habitatField.js'
-import { crystalForLogic, formEmergence, placeByLogic, worldBodyScale, WORLD_KIN_AGES, kinCrystalLevel, kinPlacement, kinScale, kinScaleHeld, kinTempo, kinTint, stepKinPhysics } from './habitatKin.js'
+import { crystalForLogic, formEmergence, keepOutOfSight, placeByLogic, worldBodyScale, WORLD_KIN_AGES, kinCrystalLevel, kinPlacement, kinScale, kinScaleHeld, kinTempo, kinTint, stepKinPhysics } from './habitatKin.js'
 import { KIN_ANCHORS, KIN_ROAM, kinLogic, pickHome, speciesFor, UNWITNESSED_HUSK_SECONDS, WORLD_KIN_COUNT } from './worldOpening.js'
 import { freshRemainsPoints } from './Remains.jsx'
 
@@ -160,6 +160,12 @@ export default function HabitatKin({ world = null, crystalRef, envRef, timeRef, 
     /* Targets from the sim + each body's own wander, then soft-body physics:
        they ease off as they near, touch, bounce gently, never pass through. */
     const bodies = []
+    /* The view to the observed life (World Final), kept clear of the others. */
+    const focusBody = w && w.phase !== 'descent' && w.focusId ? w.bodies.get(w.focusId) : null
+    const sight =
+      focusBody && Number.isFinite(focusBody.x)
+        ? { eye: [state.camera.position.x, state.camera.position.y, state.camera.position.z], focus: [focusBody.x, focusBody.y, focusBody.z], r: Math.max(0.3, focusBody.r || 1) }
+        : null
     kin.forEach((org) => {
       const s = slotFor(org.id)
       const p = s.place.current
@@ -202,6 +208,13 @@ export default function HabitatKin({ world = null, crystalRef, envRef, timeRef, 
       b.ty = ty
       b.tz = at.z
       b.r = info.radius * sc
+      /* Observing another life: step out of the view toward it. */
+      if (sight && org.id !== w.focusId) {
+        const tgt = { x: b.tx, y: b.ty, z: b.tz }
+        keepOutOfSight(tgt, b.r, sight.eye, sight.focus, sight.r)
+        b.tx = tgt.x
+        b.tz = tgt.z
+      }
       b.floor = habitatHeight(b.x, b.z) + b.r * 1.05
       bodies.push(b)
     })

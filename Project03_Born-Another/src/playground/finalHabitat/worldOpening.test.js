@@ -108,6 +108,26 @@ test('focus pose sits on the viewer side, outside the body, above the sand', () 
   assert.ok(pose.position[1] >= 4.5 + 1.1)
 })
 
+test('focus looks at the body nearly level, and steps around a dune instead of looking down', () => {
+  const centre = [0, 2, 0]
+  /* Flat sand well below: level view on the viewer's side. */
+  const flat = focusPose(centre, 1.4, [0, 3, 10], () => -2)
+  const dist = Math.hypot(flat.position[0], flat.position[2])
+  const pitch = Math.atan2(flat.position[1] - centre[1], dist) * (180 / Math.PI)
+  assert.ok(pitch > 0 && pitch < 5, `nearly level, ${pitch.toFixed(1)}°`)
+  assert.ok(flat.position[2] > 0 && Math.abs(flat.position[0]) < 1e-9)
+  /* A dune right behind the viewer's side (+z): move round to where the
+     sand is low, and stay level. */
+  const dune = (x, z) => (z > 2 && Math.abs(x) < 3 ? 3.5 : -2)
+  const around = focusPose(centre, 1.4, [0, 3, 10], dune)
+  const p2 = Math.atan2(around.position[1] - centre[1], Math.hypot(around.position[0], around.position[2])) * (180 / Math.PI)
+  assert.ok(p2 < 5, `still level, ${p2.toFixed(1)}°`)
+  assert.ok(around.position[1] >= dune(around.position[0], around.position[2]) + 1.1)
+  /* Sand high everywhere: lifted only as much as needed. */
+  const high = focusPose(centre, 1.4, [0, 3, 10], () => 4)
+  assert.ok(Math.abs(high.position[1] - 5.1) < 1e-9)
+})
+
 import { BIRTH_SPACING, INITIAL_SPECIES, KIN_LOGIC, MAX_REMAINS, kinLogic, pickHome, remainsPhase, SPECIES, speciesFor } from './worldOpening.js'
 
 test('two other lives sit off the clearing, on opposite sides, with their own logic', () => {
@@ -149,4 +169,18 @@ test('remains settle first, then are slowly buried', () => {
   assert.equal(b.settle, 1)
   assert.equal(c.bury, 1)
   assert.ok(MAX_REMAINS >= 3)
+})
+
+import { blocksSight as blocksSightCheck } from './habitatKin.js'
+
+test('focus steps round to a clear view when another life is in front', () => {
+  const centre = [0, 2, 0]
+  /* Another life right between the viewer's side and the observed one. */
+  const blocker = { x: 0, y: 2, z: 3.5, r: 1.2 }
+  const pose = focusPose(centre, 1.4, [0, 3, 10], () => -2, [blocker])
+  assert.ok(Math.abs(pose.position[0]) > 0.5, 'moved round the body')
+  assert.equal(blocksSightCheck(blocker, pose.position, centre, 1.4), false)
+  /* Nothing in the way: straight from the viewer's side. */
+  const clear = focusPose(centre, 1.4, [0, 3, 10], () => -2, [{ x: 8, y: 2, z: 8, r: 1 }])
+  assert.ok(Math.abs(clear.position[0]) < 1e-9)
 })

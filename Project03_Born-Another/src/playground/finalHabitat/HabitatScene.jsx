@@ -631,7 +631,7 @@ function HabitatScene({
       <ExploreKeys world={world} />
       {world ? <DescentCamera world={world} groundY={GROUND_Y} overlayRef={overlayRef} /> : null}
       {world ? <FocusRig world={world} overlayRef={overlayRef} /> : null}
-      <HabitatPost bloomStrength={layers?.bloom === false ? 0 : 0.12} />
+      <HabitatPost bloomStrength={layers?.bloom === false ? 0 : 0.12} world={world} />
       {world ? <SnapshotTaker world={world} /> : null}
     </WebGLCanvas>
   )

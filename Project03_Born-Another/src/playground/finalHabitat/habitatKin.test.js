@@ -119,3 +119,34 @@ test('kin get their own tint from the palette, never the hero rose', () => {
   }
   assert.ok(seen.size >= 2)
 })
+
+import { blocksSight, keepOutOfSight } from './habitatKin.js'
+
+test('lives step out of the view toward the observed one, and only when in it', () => {
+  const eye = [0, 2, 10]
+  const focus = [0, 2, 0]
+  /* Right on the line, halfway: pushed sideways, clear of the corridor. */
+  const t = keepOutOfSight({ x: 0, y: 2, z: 5 }, 1, eye, focus, 1.4)
+  assert.ok(Math.abs(t.x) >= 1 + 1.4 * 1.7 * 0.5 + 0.5 - 1e-9, `moved to ${t.x}`)
+  assert.equal(t.z, 5)
+  /* Off to the side already: untouched. */
+  const side = { x: 6, y: 2, z: 5 }
+  keepOutOfSight(side, 1, eye, focus, 1.4)
+  assert.deepEqual(side, { x: 6, y: 2, z: 5 })
+  /* Behind the observed life or behind the camera: untouched. */
+  const behind = { x: 0, y: 2, z: -4 }
+  keepOutOfSight(behind, 1, eye, focus, 1.4)
+  assert.equal(behind.x, 0)
+  const back = { x: 0, y: 2, z: 14 }
+  keepOutOfSight(back, 1, eye, focus, 1.4)
+  assert.equal(back.x, 0)
+  /* Far above the line of sight: untouched. */
+  const high = { x: 0, y: 12, z: 5 }
+  keepOutOfSight(high, 1, eye, focus, 1.4)
+  assert.equal(high.x, 0)
+  /* Slightly off the line keeps its side. */
+  const left = keepOutOfSight({ x: -0.3, y: 2, z: 4 }, 1, eye, focus, 1.4)
+  assert.ok(left.x < -1)
+  assert.equal(blocksSight({ x: 0, y: 2, z: 5, r: 1 }, eye, focus, 1.4), true)
+  assert.equal(blocksSight({ x: 6, y: 2, z: 5, r: 1 }, eye, focus, 1.4), false)
+})

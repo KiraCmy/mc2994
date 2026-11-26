@@ -202,6 +202,7 @@ export function FocusRig({ world, overlayRef }) {
       if (id) {
         r.t = 0
         r.moving = true
+        r.blockers = null
         tmp.fromPos.copy(camera.position)
         tmp.fromTarget.copy(controls?.target ?? tmp.centre)
         if (controls) controls.enabled = false
@@ -221,7 +222,15 @@ export function FocusRig({ world, overlayRef }) {
     if (r.moving) {
       r.t += Math.min(0.1, delta)
       const e = easeInOut(r.t / FOCUS_SECONDS)
-      const pose = focusPose([body.x, body.y, body.z], body.r, tmp.fromPos.toArray(), habitatHeight)
+      /* The other lives, so the chosen spot has a clear view (taken once,
+         at the start of the glide: they then step out of the way). */
+      if (!r.blockers) {
+        r.blockers = []
+        for (const [oid, ob] of w.bodies) {
+          if (oid !== id && Number.isFinite(ob.x) && ob.r > 0) r.blockers.push({ x: ob.x, y: ob.y, z: ob.z, r: ob.r })
+        }
+      }
+      const pose = focusPose([body.x, body.y, body.z], body.r, tmp.fromPos.toArray(), habitatHeight, r.blockers)
       tmp.pos.set(...pose.position)
       camera.position.lerpVectors(tmp.fromPos, tmp.pos, e)
       const floor = habitatHeight(camera.position.x, camera.position.z) + 0.8
@@ -245,6 +254,7 @@ export function FocusRig({ world, overlayRef }) {
       /* The life was born again somewhere else: glide there, don't jump. */
       r.t = 0
       r.moving = true
+      r.blockers = null
       tmp.fromPos.copy(camera.position)
       tmp.fromTarget.copy(controls?.target ?? tmp.last)
       if (controls) controls.enabled = false

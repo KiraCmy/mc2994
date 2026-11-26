@@ -9,6 +9,7 @@
  */
 
 import { habitatHeight } from './habitatField.js'
+import { blocksSight } from './habitatKin.js'
 
 function clamp01(v) {
   return Math.min(1, Math.max(0, Number(v) || 0))
@@ -208,16 +209,30 @@ export function responseCooldown(r) {
 
 export const FOCUS_SECONDS = 2.1
 
-/** Observation distance for a body of world radius `radius`. */
+/** Observation distance for a body of world radius `radius` (about a fifth
+ *  farther than it was: the life sits in its water, not filling the view). */
 export function focusDistance(radius) {
-  return Math.min(12, Math.max(4.8, radius * 3.6 + 2))
+  return Math.min(14.4, Math.max(5.8, radius * 4.3 + 2.4))
 }
+
+/** Camera height above the body's centre, as a share of the distance:
+ *  nearly level (≈3.5° down), so the far water and its forms stay in view. */
+export const FOCUS_LIFT = 0.06
+/** Clearance kept above the sand under the camera. */
+const FOCUS_CLEAR = 1.1
+/** Angles (degrees) tried around the body when the sand is in the way,
+ *  nearest to the viewer's own side first. */
+const FOCUS_SWEEP = [0, 15, -15, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90, 110, -110]
 
 /**
  * Comfortable observation pose: on the viewer's side of the body (so the
- * approach never passes through it), a little above, never below the sand.
+ * approach never passes through it), almost level with it, never below the
+ * sand. Where a dune would push the camera up into looking down at the
+ * ground, or another life (`blockers`: [{x, y, z, r}]) would stand in front
+ * of the observed one, it steps around the body to the nearest spot that is
+ * level and clear (else the least bad one).
  */
-export function focusPose(centre, radius, cameraPos, groundAt) {
+export function focusPose(centre, radius, cameraPos, groundAt, blockers = []) {
   let dx = cameraPos[0] - centre[0]
   let dz = cameraPos[2] - centre[2]
   const len = Math.hypot(dx, dz)
@@ -229,10 +244,29 @@ export function focusPose(centre, radius, cameraPos, groundAt) {
     dz /= len
   }
   const dist = focusDistance(radius)
-  const x = centre[0] + dx * dist
-  const z = centre[2] + dz * dist
-  const y = Math.max(centre[1] + dist * 0.22, (groundAt ? groundAt(x, z) : -Infinity) + 1.1)
-  return { position: [x, y, z], target: [...centre], distance: dist }
+  const want = centre[1] + dist * FOCUS_LIFT
+  const at = (deg) => {
+    const a = (deg * Math.PI) / 180
+    const ax = dx * Math.cos(a) - dz * Math.sin(a)
+    const az = dx * Math.sin(a) + dz * Math.cos(a)
+    const x = centre[0] + ax * dist
+    const z = centre[2] + az * dist
+    const floor = groundAt ? groundAt(x, z) + FOCUS_CLEAR : -Infinity
+    const y = Math.max(want, floor)
+    const blocked = blockers.filter((b) => blocksSight(b, [x, y, z], centre, radius)).length
+    const lift = Math.max(0, floor - want)
+    /* A life in front costs more than any dune. */
+    return { x, z, y, lift, blocked, cost: lift + blocked * 10 }
+  }
+  let best = at(0)
+  if (best.lift > 0.05 || best.blocked) {
+    for (const deg of FOCUS_SWEEP.slice(1)) {
+      const p = at(deg)
+      if (p.cost < best.cost - 1e-3) best = p
+      if (best.lift <= 0.05 && !best.blocked) break
+    }
+  }
+  return { position: [best.x, best.y, best.z], target: [...centre], distance: dist }
 }
 
 /** Ease for camera transitions. */

@@ -702,7 +702,9 @@ export default function Caves({ crystalRef, world = null, archive = [] }) {
       scene.fog.color.lerp(CAVE_FOG, 0.7 * m)
     }
     /* Underground darker; while a life is observed, a little darker too (FocusStudio). */
-    gl.toneMappingExposure = baseExposure.current * (1 - 0.18 * m) * (1 - 0.16 * (world?.current?.focusDim ?? 0))
+    /* The look's base exposure (HabitatTone, World Final) when there is one. */
+    const base = world?.current?.exposureBase ?? baseExposure.current
+    gl.toneMappingExposure = base * (1 - 0.18 * m) * (1 - 0.16 * (world?.current?.focusDim ?? 0))
     if (world?.current) {
       const eye = world.current.eye
       if (eye) {

@@ -32,19 +32,23 @@ test('the entrance opens from darkness through three quiet lines into the world'
   assert.equal(start.night, 1)
   assert.equal(start.veil, 1)
   assert.ok(start.phrases.every((v) => v === 0))
-  const early = entranceCue(4.2)
-  assert.ok(early.night < 0.75 && early.night > 0.15, `gradient arriving, night ${early.night}`)
+  /* The first line is up within ~2 s, still on the dark. */
+  const early = entranceCue(2.8)
+  assert.ok(early.night > 0.5, `still dark, night ${early.night}`)
   assert.equal(early.veil, 1)
   assert.ok(early.phrases[0] > 0.9)
-  const know = entranceCue(8.4)
+  assert.ok(entranceCue(1.2).phrases[0] > 0, 'the first line has started by 1.2 s')
+  const arriving = entranceCue(4.2)
+  assert.ok(arriving.night < 0.75 && arriving.night > 0.15, `gradient arriving, night ${arriving.night}`)
+  const know = entranceCue(7.0)
   assert.equal(know.phrases[0], 0)
   assert.ok(know.phrases[1] > 0.9)
-  const remember = entranceCue(11.9)
+  const remember = entranceCue(10.5)
   assert.ok(remember.phrases[2] > 0.9)
   assert.equal(remember.phrases[0], 0)
   assert.equal(remember.phrases[1], 0)
   assert.ok(remember.veil > 0.55, `last line still in the dim, veil ${remember.veil}`)
-  const after = entranceCue(13.6)
+  const after = entranceCue(12.2)
   assert.equal(after.phrases[2], 0)
   assert.ok(after.veil > 0.35, 'the world is not fully open the moment the line ends')
   assert.equal(entranceCue(ENTRANCE_SECONDS).veil, 0)
@@ -102,6 +106,26 @@ test('focus pose sits on the viewer side, outside the body, above the sand', () 
   assert.ok(d > 1.4 * 2)
   assert.ok(pose.position[2] > centre[2], 'same side as the camera')
   assert.ok(pose.position[1] >= 4.5 + 1.1)
+})
+
+test('focus looks at the body nearly level, and steps around a dune instead of looking down', () => {
+  const centre = [0, 2, 0]
+  /* Flat sand well below: level view on the viewer's side. */
+  const flat = focusPose(centre, 1.4, [0, 3, 10], () => -2)
+  const dist = Math.hypot(flat.position[0], flat.position[2])
+  const pitch = Math.atan2(flat.position[1] - centre[1], dist) * (180 / Math.PI)
+  assert.ok(pitch > 0 && pitch < 5, `nearly level, ${pitch.toFixed(1)}°`)
+  assert.ok(flat.position[2] > 0 && Math.abs(flat.position[0]) < 1e-9)
+  /* A dune right behind the viewer's side (+z): move round to where the
+     sand is low, and stay level. */
+  const dune = (x, z) => (z > 2 && Math.abs(x) < 3 ? 3.5 : -2)
+  const around = focusPose(centre, 1.4, [0, 3, 10], dune)
+  const p2 = Math.atan2(around.position[1] - centre[1], Math.hypot(around.position[0], around.position[2])) * (180 / Math.PI)
+  assert.ok(p2 < 5, `still level, ${p2.toFixed(1)}°`)
+  assert.ok(around.position[1] >= dune(around.position[0], around.position[2]) + 1.1)
+  /* Sand high everywhere: lifted only as much as needed. */
+  const high = focusPose(centre, 1.4, [0, 3, 10], () => 4)
+  assert.ok(Math.abs(high.position[1] - 5.1) < 1e-9)
 })
 
 import { BIRTH_SPACING, INITIAL_SPECIES, KIN_LOGIC, MAX_REMAINS, kinLogic, pickHome, remainsPhase, SPECIES, speciesFor } from './worldOpening.js'

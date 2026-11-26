@@ -133,9 +133,11 @@ export const ENTRANCE_SECONDS = 18
 /** Quiet lines. Each eases in, holds, then eases out before the next.
  *  The last one is gone while the world is still mostly covered. */
 export const ENTRANCE_LINES = Object.freeze([
-  Object.freeze({ text: 'to encounter', in: [2.2, 3.6], out: [4.8, 6.2] }),
-  Object.freeze({ text: 'to know', in: [6.7, 8.0], out: [8.8, 10.1] }),
-  Object.freeze({ text: 'to remember', in: [10.5, 11.7], out: [12.2, 13.4] }),
+  /* The first line arrives soon after the page opens (not after a long
+     dark wait); the three keep their rhythm. */
+  Object.freeze({ text: 'to encounter', in: [0.8, 2.2], out: [3.4, 4.8] }),
+  Object.freeze({ text: 'to know', in: [5.3, 6.6], out: [7.4, 8.7] }),
+  Object.freeze({ text: 'to remember', in: [9.1, 10.3], out: [10.8, 12.0] }),
 ])
 
 function windowOpacity(t, inn, out) {
@@ -211,9 +213,21 @@ export function focusDistance(radius) {
   return Math.min(12, Math.max(4.8, radius * 3.6 + 2))
 }
 
+/** Camera height above the body's centre, as a share of the distance:
+ *  nearly level (≈3.5° down), so the far water and its forms stay in view. */
+export const FOCUS_LIFT = 0.06
+/** Clearance kept above the sand under the camera. */
+const FOCUS_CLEAR = 1.1
+/** Angles (degrees) tried around the body when the sand is in the way,
+ *  nearest to the viewer's own side first. */
+const FOCUS_SWEEP = [0, 15, -15, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90, 110, -110]
+
 /**
  * Comfortable observation pose: on the viewer's side of the body (so the
- * approach never passes through it), a little above, never below the sand.
+ * approach never passes through it), almost level with it, never below the
+ * sand. Where a dune would push the camera up into looking down at the
+ * ground, it steps around the body to a spot where the view can stay level
+ * (else the one that needs the least lift).
  */
 export function focusPose(centre, radius, cameraPos, groundAt) {
   let dx = cameraPos[0] - centre[0]
@@ -227,10 +241,25 @@ export function focusPose(centre, radius, cameraPos, groundAt) {
     dz /= len
   }
   const dist = focusDistance(radius)
-  const x = centre[0] + dx * dist
-  const z = centre[2] + dz * dist
-  const y = Math.max(centre[1] + dist * 0.22, (groundAt ? groundAt(x, z) : -Infinity) + 1.1)
-  return { position: [x, y, z], target: [...centre], distance: dist }
+  const want = centre[1] + dist * FOCUS_LIFT
+  const at = (deg) => {
+    const a = (deg * Math.PI) / 180
+    const ax = dx * Math.cos(a) - dz * Math.sin(a)
+    const az = dx * Math.sin(a) + dz * Math.cos(a)
+    const x = centre[0] + ax * dist
+    const z = centre[2] + az * dist
+    const floor = groundAt ? groundAt(x, z) + FOCUS_CLEAR : -Infinity
+    return { x, z, y: Math.max(want, floor), lift: Math.max(0, floor - want) }
+  }
+  let best = at(0)
+  if (best.lift > 0.05 && groundAt) {
+    for (const deg of FOCUS_SWEEP.slice(1)) {
+      const p = at(deg)
+      if (p.lift < best.lift - 1e-3) best = p
+      if (best.lift <= 0.05) break
+    }
+  }
+  return { position: [best.x, best.y, best.z], target: [...centre], distance: dist }
 }
 
 /** Ease for camera transitions. */

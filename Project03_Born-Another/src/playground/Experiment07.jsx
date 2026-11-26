@@ -32,6 +32,7 @@ import './finalHabitat/habitat.css'
 
 const START_AGE = 0.64
 const START_ENV = { temperature: 0.38, moisture: 0.68, turbulence: 0.12 }
+const LOOK_KEY = 'born-another.look.v1'
 /** World Final: the water a visitor arrives in. */
 const WORLD_START_ENV = { temperature: 0.5, moisture: 0.6, turbulence: 0.15 }
 const HISTORY = 56
@@ -314,6 +315,40 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   const dead = Boolean(life.dead)
   const articleRef = useRef(null)
   const startEnv = opening ? WORLD_START_ENV : START_ENV
+  /* World Final look, for comparing: clear (lilac fog, deeper near shadows,
+     a little more exposure) or the original. Shift+M switches; remembered
+     in this browser. */
+  const [vivid, setVivid] = useState(() => {
+    try {
+      return window.localStorage.getItem(LOOK_KEY) !== 'classic'
+    } catch {
+      return true
+    }
+  })
+  useEffect(() => {
+    if (!opening) return undefined
+    const onKey = (e) => {
+      if (!e.shiftKey || (e.key !== 'M' && e.key !== 'm')) return
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      setVivid((on) => {
+        const next = !on
+        try {
+          window.localStorage.setItem(LOOK_KEY, next ? 'clear' : 'classic')
+        } catch {
+          /* Storage unavailable: the switch still works for this visit. */
+        }
+        console.info(`[Born Another] look: ${next ? 'clear' : 'classic'}`)
+        return next
+      })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [opening])
+  /* The scene's tone reads it (HabitatTone). */
+  useEffect(() => {
+    if (worldRef.current) worldRef.current.look = vivid ? 'clear' : 'classic'
+  }, [vivid])
   const [temperature, setTemperature] = useState(startEnv.temperature)
   const [running, setRunning] = useState(opening || !autoGrow)
   /* World Final opening experience: descent → discovery → encounter → focus.
@@ -741,6 +776,68 @@ export default function Experiment07({ title, description, autoGrow = false, ope
   const setTemperatureManual = useCallback((v) => applyEnv({ temperature: v }), [applyEnv])
   const setMoistureManual = useCallback((v) => applyEnv({ moisture: v }), [applyEnv])
   const setTurbulenceManual = useCallback((v) => applyEnv({ turbulence: v }), [applyEnv])
+
+  /* World Final, for recording without the mouse: 1/2 temperature, 3/4
+     moisture, 5/6 turbulence (down / up). A tap moves 0.05; holding glides
+     at ~0.2 per second until released. Same path as the sliders, so their
+     handles and values move on screen. Ignored while typing. */
+  const keyEnvRef = useRef({ set: { temperature: setTemperatureManual, moisture: setMoistureManual, turbulence: setTurbulenceManual } })
+  keyEnvRef.current.set = { temperature: setTemperatureManual, moisture: setMoistureManual, turbulence: setTurbulenceManual }
+  useEffect(() => {
+    if (!opening) return undefined
+    const KEYS = {
+      1: ['temperature', -1], 2: ['temperature', 1],
+      3: ['moisture', -1], 4: ['moisture', 1],
+      5: ['turbulence', -1], 6: ['turbulence', 1],
+    }
+    const TAP = 0.05
+    const GLIDE = 0.01
+    const GLIDE_MS = 50
+    const HOLD_MS = 320
+    const held = new Map()
+    const nudge = (channel, dir, amount) => {
+      const cur = Number(envRef.current?.[channel] ?? 0)
+      const next = Math.round(Math.min(1, Math.max(0, cur + dir * amount)) * 100) / 100
+      if (next !== cur) keyEnvRef.current.set[channel](next)
+    }
+    const stop = (code) => {
+      const h = held.get(code)
+      if (!h) return
+      window.clearTimeout(h.wait)
+      window.clearInterval(h.glide)
+      held.delete(code)
+    }
+    const onDown = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) {
+        /* The sliders themselves are inputs: only skip text fields. */
+        if (!(t.tagName === 'INPUT' && t.type === 'range')) return
+      }
+      const m = /^(?:Digit|Numpad)([1-6])$/.exec(e.code)
+      if (!m) return
+      e.preventDefault()
+      if (e.repeat || held.has(e.code)) return
+      const [channel, dir] = KEYS[m[1]]
+      nudge(channel, dir, TAP)
+      const h = { wait: 0, glide: 0 }
+      h.wait = window.setTimeout(() => {
+        h.glide = window.setInterval(() => nudge(channel, dir, GLIDE), GLIDE_MS)
+      }, HOLD_MS)
+      held.set(e.code, h)
+    }
+    const onUp = (e) => stop(e.code)
+    const onBlur = () => [...held.keys()].forEach(stop)
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      onBlur()
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup', onUp)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [opening])
 
   /* Language influence → effective water, a few times a second (smooth,
      bounded, and it relaxes back to the base when the words fade). */

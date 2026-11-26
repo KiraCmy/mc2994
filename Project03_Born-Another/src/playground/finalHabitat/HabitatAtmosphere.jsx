@@ -118,6 +118,19 @@ const TONE_SCALARS = ['fogDensity', 'hemiIntensity', 'keyIntensity', 'shaftStren
  * The water's colour follows the environment (habitatTone): eases over ~1 s
  * so slider drags and "Tell it something" shifts read as the medium changing.
  */
+/* Clear look (World Final, Shift+M): the water's colours lean toward lilac
+   (same brightness, more colour), the light from below and the sand go a
+   step deeper, and the exposure lifts a little. */
+const CLEAR_LILAC = [0.78, 0.68, 0.94]
+const CLEAR_TINT = 0.3
+const CLEAR_DEEPEN = { hemiGround: 0.72, ground: 0.88, bottom: 0.9 }
+const EXPOSURE = { classic: 0.82, clear: 0.9 }
+const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+function toLilac(c) {
+  const k = lum(c) / lum(CLEAR_LILAC)
+  return c.map((v, i) => v + (Math.min(1, CLEAR_LILAC[i] * k) - v) * CLEAR_TINT)
+}
+
 export function HabitatTone({ envRef, toneRef, deathRef = null, overlayRef = null, world = null }) {
   const scene = useThree((s) => s.scene)
   const tmp = useMemo(() => new THREE.Color(), [])
@@ -154,7 +167,21 @@ export function HabitatTone({ envRef, toneRef, deathRef = null, overlayRef = nul
         target.bloomAlpha *= 1 - veil * 0.85
       }
     }
+    const clear = world?.current?.look === 'clear'
+    if (clear) {
+      /* Thinner haze: the far water keeps its shapes and contrast. */
+      target.fogDensity *= 0.82
+      for (const key of ['fog', 'top', 'horizon', 'bottom']) target[key] = toLilac(target[key])
+      for (const [key, f] of Object.entries(CLEAR_DEEPEN)) target[key] = target[key].map((v) => v * f)
+    }
     const k = 1 - Math.exp(-Math.min(0.1, delta) * 1.6)
+    /* The base exposure for the look; Caves applies its own darkening
+       (underworld, observing) on top of it each frame. */
+    if (world?.current) {
+      const want = clear ? EXPOSURE.clear : EXPOSURE.classic
+      const w = world.current
+      w.exposureBase = (w.exposureBase ?? want) + (want - (w.exposureBase ?? want)) * k
+    }
     for (const key of TONE_COLORS) {
       const c = target[key]
       tone[key].lerp(tmp.setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace), k)
@@ -436,7 +463,35 @@ export function Bubbles({ timeRef, envRef, pixelScale = 1, count = 260 }) {
 }
 
 /** Bloom + ACES output. Takes over rendering (useFrame priority 1). */
-export function HabitatPost({ bloomStrength = 0.22 }) {
+/* Clear look's final grade (sRGB, after tone mapping): more contrast —
+   darks go down more than lights go up (pivot above mid-grey) — and a
+   little more colour. uAmount 0 leaves the frame untouched. */
+const GradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uAmount: { value: 0 },
+    uContrast: { value: 1.14 },
+    uPivot: { value: 0.6 },
+    uSaturation: { value: 1.12 },
+  },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uAmount;
+    uniform float uContrast;
+    uniform float uPivot;
+    uniform float uSaturation;
+    varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+      vec3 g = mix(vec3(l), c.rgb, uSaturation);
+      g = (g - uPivot) * uContrast + uPivot;
+      gl_FragColor = vec4(mix(c.rgb, clamp(g, 0.0, 1.0), uAmount), c.a);
+    }`,
+}
+
+export function HabitatPost({ bloomStrength = 0.22, world = null }) {
   const { gl, scene, camera, size } = useThree()
   const composer = useMemo(() => {
     const target = new THREE.WebGLRenderTarget(size.width, size.height, {
@@ -451,7 +506,9 @@ export function HabitatPost({ bloomStrength = 0.22 }) {
     const bloom = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), bloomStrength, 0.6, 0.97)
     c.addPass(bloom)
     c.addPass(new OutputPass())
-    return { c, bloom }
+    const grade = new ShaderPass(GradeShader)
+    c.addPass(grade)
+    return { c, bloom, grade }
     // Size is applied in the effect below; recreating on resize would leak.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gl, scene, camera])
@@ -467,7 +524,12 @@ export function HabitatPost({ bloomStrength = 0.22 }) {
 
   useEffect(() => () => composer.c.dispose(), [composer])
 
-  useFrame(() => {
+  useFrame((_, delta) => {
+    /* Clear look (World Final): ease the grade in or out (~1 s). */
+    const u = composer.grade.uniforms.uAmount
+    const want = world?.current?.look === 'clear' ? 1 : 0
+    u.value += (want - u.value) * (1 - Math.exp(-Math.min(0.1, delta) * 1.6))
+    composer.grade.enabled = u.value > 0.002
     composer.c.render()
   }, 1)
   return null
